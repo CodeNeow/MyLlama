@@ -1148,10 +1148,10 @@ html[data-theme='dark'] .speed-baseline {
 }
 
 
-/* Desktop two-column main area: 1280px+ (design draft F4)
+/* Desktop two-column main area: >=1100px (desktop design draft frames ⑳㉑)
    Left column (1.15fr) = status hero + action row.
    Right column (.85fr) = available models (top) + service log (bottom). */
-@media (min-width: 1280px) {
+@media (min-width: 1100px) {
   .page-scroll {
     display: grid;
     grid-template-columns: 1.15fr .85fr;

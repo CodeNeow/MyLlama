@@ -898,10 +898,10 @@ onUnmounted(() => {
   min-width: 0;
 }
 
-/* ─── Cards grid: single floating-island column on phone/tablet; two equal
-       columns on desktop (>=1280px, design frame ① adapted) where the .grid2
-       wrapper dissolves via display:contents so the two minis become regular
-       cells of the outer grid. Never three columns. ─── */
+/* ─── Cards grid: single floating-island column on phone/tablet; asymmetric
+       7fr/5fr two-column split on desktop (>=1100px, design frames ⑤⑥) where
+       the memory/CPU mini pair stays a side-by-side sub-grid cell. Never
+       three columns. ─── */
 .sys-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -925,30 +925,46 @@ onUnmounted(() => {
   padding: 20px;
 }
 
-/* Desktop two-column grid: 1280px+ (design draft D5) */
-@media (min-width: 1280px) {
+/* Desktop tier: >=1100px (design draft frames ⑤⑥) — asymmetric 7fr/5fr
+   two-column split. Hero + the memory/CPU mini pair own the left column; the
+   quick-start checklist + storage island pack the right column, the
+   resident-model card continues in the left column right after the minis,
+   and the capability/system cards stack in the right column. */
+@media (min-width: 1100px) {
   .sys-grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
     gap: 16px;
+    align-items: start;
   }
 
-  /* Hero card spans full width */
-  .home-main-col > .hero-card {
-    grid-column: 1 / -1;
+  /* Hero, memory/CPU mini cards -> left column */
+  .home-main-col > * {
+    grid-column: 1;
   }
 
-  /* Grid2 wrapper dissolves so its children become regular grid cells */
+  /* The mini pair keeps its side-by-side 1fr 1fr sub-grid as ONE left-column
+     cell: it must NOT dissolve into independent auto-placed grid cells
+     (display:contents), which let auto-placement drop the memory mini into
+     the right column next to the CPU mini. Column ownership is already
+     covered by the .home-main-col > * rule above; restated here to anchor
+     the no-dissolve decision. */
   .home-main-col > .grid2 {
-    display: contents;
+    grid-column: 1;
   }
-}
 
-/* Desktop narrow: 1100–1279px (design draft F10) — outer grid stays single-column,
-   but the inner .grid2 pairs (memory/CPU, storage/resident) must also collapse
-   so the cards stack vertically instead of forcing a side-by-side mini pair. */
-@media (min-width: 1100px) and (max-width: 1279px) {
-  .home-main-col > .grid2 {
-    display: contents;
+  /* Quick-start checklist + storage island -> right column */
+  .home-side-col > *:not(.mcard) {
+    grid-column: 2;
+  }
+
+  /* Resident-model card -> left column, right after the minis */
+  .home-side-col > .mcard {
+    grid-column: 1;
+  }
+
+  /* GPU / CUDA / system cards -> right column */
+  .home-info-col > * {
+    grid-column: 2;
   }
 }
 

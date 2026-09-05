@@ -11,12 +11,6 @@
            shapes layout only — the mobile bottom nav bar takes over at
            <=767px while the title bar band stays via --titlebar-h. -->
       <div class="title-bar" v-if="platformState.supportsFramelessTitlebar && isDesktop">
-        <!-- Breadcrumb: brand + current page name (design frame ㉒ .titlebar .crumb) -->
-        <div class="titlebar-crumb">
-          <span class="titlebar-brand">{{ t('title.brand') }}</span>
-          <span class="titlebar-sep">·</span>
-          <span class="titlebar-page">{{ pageTitle }}</span>
-        </div>
         <!-- macOS keeps the colorful dots (matches existing style); Windows / Linux / unknown use rounded 34x26 chip buttons -->
         <template v-if="platform === 'darwin'">
           <div class="window-controls">
@@ -108,10 +102,6 @@ const platformState = usePlatform()
 // the .content-fixed rule in the style block).
 const route = useRoute()
 const isFixedPage = computed(() => route.meta.fixed === true)
-
-// Titlebar breadcrumb page name: route.meta.title stores an i18n key; resolve
-// it through t() so the crumb always shows the localized page name.
-const pageTitle = computed(() => t(route.meta.title as string))
 
 // Custom-property height of the title bar band, consumed by the fixed-viewport
 // page shells (global.css .page-fixed, Chat.vue .chat-page): 40px while the
@@ -380,45 +370,19 @@ async function closeWindow() {
   overflow: hidden;
 }
 
-/* ─── Title bar ─── */
+/* ─── Title bar = pure window chrome: drag band + window controls only.
+   Branding lives in the sidebar logo, page identity in each page's own
+   header. The controls group is the sole flex child, so flex-end keeps it
+   pinned to the right edge. ─── */
 .title-bar {
   height: 40px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   padding: 0 12px;
   --wails-draggable: drag;
   user-select: none;
   flex-shrink: 0;
-}
-
-/* Breadcrumb (design frame ㉒ .titlebar .crumb): brand bold + muted page name */
-.titlebar-crumb {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--text-muted);
-  min-width: 0;
-  flex-shrink: 1;
-  overflow: hidden;
-}
-
-.titlebar-brand {
-  font-weight: 700;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-.titlebar-sep {
-  color: var(--text-dim);
-  user-select: none;
-}
-
-.titlebar-page {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* ─── Two window-control button styles ───
