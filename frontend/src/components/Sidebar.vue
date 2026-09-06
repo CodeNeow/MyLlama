@@ -46,7 +46,6 @@
       >
         <span class="nav-icon" v-html="item.icon"></span>
         <span class="nav-label">{{ t(item.labelKey) }}</span>
-        <span v-if="isActive(item.path)" class="active-indicator"></span>
       </router-link>
     </nav>
 
@@ -134,8 +133,13 @@ function isActive(path: string): boolean {
   width: 236px;
   min-width: 236px;
   height: 100vh;
-  background: var(--bg-secondary);
-  border-right: 1px solid var(--border);
+  /* Glass rail (desktop design draft v2 frame ①): translucent panel + backdrop
+     blur over the app background; the right edge is a 1px glass highlight
+     instead of a solid border. */
+  background: var(--glass);
+  backdrop-filter: blur(22px) saturate(1.6);
+  -webkit-backdrop-filter: blur(22px) saturate(1.6);
+  border-right: 1px solid var(--glass-line);
   display: flex;
   flex-direction: column;
   --wails-draggable: drag;
@@ -211,7 +215,7 @@ function isActive(path: string): boolean {
   gap: 11px;
   padding: 0 12px;
   height: 40px;
-  border-radius: 12px;
+  border-radius: var(--r-sm);
   text-decoration: none;
   color: var(--text-muted);
   font-size: 13.5px;
@@ -226,14 +230,14 @@ function isActive(path: string): boolean {
   background: var(--surface-2);
 }
 
+/* Active item = gradient capsule (desktop design draft v2 principles ①③:
+   the rail's only gradient chrome — brand gradient fill, white label,
+   violet glow shadow; replaces the old left-edge indicator bar). */
 .nav-item.active {
-  background: var(--grad-soft);
-  color: #6d28d9;
+  background: var(--grad);
+  color: #fff;
   font-weight: 700;
-}
-
-html[data-theme='dark'] .nav-item.active {
-  color: var(--accent-light);
+  box-shadow: 0 6px 16px rgba(124, 92, 246, 0.42);
 }
 
 .nav-icon {
@@ -247,9 +251,9 @@ html[data-theme='dark'] .nav-item.active {
   transition: opacity 0.2s ease;
 }
 
+/* Active icon inherits the capsule's white via currentColor */
 .nav-item.active .nav-icon {
   opacity: 1;
-  color: #a78bfa;
 }
 
 .nav-label {
@@ -262,8 +266,7 @@ html[data-theme='dark'] .nav-item.active {
 }
 
 /* Collapsed nav: label shrinks to zero width; icon centered via horizontal padding
-   (item inner width is 40px after nav padding 12px, (40 - 20) / 2 = 10 centers the 20px icon;
-   active-indicator keeps left: 0) */
+   (item inner width is 40px after nav padding 12px, (40 - 20) / 2 = 10 centers the 20px icon) */
 .sidebar.collapsed .nav-label {
   max-width: 0;
   opacity: 0;
@@ -272,16 +275,6 @@ html[data-theme='dark'] .nav-item.active {
 .sidebar.collapsed .nav-item {
   gap: 0;
   padding: 11px 10px;
-}
-
-.active-indicator {
-  position: absolute;
-  left: -12px;
-  top: 9px;
-  bottom: 9px;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
-  background: linear-gradient(180deg, #a78bfa, #6366f1);
 }
 
 .sidebar-footer {
@@ -299,20 +292,15 @@ html[data-theme='dark'] .nav-item.active {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #22c55e;
-  box-shadow: none;
+  /* Ready state (class .ok) is the base look: success green breathing with a
+     same-color glow (desktop design draft v2 frame ① footer dot). */
+  background: var(--success);
+  box-shadow: 0 0 6px var(--success);
   animation: pulse 2s infinite;
   transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Ready: green breathing */
-.status-dot.ok {
-  background: #22c55e;
-  box-shadow: none;
-  animation: pulse 2s infinite;
-}
-
-/* Not ready: gray static */
+/* Not ready: gray static, no glow */
 .status-dot.bad {
   background: var(--text-dim);
   box-shadow: none;
@@ -326,7 +314,7 @@ html[data-theme='dark'] .nav-item.active {
 
 .status-text {
   font-size: 12px;
-  color: var(--text-dim);
+  color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   max-width: 100px;

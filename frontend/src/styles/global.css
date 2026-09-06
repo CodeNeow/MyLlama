@@ -66,14 +66,19 @@
 
   /* design draft shared tokens (same values for all tiers; light overrides are in
      [data-theme="light"] below). --surface-2 is intentionally NOT re-declared
-     here: it already matches the design draft value (#232739) and is unchanged. */
+     here: it already matches the design draft value (#232739) and is unchanged.
+     Radius scale = desktop design draft v2 three steps (24 card/island ·
+     18 button/input · 12 badge); --shadow-island is the floating-island shadow
+     (softer light-theme pair in the light block below) — declaring it here
+     lights up the views that already consume it. */
   --grad: linear-gradient(135deg, #6366f1 0%, #8b5cf6 55%, #a855f7 100%);
   --grad-soft: linear-gradient(135deg, #232045 0%, #2c2145 100%);
-  --r-lg: 28px;
-  --r-md: 22px;
-  --r-sm: 16px;
+  --r-lg: 24px;
+  --r-md: 18px;
+  --r-sm: 12px;
   --glass: rgba(24, 27, 42, 0.68);
   --glass-line: rgba(255, 255, 255, 0.09);
+  --shadow-island: 0 12px 32px rgba(0, 0, 0, 0.45);
   --surface-2: #232739;
 }
 
@@ -116,6 +121,7 @@ html[data-theme='dark'] { color-scheme: dark; }
   --grad-soft: linear-gradient(135deg, #eef0ff 0%, #f6efff 100%);
   --glass: rgba(255, 255, 255, 0.72);
   --glass-line: rgba(255, 255, 255, 0.65);
+  --shadow-island: 0 10px 30px rgba(80, 84, 140, 0.10), 0 2px 6px rgba(80, 84, 140, 0.06);
   --surface-2: #f6f7fc;
 }
 

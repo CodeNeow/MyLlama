@@ -373,13 +373,18 @@ async function closeWindow() {
 /* ─── Title bar = pure window chrome: drag band + window controls only.
    Branding lives in the sidebar logo, page identity in each page's own
    header. The controls group is the sole flex child, so flex-end keeps it
-   pinned to the right edge. ─── */
+   pinned to the right edge. Glass band (desktop design draft v2 principle ④):
+   translucent panel + backdrop blur with a hairline bottom edge, no text. ─── */
 .title-bar {
   height: 40px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   padding: 0 12px;
+  background: var(--glass);
+  backdrop-filter: blur(22px) saturate(1.6);
+  -webkit-backdrop-filter: blur(22px) saturate(1.6);
+  border-bottom: 1px solid var(--line);
   --wails-draggable: drag;
   user-select: none;
   flex-shrink: 0;
@@ -399,14 +404,14 @@ async function closeWindow() {
 }
 
 .window-controls.native {
-  gap: 2px;  /* Compact chip spacing (design frame ㉒ .titlebar .winctl gap:2px) */
+  gap: 2px;  /* Compact chip spacing (design draft frame ① title-bar .winctl gap:2px) */
 }
 
 .native-btn {
   width: 34px;
   height: 26px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -422,9 +427,10 @@ async function closeWindow() {
   color: var(--text-primary);
 }
 
-/* Close button hover: red background, white glyph (design frame ㉒ .titlebar .winctl i.close.hover) */
+/* Close button hover: red background, white glyph (desktop design draft v2
+   frame ① note 2) */
 .native-btn.close:hover {
-  background: #ef4444;
+  background: var(--danger);
   color: #fff;
 }
 
