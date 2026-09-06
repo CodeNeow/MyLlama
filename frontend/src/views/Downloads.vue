@@ -710,7 +710,7 @@ onUnmounted(() => { if (taskPollTimer) clearInterval(taskPollTimer) })
 .result-tile {
   width: 48px;
   height: 48px;
-  border-radius: 15px;
+  border-radius: var(--r-md);
   background: var(--grad-soft);
   color: var(--accent-light);
   display: flex;
@@ -798,7 +798,8 @@ html[data-os='ios'] .dl-round:active {
   padding: 16px 20px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-island);
 }
 
 .task-info {
@@ -839,7 +840,7 @@ html[data-os='ios'] .dl-round:active {
 .task-fill {
   height: 100%;
   border-radius: 3px;
-  background: linear-gradient(90deg, #6366f1, #a78bfa);
+  background: var(--grad);
   transition: width 0.3s;
 }
 
@@ -854,7 +855,7 @@ html[data-os='ios'] .dl-round:active {
 .task-percent {
   font-size: 12px;
   font-weight: 600;
-  color: #a78bfa;
+  color: var(--accent-light);
   min-width: 36px;
   text-align: right;
 }
@@ -913,7 +914,7 @@ html[data-os='ios'] .dl-round:active {
 
 .resume-btn {
   background: rgba(34, 197, 94, 0.1);
-  color: #22c55e;
+  color: var(--success);
   border-color: rgba(34, 197, 94, 0.2);
 }
 
@@ -921,7 +922,7 @@ html[data-os='ios'] .dl-round:active {
 
 .retry-btn {
   background: rgba(99, 102, 241, 0.1);
-  color: #a78bfa;
+  color: var(--accent-light);
   border-color: rgba(99, 102, 241, 0.2);
 }
 
@@ -977,13 +978,16 @@ html[data-os='ios'] .cancel-btn:active {
      very short windows) */
   height: 520px;
   max-height: 80vh;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: 14px;
+  /* Glass modal (design draft v2 rule 2) */
+  background: var(--glass);
+  backdrop-filter: blur(22px) saturate(1.6);
+  -webkit-backdrop-filter: blur(22px) saturate(1.6);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--r-lg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: none;
+  box-shadow: 0 24px 60px rgba(15, 17, 28, 0.40);
 }
 
 .modal-header {
@@ -1264,10 +1268,6 @@ html[data-os='ios'] .cancel-btn:active {
     font-weight: 700;
   }
 
-  html[data-theme='dark'] .dl-pct {
-    color: #c4b5fd;
-  }
-
   .dl-card-meta {
     display: block;
     white-space: nowrap;
@@ -1302,14 +1302,10 @@ html[data-os='ios'] .cancel-btn:active {
   }
 
   .section-count {
-    color: #7c3aed;
+    color: var(--accent-light);
     font-size: 12px;
     font-weight: 700;
     flex-shrink: 0;
-  }
-
-  html[data-theme='dark'] .section-count {
-    color: #a78bfa;
   }
 
   /* Full-width result cards; the whole card is the tap target */

@@ -290,7 +290,9 @@ html[data-os='ios'] .themed-select--toolbar .themed-select__trigger:active:not(:
   border-color: rgba(99, 102, 241, 0.4);
 }
 
-/* ─── Menu (in-app so it follows the theme in both light and dark) ─── */
+/* ─── Menu (in-app so it follows the theme in both light and dark).
+       Glass floating layer (design draft v2 rule 2): translucent panel +
+       backdrop blur + glass hairline + deep floating shadow. ─── */
 .themed-select__menu {
   position: absolute;
   left: 0;
@@ -300,10 +302,12 @@ html[data-os='ios'] .themed-select--toolbar .themed-select__trigger:active:not(:
   min-width: 240px;
   max-height: 300px;
   overflow-y: auto;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: none;
+  background: var(--glass);
+  backdrop-filter: blur(22px) saturate(1.6);
+  -webkit-backdrop-filter: blur(22px) saturate(1.6);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--r-md);
+  box-shadow: 0 16px 40px rgba(15, 17, 28, 0.25);
   padding: 4px;
 }
 
@@ -336,7 +340,9 @@ html[data-os='ios'] .themed-select--toolbar .themed-select__trigger:active:not(:
   color: var(--text-primary);
 }
 
+/* Selected option: grad-soft capsule tint + accent text (mockup .ddo.on) */
 .themed-select__option--selected {
+  background: var(--grad-soft);
   color: var(--accent-light);
 }
 

@@ -214,22 +214,13 @@ function reload(): void {
   border-radius: 999px;
   padding: 6px 12px;
   background: var(--grad-soft);
-  color: #6d28d9;
+  color: var(--accent-light);
   border: none;
 }
 
-html[data-theme='dark'] .sb {
-  color: #c4b5fd;
-}
-
 .sb-cached {
-  background: #fdf3e0;
-  color: #b45309;
-}
-
-html[data-theme='dark'] .sb-cached {
-  background: #2c2416;
-  color: #fcd34d;
+  background: var(--warning-bg);
+  color: var(--warning);
 }
 
 .sb-bundled {
@@ -309,12 +300,8 @@ html[data-theme='dark'] .docpost {
 /* Links inside the markdown: the delegated container handler opens absolute
    http(s) links in the system browser and blocks everything else */
 .docpost :deep(a) {
-  color: #7c3aed;
+  color: var(--accent-light);
   word-break: break-all;
-}
-
-html[data-theme='dark'] .docpost :deep(a) {
-  color: #c4b5fd;
 }
 
 /* Inline code: subtle chip */
@@ -330,7 +317,7 @@ html[data-theme='dark'] .docpost :deep(a) {
 .docpost :deep(pre) {
   background: #141626;
   color: #9aa3c0;
-  border-radius: 12px;
+  border-radius: var(--r-sm);
   padding: 12px 14px;
   font-size: 11.5px;
   line-height: 1.8;
@@ -352,7 +339,7 @@ html[data-theme='dark'] .docpost :deep(a) {
   padding: 10px 14px;
   background: var(--grad-soft);
   border: none;
-  border-radius: 12px;
+  border-radius: var(--r-sm);
   color: #5b21b6;
   font-size: 12.5px;
 }
@@ -403,7 +390,7 @@ html[data-theme='dark'] .docpost :deep(blockquote) {
   min-height: 44px;
   background: var(--bg-secondary);
   border: none;
-  border-radius: 14px;
+  border-radius: var(--r-md);
   box-shadow: var(--shadow-island);
   padding: 11px 14px;
   font-size: 12px;

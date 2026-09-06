@@ -1138,14 +1138,14 @@ onUnmounted(() => {
 .error-text {
   flex: 1;
   font-size: 13px;
-  color: #f87171;
+  color: var(--danger);
   margin: 0;
 }
 
 .retry-btn {
   padding: 6px 16px;
   background: rgba(99, 102, 241, 0.1);
-  color: #a78bfa;
+  color: var(--accent-light);
   border: 1px solid rgba(99, 102, 241, 0.2);
   border-radius: 6px;
   font-size: 12px;
@@ -1279,7 +1279,7 @@ onUnmounted(() => {
   cursor: pointer;
   inset: 0;
   background: var(--overlay-20);
-  border-radius: 22px;
+  border-radius: 999px;
   transition: background 0.2s;
 }
 
@@ -1465,7 +1465,7 @@ onUnmounted(() => {
     min-height: 44px;
     padding: 11px 0;
     border: none;
-    border-radius: 14px;
+    border-radius: var(--r-md);
     font-size: 13px;
     font-weight: 700;
     text-align: center;
@@ -1518,9 +1518,9 @@ onUnmounted(() => {
     gap: 8px;
     flex-basis: 100%;
     padding: 10px 14px;
-    border-radius: 12px;
-    background: #e7f8f1;
-    color: #0b7c5b;
+    border-radius: var(--r-sm);
+    background: var(--success-bg);
+    color: var(--success);
     font-size: 12px;
     font-weight: 700;
   }
@@ -1536,7 +1536,7 @@ onUnmounted(() => {
   }
 
   html[data-theme='dark'] .action-err {
-    background: #2c1a1f;
+    background: var(--danger-bg);
     color: #f87171;
   }
 
@@ -1586,7 +1586,7 @@ onUnmounted(() => {
     font-family: var(--font-mono);
     background: var(--bg-card);
     border: 1px solid var(--border-light);
-    border-radius: 12px;
+    border-radius: var(--r-sm);
   }
 
   /* Frame ⑫ summary island: live parameter readout + hardware basis sub */

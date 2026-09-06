@@ -401,7 +401,7 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   background: var(--grad-soft);
-  border-radius: 15px;
+  border-radius: var(--r-md);
   color: var(--accent-light);
   flex-shrink: 0;
   margin-top: 2px;
@@ -482,7 +482,7 @@ html[data-os='ios'] .model-settings-btn:active {
   background: rgba(168, 85, 247, 0.12);
   color: #c084fc;
   border: 1px solid rgba(168, 85, 247, 0.2);
-  border-radius: 20px;
+  border-radius: var(--r-sm);
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
@@ -499,7 +499,7 @@ html[data-os='ios'] .model-settings-btn:active {
   display: inline-flex;
   align-items: center;
   padding: 2px 10px;
-  border-radius: 20px;
+  border-radius: var(--r-sm);
   font-size: 11px;
   font-weight: 600;
   margin-bottom: 8px;
@@ -542,7 +542,7 @@ html[data-os='ios'] .model-settings-btn:active {
 
 .quant-tag {
   background: rgba(34, 197, 94, 0.1);
-  color: #4ade80;
+  color: var(--success);
   border: 1px solid rgba(34, 197, 94, 0.18);
 }
 
@@ -580,9 +580,9 @@ html[data-os='ios'] .model-settings-btn:active {
   flex-direction: column;
   align-items: center;
   padding: 56px 32px;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.04) 0%, rgba(167, 139, 250, 0.02) 100%);
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--r-lg);
   text-align: center;
 }
 
@@ -684,7 +684,7 @@ html[data-os='ios'] .model-settings-btn:active {
   padding: 56px 32px;
   background: rgba(239, 68, 68, 0.04);
   border: 1px solid rgba(239, 68, 68, 0.12);
-  border-radius: 16px;
+  border-radius: var(--r-lg);
   text-align: center;
 }
 
@@ -709,7 +709,7 @@ html[data-os='ios'] .model-settings-btn:active {
 .retry-btn {
   padding: 8px 24px;
   background: rgba(99, 102, 241, 0.15);
-  color: #a78bfa;
+  color: var(--accent-light);
   border: 1px solid rgba(99, 102, 241, 0.25);
   border-radius: 8px;
   font-size: 13px;
@@ -775,19 +775,14 @@ html[data-os='ios'] .model-settings-btn:active {
     background: transparent;
     border: none;
     border-radius: 8px;
-    color: #7c3aed;
+    color: var(--accent-light);
     font-weight: 800;
   }
 
   .dir-actions-android .refresh-btn:hover:not(:disabled) {
     background: transparent;
     border: none;
-    color: #7c3aed;
-  }
-
-  html[data-theme='dark'] .dir-actions-android .refresh-btn,
-  html[data-theme='dark'] .dir-actions-android .refresh-btn:hover:not(:disabled) {
-    color: #a78bfa;
+    color: var(--accent-light);
   }
 
   /* Frame A⑨ .grid2: the tablet width dividend — two model cards per row */
@@ -842,8 +837,8 @@ html[data-os='ios'] .model-settings-btn:active {
   }
 
   .source-download {
-    background: #e7f8f1;
-    color: #0b7c5b;
+    background: var(--success-bg);
+    color: var(--success);
     border: none;
   }
 
@@ -928,7 +923,7 @@ html[data-os='ios'] .model-settings-btn:active {
     grid-area: tile;
     width: 48px;
     height: 48px;
-    border-radius: 15px;
+    border-radius: var(--r-md);
   }
 
   .skeleton-title {
@@ -953,7 +948,7 @@ html[data-os='ios'] .model-settings-btn:active {
     display: block;
     grid-area: block;
     height: 56px;
-    border-radius: 14px;
+    border-radius: var(--r-sm);
     margin-top: 4px;
   }
 
@@ -1068,19 +1063,14 @@ html[data-os='ios'] .model-settings-btn:active {
     background: transparent;
     border: none;
     border-radius: 8px;
-    color: #7c3aed;
+    color: var(--accent-light);
     font-weight: 800;
   }
 
   .dir-actions-android .refresh-btn:hover:not(:disabled) {
     background: transparent;
     border: none;
-    color: #7c3aed;
-  }
-
-  html[data-theme='dark'] .dir-actions-android .refresh-btn,
-  html[data-theme='dark'] .dir-actions-android .refresh-btn:hover:not(:disabled) {
-    color: #a78bfa;
+    color: var(--accent-light);
   }
 
   .model-card {
@@ -1133,8 +1123,8 @@ html[data-os='ios'] .model-settings-btn:active {
   }
 
   .source-download {
-    background: #e7f8f1;
-    color: #0b7c5b;
+    background: var(--success-bg);
+    color: var(--success);
     border: none;
   }
 
@@ -1210,7 +1200,7 @@ html[data-os='ios'] .model-settings-btn:active {
     grid-area: tile;
     width: 48px;
     height: 48px;
-    border-radius: 15px;
+    border-radius: var(--r-md);
   }
 
   .skeleton-title {
@@ -1235,7 +1225,7 @@ html[data-os='ios'] .model-settings-btn:active {
     display: block;
     grid-area: block;
     height: 56px;
-    border-radius: 14px;
+    border-radius: var(--r-sm);
     margin-top: 4px;
   }
 

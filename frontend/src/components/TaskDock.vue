@@ -1022,10 +1022,15 @@ onUnmounted(() => {
   right: 0;
   width: min(300px, calc(100vw - 32px));
   max-height: 50vh;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: none;
+  /* Glass floating layer (design draft v2 principle ② / frame ⑳ .dcard):
+     translucent panel + backdrop blur + glass hairline + deeper-than-island
+     shadow. */
+  background: var(--glass);
+  backdrop-filter: blur(22px) saturate(1.6);
+  -webkit-backdrop-filter: blur(22px) saturate(1.6);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--r-lg);
+  box-shadow: 0 24px 60px rgba(15, 17, 28, 0.40);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1059,9 +1064,12 @@ onUnmounted(() => {
   height: 32px;
   padding: 0 12px;
   border-radius: 999px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  box-shadow: none;
+  /* Glass capsule (design draft v2 frame ⑳ .tpill) */
+  background: var(--glass);
+  backdrop-filter: blur(22px) saturate(1.6);
+  -webkit-backdrop-filter: blur(22px) saturate(1.6);
+  border: 1px solid var(--glass-line);
+  box-shadow: 0 8px 24px rgba(20, 22, 40, 0.35);
   cursor: pointer;
   color: var(--text-secondary);
   font-size: 12px;
@@ -1071,15 +1079,16 @@ onUnmounted(() => {
 }
 
 .dock-pill:hover {
-  background: var(--hover-bg);
   color: var(--text-primary);
+  box-shadow: 0 10px 28px rgba(20, 22, 40, 0.45);
 }
 
-/* Touch press feedback (OS-scoped): mirrors the hover wash on touch. */
+/* Touch press feedback (OS-scoped): mirrors the hover on touch — the glass
+   fill stays (replacing it with a flat wash would punch a hole in the blur). */
 html[data-os='android'] .dock-pill:active,
 html[data-os='ios'] .dock-pill:active {
-  background: var(--hover-bg);
   color: var(--text-primary);
+  box-shadow: 0 10px 28px rgba(20, 22, 40, 0.45);
 }
 
 /* Collapsed-form pill hidden while the popover is open (the "morph" pairing:
@@ -1121,7 +1130,8 @@ html[data-os='ios'] .dock-pill:active {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #ef4444;
+  background: var(--danger);
+  box-shadow: 0 0 6px var(--danger);
   flex-shrink: 0;
 }
 
@@ -1132,25 +1142,25 @@ html[data-os='ios'] .dock-pill:active {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #10b981;
-  box-shadow: none;
+  background: var(--success);
+  box-shadow: 0 0 6px var(--success);
   flex-shrink: 0;
 }
 
 .pill-dot--warn {
-  background: #fbbf24;
-  box-shadow: none;
+  background: var(--warning);
+  box-shadow: 0 0 6px var(--warning);
 }
 
 .pill-dot--error {
-  background: #ef4444;
-  box-shadow: none;
+  background: var(--danger);
+  box-shadow: 0 0 6px var(--danger);
 }
 
 .pill-sep {
   width: 1px;
   height: 12px;
-  background: rgba(255, 255, 255, 0.28);
+  background: var(--border);
   flex-shrink: 0;
 }
 
@@ -1189,26 +1199,16 @@ html[data-os='ios'] .dock-pill:active {
   flex-shrink: 0;
 }
 
-/* Badge colors (frame ⑳ .tbadge): 更新 indigo / 运行时 amber / 模型 neutral,
-   dark mappings per the mockup */
+/* Badge colors (frame ⑳ .tbadge): 更新 = grad-soft + accent / 运行时 amber
+   tint / 模型 neutral — token-driven so both themes switch automatically. */
 .badge-update {
-  background: #eef0ff;
-  color: #4338ca;
-}
-
-html[data-theme='dark'] .badge-update {
-  background: #1a1f3d;
-  color: #c4b5fd;
+  background: var(--grad-soft);
+  color: var(--accent-light);
 }
 
 .badge-runtime {
-  background: #fff7ea;
-  color: #b45309;
-}
-
-html[data-theme='dark'] .badge-runtime {
-  background: #2c2416;
-  color: #fcd34d;
+  background: var(--warning-bg);
+  color: var(--warning);
 }
 
 .badge-model {
@@ -1320,11 +1320,11 @@ html[data-theme='dark'] .badge-runtime {
 }
 
 .status-fetching { color: var(--text-dim); }
-.status-downloading { color: #a78bfa; }
-.status-paused { color: #fbbf24; }
-.status-extracting { color: #22c55e; }
-.status-error { color: #ef4444; }
-.status-done { color: #22c55e; }
+.status-downloading { color: var(--accent-light); }
+.status-paused { color: var(--warning); }
+.status-extracting { color: var(--success); }
+.status-error { color: var(--danger); }
+.status-done { color: var(--success); }
 .status-idle { color: var(--text-dim); }
 .status-queued { color: var(--text-dim); }
 .status-cancelled { color: var(--overlay-20); }
@@ -1346,7 +1346,7 @@ html[data-theme='dark'] .badge-runtime {
 .dock-fill {
   height: 100%;
   border-radius: 2px;
-  background: linear-gradient(90deg, #6366f1, #a78bfa);
+  background: var(--grad);
   transition: width 0.3s ease;
 }
 
@@ -1357,7 +1357,7 @@ html[data-theme='dark'] .badge-runtime {
 .dock-percent {
   font-size: 10px;
   font-weight: 700;
-  color: #a78bfa;
+  color: var(--accent-light);
   min-width: 32px;
   text-align: right;
 }
@@ -1403,13 +1403,13 @@ html[data-theme='dark'] .badge-runtime {
 
 .type-chat {
   background: rgba(167, 139, 250, 0.12);
-  color: #a78bfa;
+  color: var(--accent-light);
   border: 1px solid rgba(167, 139, 250, 0.2);
 }
 
 .type-audio {
   background: rgba(34, 197, 94, 0.1);
-  color: #22c55e;
+  color: var(--success);
   border: 1px solid rgba(34, 197, 94, 0.18);
 }
 
@@ -1421,7 +1421,7 @@ html[data-theme='dark'] .badge-runtime {
 
 .type-video {
   background: rgba(245, 158, 11, 0.1);
-  color: #f59e0b;
+  color: var(--warning);
   border: 1px solid rgba(245, 158, 11, 0.18);
 }
 
@@ -1480,7 +1480,7 @@ html[data-os='ios'] .dock-unload-btn:active:not(:disabled) {
   background: rgba(239, 68, 68, 0.06);
   border-radius: 6px;
   font-size: 10px;
-  color: #ef4444;
+  color: var(--danger);
 }
 
 /* ─── Phone (<=767px): the pill grows to a 44px touch target (it is the only
@@ -1555,7 +1555,7 @@ html[data-os='ios'] .dock-unload-btn:active:not(:disabled) {
      deep phone shadow; header 13/800; progress bars pill-rounded */
   .dock-popover {
     border: none;
-    border-radius: 22px;
+    border-radius: var(--r-lg);
     box-shadow: none;
     max-height: 60vh;
   }
@@ -1641,7 +1641,7 @@ html[data-os='ios'] .dock-unload-btn:active:not(:disabled) {
   }
 
   .dock-op--danger {
-    color: #ef4444;
+    color: var(--danger);
   }
 
   /* Touch press feedback (OS-scoped): the ops circles are phone-tier controls
@@ -1663,8 +1663,8 @@ html[data-os='ios'] .dock-unload-btn:active:not(:disabled) {
   }
 
   .dock-model-badge.type-chat {
-    background: #e7f8f1;
-    color: #0b7c5b;
+    background: var(--success-bg);
+    color: var(--success);
   }
 
   html[data-theme='dark'] .dock-model-badge.type-chat {
@@ -1731,7 +1731,7 @@ html[data-os='ios'] .dock-unload-btn:active:not(:disabled) {
   .dock-popover {
     width: min(340px, calc(100vw - 32px));
     border: none;
-    border-radius: 22px;
+    border-radius: var(--r-lg);
     max-height: 60vh;
   }
 
@@ -1813,7 +1813,7 @@ html[data-os='ios'] .dock-unload-btn:active:not(:disabled) {
   }
 
   .dock-op--danger {
-    color: #ef4444;
+    color: var(--danger);
   }
 
   /* Touch press feedback (OS-scoped): darkens the painted disc (filter keeps
@@ -1834,8 +1834,8 @@ html[data-os='ios'] .dock-unload-btn:active:not(:disabled) {
   }
 
   .dock-model-badge.type-chat {
-    background: #e7f8f1;
-    color: #0b7c5b;
+    background: var(--success-bg);
+    color: var(--success);
   }
 
   html[data-theme='dark'] .dock-model-badge.type-chat {

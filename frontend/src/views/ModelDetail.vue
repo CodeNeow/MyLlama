@@ -346,7 +346,7 @@ onMounted(() => {
     z-index: 10;
     background: var(--glass);
     border: 1px solid var(--glass-line);
-    border-radius: 12px;
+    border-radius: var(--r-md);
     padding: 10px 16px;
     margin-top: 0;
     margin-bottom: 16px;
@@ -392,18 +392,20 @@ onMounted(() => {
 
 .download-btn {
   padding: 7px 22px;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(167, 139, 250, 0.15));
-  color: #a78bfa;
-  border: 1px solid rgba(99, 102, 241, 0.3);
-  border-radius: 8px;
+  /* Primary action = solid brand gradient + white + glow (design draft v2 rule 3) */
+  background: var(--grad);
+  color: #fff;
+  border: none;
+  border-radius: var(--r-md);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
+  box-shadow: 0 6px 16px rgba(124, 92, 246, 0.42);
 }
 
 .download-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(167, 139, 250, 0.25));
+  box-shadow: 0 8px 20px rgba(124, 92, 246, 0.5);
 }
 
 .download-btn:active:not(:disabled) {
@@ -448,7 +450,7 @@ onMounted(() => {
 .retry-btn {
   padding: 6px 16px;
   background: rgba(99, 102, 241, 0.1);
-  color: #a78bfa;
+  color: var(--accent-light);
   border: 1px solid rgba(99, 102, 241, 0.2);
   border-radius: 6px;
   font-size: 12px;
@@ -626,7 +628,7 @@ onMounted(() => {
 }
 
 .file-item input {
-  accent-color: #6366f1;
+  accent-color: var(--accent);
   flex-shrink: 0;
 }
 
@@ -656,7 +658,7 @@ onMounted(() => {
 
 .file-quant {
   background: rgba(34, 197, 94, 0.1);
-  color: #4ade80;
+  color: var(--success);
   padding: 1px 7px;
   border-radius: 4px;
   font-size: 10px;
@@ -708,7 +710,7 @@ onMounted(() => {
     background: var(--glass);
     backdrop-filter: blur(22px) saturate(1.6);
     border: 1px solid var(--glass-line);
-    border-radius: 16px;
+    border-radius: var(--r-md);
     padding: 10px 14px;
     margin-top: 0;
     margin-bottom: 16px;
@@ -718,7 +720,7 @@ onMounted(() => {
   .select-all-btn {
     background: transparent;
     border: none;
-    color: #7c3aed;
+    color: var(--accent-light);
     font-weight: 700;
   }
 
@@ -726,13 +728,8 @@ onMounted(() => {
   .select-all-btn:active:not(:disabled) {
     background: transparent;
     border: none;
-    color: #7c3aed;
+    color: var(--accent-light);
     transform: none;
-  }
-
-  html[data-theme='dark'] .select-all-btn,
-  html[data-theme='dark'] .select-all-btn:hover:not(:disabled) {
-    color: #a78bfa;
   }
 
   /* Draft .stickbar .dl: solid gradient pill */
@@ -775,7 +772,7 @@ onMounted(() => {
     padding: 12px 14px;
     background: var(--bg-secondary);
     border: 1px solid var(--border);
-    border-radius: 14px;
+    border-radius: var(--r-md);
     box-shadow: var(--shadow-island);
   }
 
@@ -850,21 +847,17 @@ onMounted(() => {
   /* Draft .qbadge: purple-on-gradient-soft quant tag */
   .file-quant {
     background: var(--grad-soft);
-    color: #6d28d9;
+    color: var(--accent-light);
     border-radius: 6px;
     font-size: 10px;
     font-weight: 800;
-  }
-
-  html[data-theme='dark'] .file-quant {
-    color: #c4b5fd;
   }
 
   /* Draft ⑩ .island: the description becomes a free-standing island card */
   .desc-section {
     background: var(--bg-secondary);
     border: 1px solid var(--border);
-    border-radius: 22px;
+    border-radius: var(--r-lg);
     box-shadow: var(--shadow-island);
     padding: 18px 20px;
   }
@@ -936,7 +929,7 @@ onMounted(() => {
     margin-bottom: 14px;
     background: var(--bg-secondary);
     border: none;
-    border-radius: 22px;
+    border-radius: var(--r-lg);
     box-shadow: var(--shadow-island);
   }
 
@@ -957,7 +950,7 @@ onMounted(() => {
     padding: 10px 12px 10px 4px;
     background: transparent;
     border: none;
-    color: #7c3aed;
+    color: var(--accent-light);
     font-size: 12px;
     font-weight: 700;
   }
@@ -965,12 +958,7 @@ onMounted(() => {
   .action-bar-sticky .select-all-btn:hover:not(:disabled) {
     background: transparent;
     border: none;
-    color: #7c3aed;
-  }
-
-  html[data-theme='dark'] .action-bar-sticky .select-all-btn,
-  html[data-theme='dark'] .action-bar-sticky .select-all-btn:hover:not(:disabled) {
-    color: #a78bfa;
+    color: var(--accent-light);
   }
 
   /* Frame ⑩ .stickbar .dl: solid gradient pill with the purple glow */
@@ -1080,14 +1068,10 @@ onMounted(() => {
   /* Frame ⑩ .qbadge: purple-on-gradient-soft quant tag (replaces green) */
   .file-quant {
     background: var(--grad-soft);
-    color: #6d28d9;
+    color: var(--accent-light);
     border-radius: 6px;
     font-size: 10px;
     font-weight: 800;
-  }
-
-  html[data-theme='dark'] .file-quant {
-    color: #c4b5fd;
   }
 
   /* Frame ⑩ .docpost: intro island body at the reading size + gradient
@@ -1100,7 +1084,7 @@ onMounted(() => {
   .desc-text :deep(blockquote) {
     margin: 8px 0;
     padding: 10px 14px;
-    border-radius: 12px;
+    border-radius: var(--r-sm);
     background: var(--grad-soft);
     color: #5b21b6;
   }

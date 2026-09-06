@@ -408,19 +408,15 @@ function selectSection(id: DocSectionId): void {
 .toc-item .no {
   width: 34px;
   height: 34px;
-  border-radius: 12px;
+  border-radius: var(--r-sm);
   background: var(--grad-soft);
-  color: #6d28d9;
+  color: var(--accent-light);
   font-weight: 800;
   font-size: 13px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-}
-
-html[data-theme='dark'] .toc-item .no {
-  color: #c4b5fd;
 }
 
 .toc-item-text {
@@ -479,7 +475,7 @@ html[data-theme='dark'] .toc-item .no {
   scroll-margin-top: 112px;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--r-lg);
   padding: 24px 28px 32px;
   color: var(--text-secondary);
   font-size: 14px;
@@ -691,24 +687,15 @@ html[data-theme='dark'] .toc-item .no {
   border-radius: 999px;
   padding: 6px 12px;
   background: var(--grad-soft);
-  color: #6d28d9;
+  color: var(--accent-light);
   border: none;
   font-family: inherit;
 }
 
-html[data-theme='dark'] .sb {
-  color: #c4b5fd;
-}
-
 /* cached content: amber pill carrying the fetch time (mockup .sb.cache) */
 .sb-cached {
-  background: #fdf3e0;
-  color: #b45309;
-}
-
-html[data-theme='dark'] .sb-cached {
-  background: #2c2416;
-  color: #fcd34d;
+  background: var(--warning-bg);
+  color: var(--warning);
 }
 
 /* bundled fallback: neutral pill */
@@ -762,19 +749,15 @@ html[data-theme='dark'] .sb-cached {
 .docrow .no {
   width: 34px;
   height: 34px;
-  border-radius: 12px;
+  border-radius: var(--r-sm);
   background: var(--grad-soft);
-  color: #6d28d9;
+  color: var(--accent-light);
   font-weight: 800;
   font-size: 13px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-}
-
-html[data-theme='dark'] .docrow .no {
-  color: #c4b5fd;
 }
 
 .docrow .docrow-t {

@@ -454,9 +454,11 @@ const tabs = [
 }
 
 .tab-btn.active {
-  background: var(--text-primary);
-  color: var(--bg-primary);
-  box-shadow: none;
+  /* Active tab = gradient capsule + glow (desktop design draft v2 frame ①
+     .tabs .tab.on); replaces the old ink chip. */
+  background: var(--grad);
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(124, 92, 246, 0.42);
 }
 
 .tab-btn .tab-icon {

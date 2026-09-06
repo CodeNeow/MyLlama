@@ -1473,7 +1473,7 @@ html[data-os='ios'] .chat-model-select :deep(button.themed-select__trigger:activ
   padding: 8px 10px;
   background: var(--bg-primary);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--r-md);
   color: var(--text-primary);
   font-size: 13px;
   font-family: var(--font-sans);
@@ -1564,7 +1564,7 @@ html[data-os='ios'] .chat-model-select :deep(button.themed-select__trigger:activ
   height: 12px;
   border-radius: 50%;
   border: 2px solid var(--border);
-  border-top-color: #a78bfa;
+  border-top-color: var(--accent-light);
   animation: notice-spin 0.8s linear infinite;
   flex-shrink: 0;
 }
@@ -1713,12 +1713,8 @@ html[data-os='ios'] .chat-model-select :deep(button.themed-select__trigger:activ
   border: none;
   font-size: 12px;
   font-weight: 700;
-  color: #7c3aed;
+  color: var(--accent-light);
   cursor: pointer;
-}
-
-html[data-theme='dark'] .params-reset-link {
-  color: #a78bfa;
 }
 
 .params-sheet-body {
@@ -1860,7 +1856,7 @@ html[data-theme='dark'] .params-reset-link {
 }
 
 .pstep-btn:active {
-  color: #7c3aed;
+  color: var(--accent-light);
 }
 
 .pstep-val {
@@ -1878,7 +1874,7 @@ html[data-theme='dark'] .params-reset-link {
   padding: 8px 11px;
   background: var(--bg-card);
   border: none;
-  border-radius: 14px;
+  border-radius: var(--r-md);
   color: var(--text-primary);
   font-size: 12px;
   font-family: var(--font-sans);
@@ -1924,14 +1920,14 @@ html[data-theme='dark'] .params-reset-link {
 .is-user .message-bubble {
   background: var(--grad);
   color: #fff;
-  border-radius: 22px 22px 6px 22px;
+  border-radius: var(--r-md) var(--r-md) 6px var(--r-md);
   box-shadow: none;
 }
 
 .is-assistant .message-bubble {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: 22px 22px 22px 6px;
+  border-radius: var(--r-md) var(--r-md) var(--r-md) 6px;
   box-shadow: var(--shadow-island);
   color: var(--text-primary);
 }
@@ -2235,7 +2231,7 @@ html[data-theme='dark'] .params-reset-link {
   padding: 6px 6px 6px 10px;
   background: var(--glass);
   border: 1px solid var(--glass-line);
-  border-radius: 28px;
+  border-radius: var(--r-lg);
   box-shadow: var(--shadow-island);
   transition: border-color 0.2s;
 }
@@ -2466,13 +2462,8 @@ html[data-os='ios'] .send-btn:active:not(:disabled) {
 
   /* Open-gear state (frame ⑤ .rnd.on): purple glyph + inset accent ring */
   .chat-settings-btn[aria-expanded='true'] {
-    color: #7c3aed;
+    color: var(--accent-light);
     border-color: transparent;
-    box-shadow: none;
-  }
-
-  html[data-theme='dark'] .chat-settings-btn[aria-expanded='true'] {
-    color: #a78bfa;
     box-shadow: none;
   }
 
@@ -2555,7 +2546,7 @@ html[data-os='ios'] .send-btn:active:not(:disabled) {
     flex-wrap: wrap;
     background: var(--bg-card);
     border: none;
-    border-radius: 14px;
+    border-radius: var(--r-md);
     padding: 10px 14px;
     box-shadow: var(--shadow-island);
     font-size: 12px;
@@ -2564,16 +2555,15 @@ html[data-os='ios'] .send-btn:active:not(:disabled) {
   }
 
   html[data-theme='dark'] .start-notice {
-    background: #1e2233;
+    background: var(--surface-2);
   }
 
   .start-notice--error {
-    background: #fdecec;
+    background: var(--danger-bg);
     color: #b91c1c;
   }
 
   html[data-theme='dark'] .start-notice--error {
-    background: #2c1a1f;
     color: #fca5a5;
   }
 
@@ -2583,11 +2573,7 @@ html[data-os='ios'] .send-btn:active:not(:disabled) {
     padding: 8px 0 8px 10px;
     font-size: 12px;
     font-weight: 700;
-    color: #7c3aed;
-  }
-
-  html[data-theme='dark'] .start-notice-btn {
-    color: #a78bfa;
+    color: var(--accent-light);
   }
 
   .start-notice-btn:hover {
@@ -2599,14 +2585,9 @@ html[data-os='ios'] .send-btn:active:not(:disabled) {
   .start-notice-spinner {
     width: 13px;
     height: 13px;
-    border: 2px solid #c7caea;
-    border-top-color: #7c3aed;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent-light);
     animation-duration: 1s;
-  }
-
-  html[data-theme='dark'] .start-notice-spinner {
-    border-color: rgba(255, 255, 255, 0.18);
-    border-top-color: #a78bfa;
   }
 
   /* Degraded composer (frame ⑦): a visible precheck blocker dims the bar */
@@ -2643,20 +2624,20 @@ html[data-os='ios'] .send-btn:active:not(:disabled) {
   }
 
   .message-image {
-    border-radius: 12px;
+    border-radius: var(--r-sm);
   }
 
   /* Thinking block container (frame ⑥ .think): bordered inset card with the
      11/700 state header and 11.5/1.7 muted body */
   .reasoning-block {
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: var(--r-sm);
     background: var(--bg-card);
     padding: 10px 12px;
   }
 
   html[data-theme='dark'] .reasoning-block {
-    background: #1e2233;
+    background: var(--surface-2);
   }
 
   .reasoning-header {
@@ -2761,13 +2742,13 @@ html[data-os='ios'] .send-btn:active:not(:disabled) {
      11.5/1.7 muted body (same treatment as the phone band) */
   .reasoning-block {
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: var(--r-sm);
     background: var(--bg-card);
     padding: 10px 12px;
   }
 
   html[data-theme='dark'] .reasoning-block {
-    background: #1e2233;
+    background: var(--surface-2);
   }
 
   .reasoning-header {
@@ -2799,7 +2780,7 @@ html[data-os='ios'] .send-btn:active:not(:disabled) {
   .chat-precheck-stack .start-notice {
     background: var(--bg-card);
     border: none;
-    border-radius: 14px;
+    border-radius: var(--r-md);
     padding: 10px 14px;
     box-shadow: var(--shadow-island);
     font-size: 12px;
@@ -2808,16 +2789,15 @@ html[data-os='ios'] .send-btn:active:not(:disabled) {
   }
 
   html[data-theme='dark'] .chat-precheck-stack .start-notice {
-    background: #1e2233;
+    background: var(--surface-2);
   }
 
   .chat-precheck-stack .start-notice--error {
-    background: #fdecec;
+    background: var(--danger-bg);
     color: #b91c1c;
   }
 
   html[data-theme='dark'] .chat-precheck-stack .start-notice--error {
-    background: #2c1a1f;
     color: #fca5a5;
   }
 
@@ -2839,14 +2819,9 @@ html[data-os='ios'] .send-btn:active:not(:disabled) {
   .chat-precheck-stack .start-notice-spinner {
     width: 13px;
     height: 13px;
-    border: 2px solid #c7caea;
-    border-top-color: #7c3aed;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent-light);
     animation-duration: 1s;
-  }
-
-  html[data-theme='dark'] .chat-precheck-stack .start-notice-spinner {
-    border-color: rgba(255, 255, 255, 0.18);
-    border-top-color: #a78bfa;
   }
 
   /* Frame A⑦: history dims behind the inline banner, composer degrades */

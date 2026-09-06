@@ -916,7 +916,7 @@ async function manualCheck() {
   justify-content: center;
   width: 36px;
   height: 36px;
-  border-radius: 12px;
+  border-radius: var(--r-sm);
   background: rgba(255, 255, 255, 0.2);
   flex-shrink: 0;
 }
@@ -1011,7 +1011,7 @@ async function manualCheck() {
   justify-content: center;
   width: 36px;
   height: 36px;
-  border-radius: 12px;
+  border-radius: var(--r-sm);
   flex-shrink: 0;
 }
 
@@ -1023,12 +1023,12 @@ async function manualCheck() {
 
 .ic-emerald {
   background: rgba(16, 185, 129, 0.14);
-  color: #10b981;
+  color: var(--success);
 }
 
 .ic-amber {
   background: rgba(245, 158, 11, 0.16);
-  color: #f59e0b;
+  color: var(--warning);
 }
 
 .ic-violet {
@@ -1502,7 +1502,7 @@ async function manualCheck() {
   .row-ic {
     width: 34px;
     height: 34px;
-    border-radius: 12px;
+    border-radius: var(--r-sm);
   }
 
   .ic-indigo {
@@ -1561,8 +1561,8 @@ async function manualCheck() {
   }
 
   html[data-theme='dark'] .row-ic {
-    background: #232739;
-    color: #a78bfa;
+    background: var(--surface-2);
+    color: var(--accent-light);
   }
 
   .row-title {
@@ -1611,9 +1611,9 @@ async function manualCheck() {
     bottom: calc(var(--mobile-nav-height, 0px) + 10px + var(--keyboard-inset, 0px));
     width: auto;
     max-height: 50vh;
-    border-radius: 20px;
+    border-radius: var(--r-lg);
     border: none;
-    box-shadow: none;
+    box-shadow: 0 24px 60px rgba(15, 17, 28, 0.40);
   }
 
   /* API key row tail (frame ⑯): compact button showing current auth state */
@@ -1678,7 +1678,7 @@ async function manualCheck() {
     padding: 12px 14px;
     background: var(--surface-2);
     border: none;
-    border-radius: 12px;
+    border-radius: var(--r-sm);
     color: var(--text-primary);
     font-size: 14px;
     font-family: var(--font-mono);
@@ -1695,7 +1695,7 @@ async function manualCheck() {
     min-height: 44px;
     padding: 13px 0;
     border: none;
-    border-radius: 16px;
+    border-radius: var(--r-md);
     background: var(--grad);
     color: #fff;
     font-size: 14px;
@@ -1717,10 +1717,13 @@ async function manualCheck() {
 }
 
 .api-key-dialog {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  box-shadow: none;
+  /* Glass modal (design draft v2 rule 2) */
+  background: var(--glass);
+  backdrop-filter: blur(22px) saturate(1.6);
+  -webkit-backdrop-filter: blur(22px) saturate(1.6);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--r-lg);
+  box-shadow: 0 24px 60px rgba(15, 17, 28, 0.40);
   padding: 20px;
   width: 340px;
   max-width: 90vw;
@@ -1835,11 +1838,7 @@ async function manualCheck() {
   /* Draft A16 icon brick: grad-soft tile + violet glyph on the surface card */
   .docs-entry-icon {
     background: var(--grad-soft);
-    color: #6d28d9;
-  }
-
-  html[data-theme='dark'] .docs-entry-icon {
-    color: #c4b5fd;
+    color: var(--accent-light);
   }
 
   .docs-entry-sub {

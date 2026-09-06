@@ -223,16 +223,20 @@ function close() {
 }
 
 .modal {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 16px;
+  /* Glass modal (design draft v2 principle ② / frame ㉑ .modal): translucent
+     panel + backdrop blur + glass hairline + deep floating shadow. */
+  background: var(--glass);
+  backdrop-filter: blur(22px) saturate(1.6);
+  -webkit-backdrop-filter: blur(22px) saturate(1.6);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--r-lg);
   /* min() clamp: the fixed 520px overflowed narrow phone viewports; a no-op
      on viewports >= 552px where it resolves to 520px */
   width: min(520px, calc(100vw - 32px));
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  box-shadow: none;
+  box-shadow: 0 24px 60px rgba(15, 17, 28, 0.40);
 }
 
 .modal-header {
@@ -364,13 +368,13 @@ function close() {
 .dl-glyph {
   width: 44px;
   height: 44px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #6366f1, #a78bfa);
+  border-radius: var(--r-sm);
+  background: var(--grad);
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: none;
+  box-shadow: 0 6px 16px rgba(124, 92, 246, 0.42);
 }
 
 .dl-version {
@@ -390,7 +394,7 @@ function close() {
 
 .dl-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #6366f1, #a78bfa);
+  background: var(--grad);
   border-radius: 5px;
   transition: width 0.3s ease;
 }
@@ -584,13 +588,13 @@ function close() {
     padding: 6px 12px;
     border: none;
     background: var(--grad-soft);
-    color: #6d28d9;
+    color: var(--accent-light);
     font-size: 11.5px;
     font-weight: 700;
   }
 
   html[data-theme='dark'] .meta-chip {
-    color: #c4b5fd;
+    color: var(--accent-light);
   }
 
   .meta-chip.plain {
@@ -604,7 +608,7 @@ function close() {
 
   .release-notes {
     border: none;
-    border-radius: 14px;
+    border-radius: var(--r-md);
     padding: 12px 14px;
     background: var(--bg-card);
   }
@@ -648,7 +652,7 @@ function close() {
     padding: 13px 0;
     background: var(--bg-primary);
     border: none;
-    border-radius: 14px;
+    border-radius: var(--r-md);
     color: var(--text-secondary);
     font-size: 13.5px;
     font-weight: 800;
@@ -659,7 +663,7 @@ function close() {
     padding: 13px 0;
     background: var(--grad);
     border: none;
-    border-radius: 14px;
+    border-radius: var(--r-md);
     color: #fff;
     font-size: 13.5px;
     font-weight: 800;
@@ -722,13 +726,13 @@ function close() {
     padding: 6px 12px;
     border: none;
     background: var(--grad-soft);
-    color: #6d28d9;
+    color: var(--accent-light);
     font-size: 11.5px;
     font-weight: 700;
   }
 
   html[data-theme='dark'] .meta-chip {
-    color: #c4b5fd;
+    color: var(--accent-light);
   }
 
   .meta-chip.plain {
@@ -742,7 +746,7 @@ function close() {
 
   .release-notes {
     border: none;
-    border-radius: 14px;
+    border-radius: var(--r-md);
     padding: 12px 14px;
     background: var(--bg-card);
   }
@@ -786,7 +790,7 @@ function close() {
     padding: 13px 0;
     background: var(--bg-primary);
     border: none;
-    border-radius: 14px;
+    border-radius: var(--r-md);
     color: var(--text-secondary);
     font-size: 13.5px;
     font-weight: 800;
@@ -797,7 +801,7 @@ function close() {
     padding: 13px 0;
     background: var(--grad);
     border: none;
-    border-radius: 14px;
+    border-radius: var(--r-md);
     color: #fff;
     font-size: 13.5px;
     font-weight: 800;

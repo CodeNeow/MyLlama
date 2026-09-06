@@ -833,7 +833,7 @@ async function loadModel(m: string) {
   margin-top: 12px;
   background: var(--hover-bg);
   border: 1px solid var(--border-light);
-  border-radius: 14px;
+  border-radius: var(--r-sm);
   padding: 10px 14px;
   font-family: var(--font-mono);
   font-size: 12.5px;
@@ -937,7 +937,7 @@ async function loadModel(m: string) {
    the data chart; on desktop it sits inside the hidden ghost, on phone inside
    the 45% ghost — both keep the card height reserved */
 .speed-baseline {
-  stroke: #c9cdde;
+  stroke: var(--text-dim);
   stroke-width: 2;
   stroke-dasharray: 4 6;
 }
@@ -991,7 +991,7 @@ html[data-theme='dark'] .speed-baseline {
   gap: 9px;
   padding: 15px 0;
   border: none;
-  border-radius: 20px;
+  border-radius: var(--r-md);
   font-size: 14px;
   font-weight: 800;
   font-family: inherit;
@@ -1019,7 +1019,7 @@ html[data-theme='dark'] .speed-baseline {
 /* Stopped → the one executable action rides the brand gradient (frame ⑥) */
 .primary-btn.start {
   background: var(--grad);
-  box-shadow: none;
+  box-shadow: 0 6px 16px rgba(124, 92, 246, 0.42);
 }
 
 /* Running → the one primary action is the danger-tinted stop */
@@ -1036,9 +1036,9 @@ html[data-theme='dark'] .speed-baseline {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-secondary);
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 20px;
+  border-radius: var(--r-md);
   box-shadow: var(--shadow-island);
   color: var(--text-secondary);
   cursor: pointer;
@@ -1067,10 +1067,13 @@ html[data-theme='dark'] .speed-baseline {
   top: calc(100% + 8px);
   z-index: 30;
   width: 300px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: none;
+  /* Glass popover (design draft v2 rule 2) */
+  background: var(--glass);
+  backdrop-filter: blur(22px) saturate(1.6);
+  -webkit-backdrop-filter: blur(22px) saturate(1.6);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--r-lg);
+  box-shadow: 0 18px 48px rgba(15, 17, 28, 0.22);
   padding: 16px;
 }
 
@@ -1652,7 +1655,7 @@ html[data-theme='dark'] .speed-baseline {
     margin-top: 10px;
     padding: 13px 0;
     border: none;
-    border-radius: 16px;
+    border-radius: var(--r-md);
     background: var(--grad);
     color: #fff;
     font-size: 14px;
@@ -1728,11 +1731,7 @@ html[data-theme='dark'] .speed-baseline {
   }
 
   .address-copy-icon {
-    color: #7c3aed;
-  }
-
-  html[data-theme='dark'] .address-copy-icon {
-    color: #c4b5fd;
+    color: var(--accent-light);
   }
 
   /* Stopped ghost at 45% ink instead of hidden (frame ⑭ .ghosted) */
@@ -1803,12 +1802,8 @@ html[data-theme='dark'] .speed-baseline {
 
   .model-chip.active {
     background: var(--grad-soft);
-    color: #6d28d9;
+    color: var(--accent-light);
     font-weight: 700;
-  }
-
-  html[data-theme='dark'] .model-chip.active {
-    color: #c4b5fd;
   }
 
   .model-chip:disabled {
@@ -2000,7 +1995,7 @@ html[data-theme='dark'] .speed-baseline {
     margin-top: 10px;
     padding: 13px 0;
     border: none;
-    border-radius: 16px;
+    border-radius: var(--r-md);
     background: var(--grad);
     color: #fff;
     font-size: 14px;

@@ -133,12 +133,12 @@ const tabs = [
   color: var(--text-secondary);
 }
 
-/* Active segment: lifted white/surface chip with a soft island shadow
-   (design .seg span.on) */
+/* Active segment = gradient capsule + glow (desktop design draft v2 frames
+   ⑩-⑬ .segb.on; replaces the lifted surface chip) */
 .seg-btn.active {
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  box-shadow: none;
+  background: var(--grad);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(124, 92, 246, 0.35);
 }
 
 /* The 20px gap under the control lives here as sticky-top padding instead of a

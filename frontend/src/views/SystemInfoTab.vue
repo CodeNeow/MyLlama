@@ -1249,7 +1249,7 @@ onUnmounted(() => {
   flex: 1;
   min-width: 0;
   background: var(--overlay-8);
-  border-radius: 14px;
+  border-radius: var(--r-sm);
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
@@ -1283,7 +1283,7 @@ onUnmounted(() => {
 .tile {
   width: 48px;
   height: 48px;
-  border-radius: 15px;
+  border-radius: var(--r-md);
   background: var(--grad-soft);
   color: var(--accent-light);
   display: flex;
@@ -1667,7 +1667,7 @@ html[data-os='ios'] .unload-btn:active:not(:disabled) {
   align-items: center;
   gap: 6px;
   padding: 2px 12px;
-  border-radius: 20px;
+  border-radius: var(--r-sm);
   font-size: 12px;
   font-weight: 600;
 }
@@ -1852,7 +1852,7 @@ html[data-os='ios'] .unload-btn:active:not(:disabled) {
     padding: 10px 0 10px 12px;
     background: transparent;
     border-radius: 8px;
-    color: #7c3aed;
+    color: var(--accent-light);
     font-size: 12px;
     font-weight: 800;
   }
@@ -1863,10 +1863,6 @@ html[data-os='ios'] .unload-btn:active:not(:disabled) {
 
   .step-action svg {
     display: none;
-  }
-
-  html[data-theme='dark'] .step-action {
-    color: #a78bfa;
   }
 
   /* ── Hero (mockup .hero / .hero.off) ── */
@@ -1946,16 +1942,12 @@ html[data-os='ios'] .unload-btn:active:not(:disabled) {
     width: 42px;
     height: 42px;
     border-radius: 13px;
-    color: #7c3aed;
-  }
-
-  html[data-theme='dark'] .mcard .tile {
-    color: #a78bfa;
+    color: var(--accent-light);
   }
 
   .mcard-chips i.resident-chip {
-    background: #e7f8f1;
-    color: #0b7c5b;
+    background: var(--success-bg);
+    color: var(--success);
   }
 
   html[data-theme='dark'] .mcard-chips i.resident-chip {
@@ -2112,7 +2104,7 @@ html[data-os='ios'] .unload-btn:active:not(:disabled) {
     padding: 10px 0 10px 12px;
     background: transparent;
     border-radius: 8px;
-    color: #7c3aed;
+    color: var(--accent-light);
     font-size: 12px;
     font-weight: 800;
   }
@@ -2123,10 +2115,6 @@ html[data-os='ios'] .unload-btn:active:not(:disabled) {
 
   .step-action svg {
     display: none;
-  }
-
-  html[data-theme='dark'] .step-action {
-    color: #a78bfa;
   }
 }
 

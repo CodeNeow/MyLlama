@@ -542,7 +542,8 @@ onUnmounted(() => {
   padding: 24px 28px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-island);
   transition: border-color 0.2s;
 }
 
@@ -601,21 +602,17 @@ onUnmounted(() => {
   color: var(--warning);
 }
 
-/* Component-row icon tile (mockup frame ③: 42px / 13px gradient-soft brick) */
+/* Component-row icon tile (mockup frame ③: 42px gradient-soft brick) */
 .comp-tile {
   width: 42px;
   height: 42px;
   border-radius: 13px;
   background: var(--grad-soft);
-  color: #7c3aed;
+  color: var(--accent-light);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-}
-
-html[data-theme='dark'] .comp-tile {
-  color: #a78bfa;
 }
 
 /* Combined download status line (mockup .dlcard .t .st) */
@@ -623,7 +620,7 @@ html[data-theme='dark'] .comp-tile {
   margin-left: auto;
   font-size: 12px;
   font-weight: 700;
-  color: #8b5cf6;
+  color: var(--accent-light);
 }
 
 /* Phone-tier card title (mockup .dlcard .t left slot, "下载进度"): rendered
@@ -633,10 +630,6 @@ html[data-theme='dark'] .comp-tile {
   font-size: 13px;
   font-weight: 700;
   color: var(--text-primary);
-}
-
-html[data-theme='dark'] .dl-status-line {
-  color: #a78bfa;
 }
 
 .dl-status-line.paused {
@@ -697,7 +690,7 @@ html[data-theme='dark'] .dl-status-line {
   padding: 24px 28px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--r-lg);
   min-width: 0;
 }
 
@@ -792,7 +785,7 @@ html[data-theme='dark'] .dl-status-line {
   align-items: center;
   gap: 6px;
   padding: 2px 12px;
-  border-radius: 20px;
+  border-radius: var(--r-sm);
   font-size: 12px;
   font-weight: 600;
 }
@@ -814,7 +807,7 @@ html[data-theme='dark'] .dl-status-line {
   padding: 24px 28px;
   background: var(--surface);
   border: 1px solid var(--skeleton-bg);
-  border-radius: 14px;
+  border-radius: var(--r-lg);
 }
 
 .skeleton-line {
@@ -847,7 +840,7 @@ html[data-theme='dark'] .dl-status-line {
   padding: 56px 32px;
   background: rgba(239, 68, 68, 0.04);
   border: 1px solid rgba(239, 68, 68, 0.12);
-  border-radius: 16px;
+  border-radius: var(--r-lg);
   text-align: center;
 }
 
@@ -903,27 +896,28 @@ html[data-theme='dark'] .dl-status-line {
   align-items: center;
   gap: 8px;
   padding: 10px 22px;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(167, 139, 250, 0.15));
-  color: var(--accent-light);
-  border: 1px solid rgba(99, 102, 241, 0.3);
-  border-radius: 10px;
+  /* Primary action = solid brand gradient + white label + glow (design draft
+     v2 principle ③); the secondary "自定义" stays a bordered neutral button. */
+  background: var(--grad);
+  color: #fff;
+  border: none;
+  border-radius: var(--r-md);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
+  box-shadow: 0 6px 16px rgba(124, 92, 246, 0.42);
 }
 
 .download-btn:hover {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(167, 139, 250, 0.25));
-  border-color: rgba(99, 102, 241, 0.5);
-  color: var(--accent-light);
+  color: #fff;
   transform: translateY(-1px);
-  box-shadow: none;
+  box-shadow: 0 8px 20px rgba(124, 92, 246, 0.5);
 }
 
 .download-btn:active {
   transform: translateY(0);
-  box-shadow: none;
+  box-shadow: 0 6px 16px rgba(124, 92, 246, 0.42);
 }
 
 /* ─── Custom button ─── */
@@ -932,10 +926,11 @@ html[data-theme='dark'] .dl-status-line {
   align-items: center;
   gap: 8px;
   padding: 10px 22px;
-  background: var(--border-light);
+  /* Secondary action: surface fill + 1px border (design draft v2 principle ⑤) */
+  background: var(--surface);
   color: var(--text-muted);
-  border: 1px solid var(--overlay-10);
-  border-radius: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -943,8 +938,8 @@ html[data-theme='dark'] .dl-status-line {
 }
 
 .custom-btn:hover {
-  background: var(--overlay-8);
-  border-color: var(--scrollbar-thumb-hover);
+  background: var(--surface-2);
+  border-color: var(--overlay-20);
   color: var(--text-primary);
 }
 
@@ -971,7 +966,7 @@ html[data-theme='dark'] .dl-status-line {
 
 .custom-path-value {
   font-size: 12px;
-  color: #22c55e;
+  color: var(--success);
   font-family: var(--font-mono);
   word-break: break-all;
 }
@@ -1046,7 +1041,7 @@ html[data-theme='dark'] .dl-status-line {
 }
 
 .pkg-name svg {
-  color: #22c55e;
+  color: var(--success);
   flex-shrink: 0;
 }
 
@@ -1082,7 +1077,7 @@ html[data-theme='dark'] .dl-status-line {
 .dl-fill {
   height: 100%;
   border-radius: 3px;
-  background: linear-gradient(90deg, #6366f1, #a78bfa);
+  background: var(--grad);
   transition: width 0.3s ease;
 }
 
@@ -1148,7 +1143,7 @@ html[data-theme='dark'] .dl-status-line {
 
 .resume-btn {
   background: rgba(34, 197, 94, 0.12);
-  color: #22c55e;
+  color: var(--success);
   border-color: rgba(34, 197, 94, 0.2);
 }
 
@@ -1246,7 +1241,7 @@ html[data-theme='dark'] .dl-status-line {
     background: var(--grad);
     color: #fff;
     border: none;
-    border-radius: 16px;
+    border-radius: var(--r-md);
     font-size: 13.5px;
     font-weight: 800;
     box-shadow: none;
@@ -1414,7 +1409,7 @@ html[data-theme='dark'] .dl-status-line {
     padding: 20px 24px;
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 14px;
+    border-radius: var(--r-lg);
   }
 
   /* The in-card install paths move into the right-rail card on this layout */
