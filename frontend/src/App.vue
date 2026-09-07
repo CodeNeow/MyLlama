@@ -370,21 +370,18 @@ async function closeWindow() {
   overflow: hidden;
 }
 
-/* ─── Title bar = pure window chrome: drag band + window controls only.
-   Branding lives in the sidebar logo, page identity in each page's own
-   header. The controls group is the sole flex child, so flex-end keeps it
-   pinned to the right edge. Glass band (desktop design draft v2 principle ④):
-   translucent panel + backdrop blur with a hairline bottom edge, no text. ─── */
+/* ─── Title bar = pure window chrome: transparent drag band (no visible top
+   bar) + window controls only. The band itself paints nothing — the only
+   visible window chrome is the top-right control buttons. Branding lives in
+   the sidebar logo, page identity in each page's own header. The controls
+   group is the sole flex child, so flex-end keeps it pinned to the right
+   edge. ─── */
 .title-bar {
   height: 40px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   padding: 0 12px;
-  background: var(--glass);
-  backdrop-filter: blur(22px) saturate(1.6);
-  -webkit-backdrop-filter: blur(22px) saturate(1.6);
-  border-bottom: 1px solid var(--line);
   --wails-draggable: drag;
   user-select: none;
   flex-shrink: 0;
