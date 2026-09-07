@@ -195,6 +195,15 @@ function isActive(path: string): boolean {
   gap: 0;
 }
 
+/* Collapsed header: widen the side padding so the 32px logo icon centers in
+   the 64px rail (16 + 32/2 = 32), matching the nav icons (12 + 10 + 20/2 = 32)
+   and the absolutely-centered collapse toggle. Vertical padding stays the base
+   value so the header height does not jump on collapse/expand. */
+.sidebar.collapsed .sidebar-header {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
 .sidebar.collapsed .logo-text {
   max-width: 0;
   opacity: 0;
@@ -396,6 +405,13 @@ function isActive(path: string): boolean {
 
   .sidebar .logo {
     gap: 0;
+  }
+
+  /* Same 16px side padding as .sidebar.collapsed: centers the 32px logo icon
+     in the forced 64px rail */
+  .sidebar .sidebar-header {
+    padding-left: 16px;
+    padding-right: 16px;
   }
 
   .sidebar .logo-text {

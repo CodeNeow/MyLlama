@@ -261,8 +261,10 @@
       <!-- GPU Card: only on platforms with a real GPU probe (windows, linux,
            macOS on Apple Silicon). Android probes are unsupported (GPUs always
            empty) and macOS x64 ships the CPU-only release (no GPUs), so the
-           card — including its empty state — would be pure noise there. -->
-      <section v-if="showGpuCard" class="island info-section">
+           card — including its empty state — would be pure noise there.
+           Desktop tier (>=1100px) re-homes it into the left column via the
+           .gpu-card grid-column override for column balance. -->
+      <section v-if="showGpuCard" class="island info-section gpu-card">
         <h2 class="section-title">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
@@ -929,7 +931,9 @@ onUnmounted(() => {
    two-column split. Hero + the memory/CPU mini pair own the left column; the
    quick-start checklist + storage island pack the right column, the
    resident-model card continues in the left column right after the minis,
-   and the capability/system cards stack in the right column. */
+   the GPU card follows it (balance fix: with the GPU card on the right, that
+   column outgrew the left by ~240px on real machines), and the CUDA/system
+   cards stack in the right column. */
 @media (min-width: 1100px) {
   .sys-grid {
     grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
@@ -962,9 +966,18 @@ onUnmounted(() => {
     grid-column: 1;
   }
 
-  /* GPU / CUDA / system cards -> right column */
+  /* CUDA / system cards -> right column */
   .home-info-col > * {
     grid-column: 2;
+  }
+
+  /* GPU card -> left column, after the resident-model card: balances the two
+     columns (the checklist + storage side outgrew the left once the GPU card
+     sat here). Specificity (0,2,0) beats the (0,1,0) rule above, and the
+     card's source position after the minis keeps the auto-placed row order
+     hero -> minis -> resident -> GPU in the left column. */
+  .home-info-col > .gpu-card {
+    grid-column: 1;
   }
 }
 
