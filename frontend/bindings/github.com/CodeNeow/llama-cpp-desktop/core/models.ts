@@ -512,6 +512,99 @@ export class LoadedModel {
     }
 }
 
+/**
+ * LoraInfo describes one scanned .gguf file in the LoRA directory. Valid marks
+ * a file identified as a LoRA adapter GGUF (general.type "adapter" +
+ * adapter.type "lora"); a regular model GGUF or an unreadable file scans with
+ * Valid=false so the UI can flag it instead of silently hiding it. Alpha is
+ * meaningful only when HasAlpha is set (the key is optional in the GGUF spec —
+ * the loader reads it with a zero default).
+ */
+export class LoraInfo {
+    "name": string;
+    "path": string;
+    "sizeBytes": number;
+    "sizeHuman": string;
+    "alpha": number;
+    "hasAlpha": boolean;
+    "arch": string;
+    "valid": boolean;
+
+    /** Creates a new LoraInfo instance. */
+    constructor($$source: Partial<LoraInfo> = {}) {
+        if (!("name" in $$source)) {
+            this["name"] = "";
+        }
+        if (!("path" in $$source)) {
+            this["path"] = "";
+        }
+        if (!("sizeBytes" in $$source)) {
+            this["sizeBytes"] = 0;
+        }
+        if (!("sizeHuman" in $$source)) {
+            this["sizeHuman"] = "";
+        }
+        if (!("alpha" in $$source)) {
+            this["alpha"] = 0;
+        }
+        if (!("hasAlpha" in $$source)) {
+            this["hasAlpha"] = false;
+        }
+        if (!("arch" in $$source)) {
+            this["arch"] = "";
+        }
+        if (!("valid" in $$source)) {
+            this["valid"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new LoraInfo instance from a string or object.
+     */
+    static createFrom($$source: any = {}): LoraInfo {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new LoraInfo($$parsedSource as Partial<LoraInfo>);
+    }
+}
+
+/**
+ * LoraRef is one LoRA adapter attached to a model config: Name is the adapter
+ * GGUF file name inside the LoRA directory (never a path — validated against
+ * separators/.. at every entry point, see validLoraRefName), Scale is the
+ * upstream --lora-scaled weight (0.0–4.0, default 1.0) and Enabled gates
+ * whether the adapter is passed to llama-server at all.
+ */
+export class LoraRef {
+    "name": string;
+    "scale": number;
+    "enabled": boolean;
+
+    /** Creates a new LoraRef instance. */
+    constructor($$source: Partial<LoraRef> = {}) {
+        if (!("name" in $$source)) {
+            this["name"] = "";
+        }
+        if (!("scale" in $$source)) {
+            this["scale"] = 0;
+        }
+        if (!("enabled" in $$source)) {
+            this["enabled"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new LoraRef instance from a string or object.
+     */
+    static createFrom($$source: any = {}): LoraRef {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new LoraRef($$parsedSource as Partial<LoraRef>);
+    }
+}
+
 export class MemoryInfo {
     "totalGb": number;
     "freeGb": number;
@@ -663,6 +756,18 @@ export class ModelConfig {
      */
     "noMmap"?: boolean;
 
+    /**
+     * LoraAdapters lists the LoRA adapter files mounted onto this model at
+     * llama-server start. Names are bare file names resolved against the LoRA
+     * directory (loraDir); Scale is the upstream --lora-scaled weight clamped
+     * to [0,4] (default 1.0); Enabled=false entries are never written into the
+     * preset. omitempty keeps old configs (and the auto-tuner, which builds a
+     * fresh ModelConfig without the field) byte-compatible; writers that send
+     * a nil slice mean "not provided" and the previous refs are preserved
+     * (see SaveModelConfig), while an empty non-nil slice clears them.
+     */
+    "loraAdapters"?: LoraRef[];
+
     /** Creates a new ModelConfig instance. */
     constructor($$source: Partial<ModelConfig> = {}) {
         if (!("threads" in $$source)) {
@@ -733,7 +838,11 @@ export class ModelConfig {
      * Creates a new ModelConfig instance from a string or object.
      */
     static createFrom($$source: any = {}): ModelConfig {
+        const $$createField22_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("loraAdapters" in $$parsedSource) {
+            $$parsedSource["loraAdapters"] = $$createField22_0($$parsedSource["loraAdapters"]);
+        }
         return new ModelConfig($$parsedSource as Partial<ModelConfig>);
     }
 }
@@ -909,8 +1018,8 @@ export class MonitorStatus {
      * Creates a new MonitorStatus instance from a string or object.
      */
     static createFrom($$source: any = {}): MonitorStatus {
-        const $$createField3_0 = $$createType4;
-        const $$createField8_0 = $$createType6;
+        const $$createField3_0 = $$createType6;
+        const $$createField8_0 = $$createType8;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("gpus" in $$parsedSource) {
             $$parsedSource["gpus"] = $$createField3_0($$parsedSource["gpus"]);
@@ -1116,7 +1225,7 @@ export class ServerLogsPage {
      * Creates a new ServerLogsPage instance from a string or object.
      */
     static createFrom($$source: any = {}): ServerLogsPage {
-        const $$createField0_0 = $$createType8;
+        const $$createField0_0 = $$createType10;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("entries" in $$parsedSource) {
             $$parsedSource["entries"] = $$createField0_0($$parsedSource["entries"]);
@@ -1166,12 +1275,12 @@ export class SystemInfo {
      * Creates a new SystemInfo instance from a string or object.
      */
     static createFrom($$source: any = {}): SystemInfo {
-        const $$createField2_0 = $$createType9;
-        const $$createField3_0 = $$createType10;
-        const $$createField4_0 = $$createType12;
-        const $$createField5_0 = $$createType13;
-        const $$createField6_0 = $$createType14;
-        const $$createField7_0 = $$createType6;
+        const $$createField2_0 = $$createType11;
+        const $$createField3_0 = $$createType12;
+        const $$createField4_0 = $$createType14;
+        const $$createField5_0 = $$createType15;
+        const $$createField6_0 = $$createType16;
+        const $$createField7_0 = $$createType8;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("cpu" in $$parsedSource) {
             $$parsedSource["cpu"] = $$createField2_0($$parsedSource["cpu"]);
@@ -1317,15 +1426,17 @@ export class UpdateDownloadState {
 const $$createType0 = $Create.Array($Create.Any);
 const $$createType1 = HFFile.createFrom;
 const $$createType2 = $Create.Array($$createType1);
-const $$createType3 = MonitorGPU.createFrom;
+const $$createType3 = LoraRef.createFrom;
 const $$createType4 = $Create.Array($$createType3);
-const $$createType5 = DiskUsage.createFrom;
-const $$createType6 = $Create.Nullable($$createType5);
-const $$createType7 = ServerLogEntry.createFrom;
-const $$createType8 = $Create.Array($$createType7);
-const $$createType9 = CPUInfo.createFrom;
-const $$createType10 = MemoryInfo.createFrom;
-const $$createType11 = GPUInfo.createFrom;
-const $$createType12 = $Create.Array($$createType11);
-const $$createType13 = CUDAInfo.createFrom;
-const $$createType14 = LlamaCppInfo.createFrom;
+const $$createType5 = MonitorGPU.createFrom;
+const $$createType6 = $Create.Array($$createType5);
+const $$createType7 = DiskUsage.createFrom;
+const $$createType8 = $Create.Nullable($$createType7);
+const $$createType9 = ServerLogEntry.createFrom;
+const $$createType10 = $Create.Array($$createType9);
+const $$createType11 = CPUInfo.createFrom;
+const $$createType12 = MemoryInfo.createFrom;
+const $$createType13 = GPUInfo.createFrom;
+const $$createType14 = $Create.Array($$createType13);
+const $$createType15 = CUDAInfo.createFrom;
+const $$createType16 = LlamaCppInfo.createFrom;

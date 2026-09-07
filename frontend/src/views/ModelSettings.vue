@@ -364,6 +364,103 @@
           </div>
         </div>
       </div>
+      <!-- LoRA adapters: per-model adapter mounts (Unsloth-export consumers);
+           visible on every platform — Android direct mode mounts them too -->
+      <div id="tab-lora" role="tabpanel" aria-labelledby="tab-lora-tab" v-show="activeTab === 'tab-lora'">
+        <div class="param-group">
+          <div class="lora-head">
+            <h3 class="group-title lora-title">{{ t('modelSettings.tabLora') }}</h3>
+            <button class="lora-refresh" :disabled="loraLoading || loraSaving" @click="loadLora">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"/>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+              </svg>
+              {{ t('modelSettings.loraRefresh') }}
+            </button>
+          </div>
+          <p class="param-hint lora-lead">{{ t('modelSettings.loraHint') }}</p>
+
+          <!-- Loading -->
+          <div v-if="loraLoading" class="loading-placeholder lora-loading">{{ t('modelSettings.loading') }}</div>
+
+          <!-- Error -->
+          <p v-else-if="loraLoadError" class="action-msg action-err lora-msg">{{ t('modelSettings.loraLoadFailed', { msg: loraLoadError }) }}</p>
+
+          <!-- Empty state: guide users to drop exported adapters into the dir -->
+          <div v-else-if="loraRows.length === 0" class="lora-empty">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            <p class="lora-empty-title">{{ t('modelSettings.loraEmptyTitle') }}</p>
+            <p class="lora-empty-text">{{ t('modelSettings.loraEmpty') }}</p>
+          </div>
+
+          <!-- Adapter rows -->
+          <template v-else>
+            <p class="lora-count">{{ t('modelSettings.loraActiveCount', { n: activeLoraCount }) }}</p>
+            <div v-for="row in loraRows" :key="row.name" class="lora-row" :class="{ 'lora-row--dim': (!row.onDisk || !row.valid) }">
+              <div class="lora-info">
+                <span class="lora-name">{{ row.name }}</span>
+                <span class="lora-meta">
+                  {{ row.sizeHuman }}
+                  <template v-if="row.valid && row.hasAlpha"> · {{ t('modelSettings.loraAlpha', { alpha: row.alpha }) }}</template>
+                  <template v-if="row.arch"> · {{ row.arch }}</template>
+                </span>
+                <span v-if="!row.onDisk" class="lora-badge lora-badge--warn">{{ t('modelSettings.loraMissing') }}</span>
+                <span v-else-if="!row.valid" class="lora-badge">{{ t('modelSettings.loraNotAdapter') }}</span>
+              </div>
+              <div class="lora-controls">
+                <label class="lora-scale-field">
+                  <span class="lora-scale-label">{{ t('modelSettings.loraScale') }}</span>
+                  <input
+                    v-model.number="row.scale"
+                    type="number"
+                    min="0"
+                    max="4"
+                    step="0.05"
+                    class="param-input lora-scale-input"
+                    :disabled="!row.onDisk || !row.valid"
+                    @change="row.scale = clampLoraScale(row.scale); markLoraDirty()"
+                  />
+                </label>
+                <label class="switch">
+                  <input
+                    type="checkbox"
+                    v-model="row.enabled"
+                    :disabled="!row.onDisk || !row.valid"
+                    :aria-label="row.name"
+                    @change="markLoraDirty"
+                  />
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+          </template>
+
+          <!-- Persist + (when running) hot-apply actions -->
+          <div class="lora-actions">
+            <span class="action-msg" v-if="loraSaved">{{ t('modelSettings.loraSaved') }}</span>
+            <span class="action-msg action-err" v-else-if="loraSaveError">{{ loraSaveError }}</span>
+            <span class="action-msg" v-else-if="loraApplied">{{ t('modelSettings.loraApplied') }}</span>
+            <span class="action-msg action-err" v-else-if="loraApplyError">{{ t('modelSettings.loraApplyFailed', { msg: loraApplyError }) }}</span>
+            <span class="action-spacer"></span>
+            <button
+              v-if="serverRunning"
+              class="btn-secondary"
+              :disabled="loraApplying || loraSaving || loraDirty"
+              :title="loraDirty ? t('modelSettings.loraSave') : ''"
+              @click="applyLora"
+            >
+              {{ loraApplying ? t('modelSettings.loraApplying') : t('modelSettings.loraApply') }}
+            </button>
+            <button class="btn-primary" :disabled="loraSaving || !loraDirty" @click="saveLora">
+              {{ loraSaving ? t('modelSettings.saving') : t('modelSettings.loraSave') }}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Tablet portrait summary island (tablet draft frames ⑪⑫, track A):
@@ -386,7 +483,9 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { getModelConfig, saveModelConfig, getServerStatus, tuneModelConfig, benchmarkModel, getSystemInfo, getModels } from '../wails'
+import { getModelConfig, saveModelConfig, getServerStatus, tuneModelConfig, benchmarkModel, getSystemInfo, getModels, listLoraAdapters, getLoraConfig, setLoraAdapters, applyLoraRuntime } from '../wails'
+import type { LoraRow } from '../lib/lora'
+import { clampLoraScale, mergeLoraRows, rowsToRefs, countEnabled } from '../lib/lora'
 import { t } from '../lib/i18n'
 import { tunedSummaryParams, tunedToastKey } from '../lib/modelTune'
 import { estimateMemory, memorySummaryRows, type MemorySummaryCopy } from '../lib/modelMemory'
@@ -694,6 +793,11 @@ const tabs = [
     icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0-2.83l-.06-.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
   },
   {
+    id: 'tab-lora',
+    label: () => t('modelSettings.tabLora'),
+    icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M10 6.5h7.5v7"/><path d="M6.5 10v7.5H14"/></svg>`,
+  },
+  {
     id: 'tab-infer',
     label: () => t('modelSettings.tabInfer'),
     icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
@@ -758,6 +862,8 @@ watch(modelName, () => {
   loadConfig()
   // The weights term of the memory estimate follows the model too
   lookupModelSize()
+  // Adapter mounts are per-model as well
+  loadLora()
 })
 
 // ─── Load / Reset / Save ──────────────────────────────────────────────────────
@@ -901,6 +1007,88 @@ async function bench() {
   }
 }
 
+// ─── LoRA adapters (tab-lora) ──────────────────────────────────────────────────
+// Per-model adapter mounts: rows merge the LoRA-directory scan with the
+// persisted refs (lib/lora.ts). Edits stay local until 保存适配器 persists
+// them via SetLoraAdapters; the hot-apply button (service running) pushes the
+// saved weights to llama-server best-effort and falls back to the
+// "takes effect on next start" hint on failure.
+const loraRows = ref<LoraRow[]>([])
+const loraLoading = ref(false)
+const loraLoadError = ref('')
+const loraDirty = ref(false)
+const loraSaving = ref(false)
+const loraSaved = ref(false)
+const loraSaveError = ref('')
+const loraApplying = ref(false)
+const loraApplied = ref(false)
+const loraApplyError = ref('')
+
+const activeLoraCount = computed(() => countEnabled(loraRows.value))
+
+function markLoraDirty() {
+  loraDirty.value = true
+  loraSaved.value = false
+  loraApplyError.value = ''
+}
+
+async function loadLora() {
+  loraLoading.value = true
+  loraLoadError.value = ''
+  loraSaved.value = false
+  loraSaveError.value = ''
+  loraApplied.value = false
+  loraApplyError.value = ''
+  loraDirty.value = false
+  try {
+    const [scan, refs] = await Promise.all([
+      listLoraAdapters(),
+      getLoraConfig(decodedModelName.value),
+    ])
+    loraRows.value = mergeLoraRows(scan ?? [], refs ?? [])
+  } catch (e: any) {
+    loraRows.value = []
+    loraLoadError.value = e?.message || String(e)
+  } finally {
+    loraLoading.value = false
+  }
+}
+
+async function saveLora() {
+  if (loraSaving.value || !loraDirty.value) return
+  loraSaving.value = true
+  loraSaveError.value = ''
+  loraSaved.value = false
+  loraApplied.value = false
+  loraApplyError.value = ''
+  try {
+    await setLoraAdapters(decodedModelName.value, rowsToRefs(loraRows.value))
+    loraSaved.value = true
+    loraDirty.value = false
+  } catch (e: any) {
+    loraSaveError.value = e?.message || String(e)
+  } finally {
+    loraSaving.value = false
+  }
+}
+
+async function applyLora() {
+  if (loraApplying.value || loraDirty.value) return
+  loraApplying.value = true
+  loraApplied.value = false
+  loraApplyError.value = ''
+  loraSaved.value = false
+  try {
+    await applyLoraRuntime(decodedModelName.value)
+    loraApplied.value = true
+  } catch (e: any) {
+    // Degrade path: the backend message already carries the restart guidance.
+    loraApplyError.value = e?.message || String(e)
+  } finally {
+    loraApplying.value = false
+  }
+}
+
 // ─── Lifecycle ────────────────────────────────────────────────────────────────
 onMounted(async () => {
   loadConfig()
@@ -919,6 +1107,8 @@ onMounted(async () => {
   } catch {}
   // Best-effort weights term for the tablet memory estimate
   lookupModelSize()
+  // Adapter list for the LoRA tab
+  loadLora()
 })
 
 // Pending tune/bench feedback timers must not fire after the page is left
@@ -1308,6 +1498,172 @@ onUnmounted(() => {
   outline-offset: 2px;
 }
 
+/* ─── LoRA adapter tab ─────────────────────────────────────────────── */
+.lora-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.lora-head .lora-title {
+  margin-bottom: 0;
+}
+
+.lora-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lora-refresh:hover:not(:disabled) {
+  background: var(--hover-bg);
+  color: var(--text-secondary);
+}
+
+.lora-refresh:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.lora-lead {
+  margin: 10px 0 14px;
+}
+
+.lora-loading {
+  padding: 24px 0;
+}
+
+.lora-msg {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.lora-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 28px 16px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.lora-empty-title {
+  margin: 6px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.lora-empty-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  max-width: 420px;
+}
+
+.lora-count {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.lora-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+}
+
+.lora-row--dim {
+  opacity: 0.55;
+}
+
+.lora-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.lora-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+
+.lora-meta {
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+.lora-badge {
+  align-self: flex-start;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--overlay-8);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.lora-badge--warn {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+}
+
+.lora-controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+.lora-scale-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lora-scale-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.lora-scale-input {
+  width: 96px;
+  padding: 6px 10px;
+}
+
+.lora-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
 /* ─── Tablet summary rows (draft ⑪⑫ "参数速览"): shared by the portrait
        page-bottom island and the landscape sticky rail — one rows builder
        (lib/modelMemory.ts), two placements. Both DOM nodes are tier-gated
@@ -1628,6 +1984,27 @@ onUnmounted(() => {
 
   .restart-note .note-icon {
     flex-shrink: 0;
+  }
+
+  /* LoRA adapter rows stack on the narrow band: info block above a full-width
+     controls row (scale input left, mount switch right) */
+  .lora-row {
+    flex-wrap: wrap;
+  }
+
+  .lora-controls {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .lora-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .lora-actions .btn-secondary,
+  .lora-actions .btn-primary {
+    flex: 1 1 0;
   }
 
   .retry-btn {

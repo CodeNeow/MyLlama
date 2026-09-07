@@ -15,6 +15,29 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 import * as $models from "./models.js";
 
 /**
+ * ApplyLoraRuntime hot-applies the model's current enabled adapter weights to
+ * the RUNNING llama-server via POST /lora-adapters (best effort):
+ * 
+ *   - Android direct mode (single model process, no proxy): the runtime
+ *     endpoint accepts the plain array body, so a matching loaded-adapter set
+ *     applies immediately.
+ *   - Desktop router mode: GET works per-model via ?model=, but the POST
+ *     cannot pass the router at the pinned llama.cpp (the proxy wants a
+ *     "model" field inside the body while the child requires a plain array —
+ *     mutually exclusive upstream shapes), so the call fails with an explicit
+ *     "takes effect on next service start" error.
+ * 
+ * The running server's loaded list (GET) is matched against the persisted
+ * references by adapter file name; loaded-but-now-disabled adapters are
+ * omitted from the POST, which resets their scale to 0 (upstream replace
+ * semantics). A server started before the adapters were configured has an
+ * empty / mismatching loaded list — reported as a degrade error too.
+ */
+export function ApplyLoraRuntime(modelID: string): $CancellablePromise<void> {
+    return $Call.ByID(1353709832, modelID);
+}
+
+/**
  * BenchmarkModel measures the real token-generation speed of modelID on this
  * machine by running the llama-bench binary installed next to llama-server
  * with the model's CURRENT SAVED ModelConfig (a model without a saved config
@@ -22,7 +45,7 @@ import * as $models from "./models.js";
  * strictly user-triggered (no auto-triggers anywhere), single-flight via
  * benchRunMu — wait-then-run: a concurrent second call blocks and then runs
  * its own measurement — and bounded by benchRunTimeout per invocation.
- *
+ * 
  * cpu-moe configs try the optional-flag shapes in order, stopping at the
  * first success (non-cpu-moe configs run the single no-flags attempt; there
  * is nothing to retry):
@@ -33,7 +56,7 @@ import * as $models from "./models.js";
  *     a layer count, otherwise this step is skipped (UsedCPUMoe=true),
  *  3. no optional flags — last resort; the measured placement then differs
  *     from the saved config and UsedCPUMoe=false records it.
- *
+ * 
  * Each attempt is logged at [INFO] (intermediate failures at [WARN]); only
  * the final attempt's failure is surfaced as the error.
  */
@@ -167,15 +190,26 @@ export function GetLoadedModels(): $CancellablePromise<$models.LoadedModel[]> {
     });
 }
 
+/**
+ * GetLoraConfig returns the LoRA references persisted for one model (empty
+ * slice when the model has no config entry yet). modelID is the scanned model
+ * name — the same id the ModelSettings page addresses.
+ */
+export function GetLoraConfig(modelID: string): $CancellablePromise<$models.LoraRef[]> {
+    return $Call.ByID(2164216874, modelID).then(($result: any) => {
+        return $$createType21($result);
+    });
+}
+
 export function GetMemory(): $CancellablePromise<$models.MemoryInfo | null> {
     return $Call.ByID(3935674743).then(($result: any) => {
-        return $$createType21($result);
+        return $$createType23($result);
     });
 }
 
 export function GetModelConfig(modelID: string): $CancellablePromise<$models.ModelConfig> {
     return $Call.ByID(3379369827, modelID).then(($result: any) => {
-        return $$createType22($result);
+        return $$createType24($result);
     });
 }
 
@@ -194,7 +228,7 @@ export function GetModelDescription(modelID: string): $CancellablePromise<string
  */
 export function GetModelFiles(modelID: string): $CancellablePromise<$models.HFFileOut[]> {
     return $Call.ByID(3059698428, modelID).then(($result: any) => {
-        return $$createType24($result);
+        return $$createType26($result);
     });
 }
 
@@ -209,7 +243,7 @@ export function GetModelMaxFileSize(modelID: string): $CancellablePromise<number
 
 export function GetModels(): $CancellablePromise<$models.ModelInfo[]> {
     return $Call.ByID(3623107510).then(($result: any) => {
-        return $$createType26($result);
+        return $$createType28($result);
     });
 }
 
@@ -220,13 +254,13 @@ export function GetModels(): $CancellablePromise<$models.ModelInfo[]> {
  */
 export function GetMonitorStatus(): $CancellablePromise<$models.MonitorStatus | null> {
     return $Call.ByID(1406400820).then(($result: any) => {
-        return $$createType28($result);
+        return $$createType30($result);
     });
 }
 
 export function GetOS(): $CancellablePromise<{ [_ in string]?: string }> {
     return $Call.ByID(1828890902).then(($result: any) => {
-        return $$createType29($result);
+        return $$createType31($result);
     });
 }
 
@@ -239,7 +273,7 @@ export function GetOS(): $CancellablePromise<{ [_ in string]?: string }> {
  */
 export function GetRemoteDoc(lang: string, sectionID: string, force: boolean): $CancellablePromise<$models.RemoteDocResult> {
     return $Call.ByID(2670577276, lang, sectionID, force).then(($result: any) => {
-        return $$createType30($result);
+        return $$createType32($result);
     });
 }
 
@@ -252,13 +286,13 @@ export function GetRemoteDoc(lang: string, sectionID: string, force: boolean): $
  */
 export function GetSafeArea(): $CancellablePromise<$models.SafeArea> {
     return $Call.ByID(4054609944).then(($result: any) => {
-        return $$createType31($result);
+        return $$createType33($result);
     });
 }
 
 export function GetServerConfig(): $CancellablePromise<$models.ServerConfig> {
     return $Call.ByID(922492437).then(($result: any) => {
-        return $$createType32($result);
+        return $$createType34($result);
     });
 }
 
@@ -271,7 +305,7 @@ export function GetServerConfig(): $CancellablePromise<$models.ServerConfig> {
  */
 export function GetServerLogsSince(since: number): $CancellablePromise<$models.ServerLogsPage> {
     return $Call.ByID(2272125646, since).then(($result: any) => {
-        return $$createType33($result);
+        return $$createType35($result);
     });
 }
 
@@ -283,7 +317,7 @@ export function GetServerStatus(): $CancellablePromise<{ [_ in string]?: any }> 
 
 export function GetSystemInfo(): $CancellablePromise<$models.SystemInfo | null> {
     return $Call.ByID(1207510045).then(($result: any) => {
-        return $$createType35($result);
+        return $$createType37($result);
     });
 }
 
@@ -293,7 +327,7 @@ export function GetSystemInfo(): $CancellablePromise<$models.SystemInfo | null> 
  */
 export function GetUpdateDownloadStatus(): $CancellablePromise<$models.UpdateDownloadState | null> {
     return $Call.ByID(1961990283).then(($result: any) => {
-        return $$createType37($result);
+        return $$createType39($result);
     });
 }
 
@@ -307,6 +341,17 @@ export function InstallUpdate(): $CancellablePromise<void> {
     return $Call.ByID(2348643066);
 }
 
+/**
+ * ListLoraAdapters scans the LoRA adapter directory and classifies every .gguf
+ * file as a LoRA adapter or not (via the GGUF header keys llama.cpp's own
+ * loader enforces). A missing directory yields an empty list, not an error.
+ */
+export function ListLoraAdapters(): $CancellablePromise<$models.LoraInfo[]> {
+    return $Call.ByID(2823292852).then(($result: any) => {
+        return $$createType41($result);
+    });
+}
+
 export function PauseDownloadTask(id: string): $CancellablePromise<void> {
     return $Call.ByID(2431111255, id);
 }
@@ -317,7 +362,7 @@ export function PauseLlamaCppDownload(): $CancellablePromise<void> {
 
 export function RefreshModels(): $CancellablePromise<$models.ModelInfo[]> {
     return $Call.ByID(879778009).then(($result: any) => {
-        return $$createType26($result);
+        return $$createType28($result);
     });
 }
 
@@ -356,7 +401,7 @@ export function SaveServerConfig(cfg: $models.ServerConfig): $CancellablePromise
  */
 export function SearchDownloads(query: string, filter: string): $CancellablePromise<$models.HFSearchResult[]> {
     return $Call.ByID(3752716797, query, filter).then(($result: any) => {
-        return $$createType39($result);
+        return $$createType43($result);
     });
 }
 
@@ -412,6 +457,16 @@ export function SetLlamaCppDownloadDir(dir: string): $CancellablePromise<void> {
 }
 
 /**
+ * SetLoraAdapters validates and persists the LoRA references of one model,
+ * preserving every other field of the model's config. References are clamped
+ * to the supported shape: bare file names (validLoraRefName) and scales within
+ * [0,4]; duplicate names are rejected.
+ */
+export function SetLoraAdapters(modelID: string, refs: $models.LoraRef[]): $CancellablePromise<void> {
+    return $Call.ByID(812703148, modelID, refs);
+}
+
+/**
  * SetModelDownloadDir sets the directory new model downloads land in: any
  * non-empty path is accepted (a fresh path is a valid target for the next
  * download), written to the global, persisted, and the model cache is
@@ -461,7 +516,7 @@ export function SetTheme(theme: string): $CancellablePromise<void> {
  * persisted value, on other platforms it only persists (the callers no-op —
  * see trayPlatformSupported). Concurrency-safe (configMu and trayMu guard
  * global state), called by the frontend settings page system tray toggle.
- *
+ * 
  * Note: the tray is one-shot per process (the old fyne.io/systray had a
  * package-level quitOnce, and the v3 SystemTray tray deliberately keeps the
  * same semantics — see the trayStarted comment in core/tray.go) — so when
@@ -529,7 +584,7 @@ export function StopUpdateDownload(): $CancellablePromise<void> {
  */
 export function TuneModelConfig(modelID: string): $CancellablePromise<$models.ModelConfig> {
     return $Call.ByID(769524497, modelID).then(($result: any) => {
-        return $$createType22($result);
+        return $$createType24($result);
     });
 }
 
@@ -563,23 +618,27 @@ const $$createType16 = $models.DownloadState.createFrom;
 const $$createType17 = $Create.Nullable($$createType16);
 const $$createType18 = $models.LoadedModel.createFrom;
 const $$createType19 = $Create.Array($$createType18);
-const $$createType20 = $models.MemoryInfo.createFrom;
-const $$createType21 = $Create.Nullable($$createType20);
-const $$createType22 = $models.ModelConfig.createFrom;
-const $$createType23 = $models.HFFileOut.createFrom;
-const $$createType24 = $Create.Array($$createType23);
-const $$createType25 = $models.ModelInfo.createFrom;
+const $$createType20 = $models.LoraRef.createFrom;
+const $$createType21 = $Create.Array($$createType20);
+const $$createType22 = $models.MemoryInfo.createFrom;
+const $$createType23 = $Create.Nullable($$createType22);
+const $$createType24 = $models.ModelConfig.createFrom;
+const $$createType25 = $models.HFFileOut.createFrom;
 const $$createType26 = $Create.Array($$createType25);
-const $$createType27 = $models.MonitorStatus.createFrom;
-const $$createType28 = $Create.Nullable($$createType27);
-const $$createType29 = $Create.Map($Create.Any, $Create.Any);
-const $$createType30 = $models.RemoteDocResult.createFrom;
-const $$createType31 = $models.SafeArea.createFrom;
-const $$createType32 = $models.ServerConfig.createFrom;
-const $$createType33 = $models.ServerLogsPage.createFrom;
-const $$createType34 = $models.SystemInfo.createFrom;
-const $$createType35 = $Create.Nullable($$createType34);
-const $$createType36 = $models.UpdateDownloadState.createFrom;
+const $$createType27 = $models.ModelInfo.createFrom;
+const $$createType28 = $Create.Array($$createType27);
+const $$createType29 = $models.MonitorStatus.createFrom;
+const $$createType30 = $Create.Nullable($$createType29);
+const $$createType31 = $Create.Map($Create.Any, $Create.Any);
+const $$createType32 = $models.RemoteDocResult.createFrom;
+const $$createType33 = $models.SafeArea.createFrom;
+const $$createType34 = $models.ServerConfig.createFrom;
+const $$createType35 = $models.ServerLogsPage.createFrom;
+const $$createType36 = $models.SystemInfo.createFrom;
 const $$createType37 = $Create.Nullable($$createType36);
-const $$createType38 = $models.HFSearchResult.createFrom;
-const $$createType39 = $Create.Array($$createType38);
+const $$createType38 = $models.UpdateDownloadState.createFrom;
+const $$createType39 = $Create.Nullable($$createType38);
+const $$createType40 = $models.LoraInfo.createFrom;
+const $$createType41 = $Create.Array($$createType40);
+const $$createType42 = $models.HFSearchResult.createFrom;
+const $$createType43 = $Create.Array($$createType42);

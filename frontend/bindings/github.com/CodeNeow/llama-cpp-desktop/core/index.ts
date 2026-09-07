@@ -18,6 +18,8 @@ export {
     HFSearchResult,
     LlamaCppInfo,
     LoadedModel,
+    LoraInfo,
+    LoraRef,
     MemoryInfo,
     ModelBenchResult,
     ModelConfig,

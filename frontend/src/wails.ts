@@ -414,6 +414,52 @@ export async function unloadModel(id: string): Promise<void> {
   return app().UnloadModel(id)
 }
 
+// ─── LoRA Adapters (ModelSettings page per-model adapter mounts) ─────────────
+
+// LoraRef mirrors the backend core.LoraRef: name is the adapter GGUF file name
+// inside the LoRA directory, scale the --lora-scaled weight (0–4) and enabled
+// the mount switch.
+export interface LoraRef { name: string; scale: number; enabled: boolean }
+
+// LoraInfo mirrors the backend core.LoraInfo: one scanned .gguf file in the
+// LoRA directory; valid marks a file identified as a LoRA adapter GGUF
+// (general.type "adapter" + adapter.type "lora"); alpha is meaningful only
+// when hasAlpha is set.
+export interface LoraInfo {
+  name: string
+  path: string
+  sizeBytes: number
+  sizeHuman: string
+  alpha: number
+  hasAlpha: boolean
+  arch: string
+  valid: boolean
+}
+
+// listLoraAdapters scans the LoRA adapter directory (missing directory scans
+// as an empty list).
+export async function listLoraAdapters(): Promise<LoraInfo[]> {
+  return (await app().ListLoraAdapters()) ?? []
+}
+
+// getLoraConfig returns the LoRA references persisted for one model.
+export async function getLoraConfig(modelID: string): Promise<LoraRef[]> {
+  return (await app().GetLoraConfig(modelID)) ?? []
+}
+
+// setLoraAdapters validates and persists the model's LoRA references.
+export async function setLoraAdapters(modelID: string, refs: LoraRef[]): Promise<void> {
+  return app().SetLoraAdapters(modelID, refs)
+}
+
+// applyLoraRuntime hot-applies the model's enabled adapter weights to the
+// RUNNING llama-server (best effort): rejects with a degrade message when the
+// endpoint is unavailable or the running server has none of the adapters
+// loaded — the frontend surfaces "takes effect on next service start".
+export async function applyLoraRuntime(modelID: string): Promise<void> {
+  return app().ApplyLoraRuntime(modelID)
+}
+
 // ─── Remote Docs (Docs page remote-first content) ────────────────────────────
 
 // RemoteDocResult mirrors the backend core.RemoteDocResult: text is the markdown

@@ -11,7 +11,9 @@ Each model card shows the name, architecture (e.g. `qwen2`), quantization (e.g. 
 
 ## Opening model settings
 
-Click the gear icon on a model card to open that model's dedicated settings page. Parameters are organized into six tabs — Basic / Inference / Memory-Loading / Multi-GPU / Long Context / Advanced — each with its own usage hint.
+Click the gear icon on a model card to open that model's dedicated settings page. Parameters are organized into seven tabs — Basic / LoRA Adapters / Inference / Memory-Loading / Multi-GPU / Long Context / Advanced — each with its own usage hint.
+
+The "LoRA Adapters" tab manages the LoRA mounts **specific to this model**: drop LoRA adapter GGUFs trained and exported by Unsloth and friends into the "model download dir/lora" folder and click "Rescan" — every file is listed with its size and Alpha, and its GGUF metadata is checked to tell real adapters apart from ordinary models. Flip the switch, set the weight (scale, 0–4, default 1.0) and click "Save Adapters"; the adapters then mount onto this model via `--lora-scaled` when the service starts (each model carries its own set; an adapter must match its base model's architecture to load). While the service is running, "Apply to Running Service" hot-applies the saved weights: Android direct mode applies them immediately, while on desktop the pinned llama.cpp router cannot accept runtime updates and the page answers with the "takes effect on the next service start" hint — just restart the service.
 
 ## One-click auto-tune
 

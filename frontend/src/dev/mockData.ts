@@ -35,6 +35,7 @@ const config: Record<string, any> = {
   modelsDir: 'C:\\Users\\demo\\LLM-Models',
   llamaCppDownloadDir: 'C:\\Users\\demo\\llama.cpp-dl',
   modelDownloadDir: 'C:\\Users\\demo\\model-downloads',
+  loraDir: 'C:\\Users\\demo\\model-downloads\\lora',
   downloadSource: 'hf',
   language: 'zh',
   resolvedLanguage: 'zh',
@@ -487,6 +488,54 @@ const defaultModelConfig: Record<string, any> = {
 
 const modelConfigs: Record<string, Record<string, any>> = {}
 
+// ─── LoRA adapters (ModelSettings LoRA tab) ──────────────────────────────────
+// Fake scan of the LoRA directory: two valid adapter GGUFs (Unsloth-export
+// style metadata) plus one regular model GGUF that must show as invalid. The
+// per-model persisted refs live in loraRefs; SetLoraAdapters mirrors the
+// backend validation (plain file names, scale 0–4) so the mock rejects loudly.
+
+const mockLoraDir = 'C:\\Users\\demo\\model-downloads\\lora'
+
+const loraScan = [
+  {
+    name: 'qwen3-4b-sql-lora.gguf',
+    path: mockLoraDir + '\\qwen3-4b-sql-lora.gguf',
+    sizeBytes: 168_000_000,
+    sizeHuman: '160.2 MB',
+    alpha: 16,
+    hasAlpha: true,
+    arch: 'qwen2',
+    valid: true,
+  },
+  {
+    name: 'qwen3-4b-roleplay-lora.gguf',
+    path: mockLoraDir + '\\qwen3-4b-roleplay-lora.gguf',
+    sizeBytes: 84_000_000,
+    sizeHuman: '80.1 MB',
+    alpha: 8,
+    hasAlpha: true,
+    arch: 'qwen2',
+    valid: true,
+  },
+  {
+    name: 'not-an-adapter.gguf',
+    path: mockLoraDir + '\\not-an-adapter.gguf',
+    sizeBytes: 3_800_000_000,
+    sizeHuman: '3.5 GB',
+    alpha: 0,
+    hasAlpha: false,
+    arch: 'qwen2',
+    valid: false,
+  },
+]
+
+const loraRefs: Record<string, Array<{ name: string; scale: number; enabled: boolean }>> = {
+  [residentModel]: [
+    { name: 'qwen3-4b-sql-lora.gguf', scale: 1, enabled: true },
+    { name: 'qwen3-4b-roleplay-lora.gguf', scale: 0.5, enabled: false },
+  ],
+}
+
 // ─── Chat SSE sample answer (POST /v1/chat/completions via the mock runtime) ─
 // Language-aware demo replies, written in the voice of a local model so the
 // mock chat reads naturally in walkthrough captures of either locale.
@@ -663,6 +712,28 @@ export const handlers: Record<string, (...args: any[]) => any> = {
   BenchmarkModel: async () => {
     await sleep(2000)
     return { tgTps: 8.4, ngl: '999', threads: 0, usedCpuMoe: true, elapsedS: 74.6 }
+  },
+
+  // ── LoRA adapters ──
+  ListLoraAdapters: () => loraScan.map((a) => ({ ...a })),
+  GetLoraConfig: (modelID: string) => (loraRefs[modelID] ?? []).map((r) => ({ ...r })),
+  SetLoraAdapters: (modelID: string, refs: Array<{ name: string; scale: number; enabled: boolean }>) => {
+    for (const ref of refs ?? []) {
+      if (!ref.name || ref.name.includes('/') || ref.name.includes('\\') || ref.name.includes(':')) {
+        throw new Error('invalid LoRA adapter name: ' + ref.name)
+      }
+      if (typeof ref.scale !== 'number' || !(ref.scale >= 0 && ref.scale <= 4)) {
+        throw new Error('invalid LoRA scale: ' + ref.scale)
+      }
+    }
+    loraRefs[modelID] = (refs ?? []).map((r) => ({ ...r }))
+  },
+  ApplyLoraRuntime: (modelID: string) => {
+    if (!serverRunning) {
+      throw new Error('llama-server is not running (mock)')
+    }
+    const active = (loraRefs[modelID] ?? []).filter((r) => r.enabled)
+    mockAddServerLog(`[INFO] LoRA adapters hot-applied for model "${modelID}" (${active.length} active) (mock)`)
   },
 
   // ── Server ──
