@@ -47,7 +47,12 @@ const config: Record<string, any> = {
 
 // ─── System probes (android semantics: no GPU/CUDA, CPU-only accel) ─────────
 
-const os = { os: 'android', arch: 'arm64' }
+// Walkthrough persona: the default preview is the Android phone layout (?sc=
+// desktop switches to a Windows desktop persona so the desktop-gated UI —
+// e.g. the right-click quantize menu — can be exercised in the mock too).
+const os = new URLSearchParams(window.location.search).get('sc') === 'desktop'
+  ? { os: 'windows', arch: 'x86_64' }
+  : { os: 'android', arch: 'arm64' }
 
 const cpu = { model: 'Mock Snapdragon 8 Gen 3', cores: 8, logicalCpus: 8 }
 
@@ -536,6 +541,30 @@ const loraRefs: Record<string, Array<{ name: string; scale: number; enabled: boo
   ],
 }
 
+// Fake llama-quantize task state (mirrors the Go QuantizeStatus shape).
+const quantizeMock: {
+  running: boolean
+  done: boolean
+  success: boolean
+  error: string
+  srcPath: string
+  outPath: string
+  quant: string
+  logs: Array<{ seq: number; text: string }>
+  seq: number
+  timer?: ReturnType<typeof setInterval>
+} = {
+  running: false,
+  done: false,
+  success: false,
+  error: '',
+  srcPath: '',
+  outPath: '',
+  quant: '',
+  logs: [],
+  seq: 0,
+}
+
 // ─── Chat SSE sample answer (POST /v1/chat/completions via the mock runtime) ─
 // Language-aware demo replies, written in the voice of a local model so the
 // mock chat reads naturally in walkthrough captures of either locale.
@@ -734,6 +763,77 @@ export const handlers: Record<string, (...args: any[]) => any> = {
     }
     const active = (loraRefs[modelID] ?? []).filter((r) => r.enabled)
     mockAddServerLog(`[INFO] LoRA adapters hot-applied for model "${modelID}" (${active.length} active) (mock)`)
+  },
+
+  // ── Quantize tool (desktop only; fake llama-quantize run) ──
+  StartQuantize: (srcPath: string, quant: string, outName: string) => {
+    if (quantizeMock.running) {
+      throw new Error('a quantization task is already running (mock)')
+    }
+    if (!['q4_k_m', 'q5_k_m', 'q8_0', 'f16'].includes(quant)) {
+      throw new Error('invalid quantization type: ' + quant)
+    }
+    const base = srcPath.replace(/[/\\][^/\\]+$/, '') ?? ''
+    const out = outName.replace(/\.gguf$/i, '') + '.gguf'
+    quantizeMock.running = true
+    quantizeMock.done = false
+    quantizeMock.success = false
+    quantizeMock.error = ''
+    quantizeMock.srcPath = srcPath
+    quantizeMock.outPath = (base ? base + '\\' : '') + out
+    quantizeMock.quant = quant
+    quantizeMock.logs = []
+    const steps = [
+      'llama-quantize: quantizing "' + srcPath.split(/[\\/]/).pop() + '" -> ' + out,
+      'load_tensors: loading 291 tensors (2.4 GiB) (mock)',
+      '[   1/291] output.output_q6_K - type q6_K',
+      '[  36/291] blk.0.attn_q.weight - type q4_K',
+      '[  92/291] blk.5.ffn_down.weight - type q5_K',
+      '[ 148/291] blk.11.attn_v.weight - type q4_K',
+      '[ 205/291] blk.17.ffn_gate.weight - type q4_K',
+      '[ 259/291] blk.23.ffn_up.weight - type q4_K',
+      '[ 291/291] output_norm.weight - type f32',
+      'save_tensors: writing ' + out + ' (1.5 GiB) (mock)',
+      'quantize: done in 6.2s (mock)',
+    ]
+    let i = 0
+    quantizeMock.timer = setInterval(() => {
+      if (i < steps.length) {
+        quantizeMock.logs.push({ seq: quantizeMock.seq++, text: steps[i] })
+        i++
+      } else {
+        clearInterval(quantizeMock.timer)
+        quantizeMock.timer = undefined
+        quantizeMock.running = false
+        quantizeMock.done = true
+        quantizeMock.success = true
+      }
+    }, 700)
+  },
+  GetQuantizeStatus: () => ({
+    running: quantizeMock.running,
+    done: quantizeMock.done,
+    success: quantizeMock.success,
+    error: quantizeMock.error,
+    srcPath: quantizeMock.srcPath,
+    outPath: quantizeMock.outPath,
+    quant: quantizeMock.quant,
+    logs: quantizeMock.logs.map((l) => ({ ...l })),
+    next: quantizeMock.seq,
+  }),
+  CancelQuantize: () => {
+    if (!quantizeMock.running) {
+      throw new Error('no quantization task is running (mock)')
+    }
+    if (quantizeMock.timer) {
+      clearInterval(quantizeMock.timer)
+      quantizeMock.timer = undefined
+    }
+    quantizeMock.running = false
+    quantizeMock.done = true
+    quantizeMock.success = false
+    quantizeMock.error = 'llama-quantize exited abnormally (possibly cancelled, see the log)'
+    quantizeMock.logs.push({ seq: quantizeMock.seq++, text: '[cancelled] killed by user (mock)' })
   },
 
   // ── Server ──

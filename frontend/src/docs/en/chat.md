@@ -17,15 +17,17 @@ Multimodal models (with an mmproj file) can also take images: use the paperclip 
 
 ## Tuning chat parameters
 
+Sampling parameters are owned by the **sampling preset** picker next to the model capsule in the top toolbar, borrowed from unsloth's generation presets: **Default** (no override — the per-model sampling parameters saved in the model settings apply), **Precise** (temperature 0.3 / top_p 0.8 / top_k 20 / repeat_penalty 1.1), **Balanced** (0.7 / 0.9 / 40 / 1.1), **Creative** (1.0 / 0.95 / 60 / 1.05) and **Random** (1.2 / 1.0 / 80 / 1.0). With any non-default preset selected, the sent request body carries those four sampling override fields; with "Default" none are attached and the server-side parameters decide. The selection is remembered across sessions.
+
+After picking a non-default preset, the bookmark icon in the toolbar opens "Manage presets": **save the current preset under a custom name** (up to 20) and delete custom presets you no longer need.
+
 Click the gear icon at the right end of the top toolbar to open the parameter panel:
 
-- **Temperature**: higher is more creative, lower is more deterministic;
-- **Top P / Top K**: how wide the sampling pool is;
-- **Repeat penalty**: reduces repetitive rambling;
+- **Sampling preset summary**: a read-only line at the top showing the active preset and its four values;
 - **Max tokens**: the length cap for a single reply;
 - **System prompt**: persona or task instructions for the model; left empty, nothing is injected.
 
-"Reset defaults" restores every parameter. Changes apply from the next request on.
+"Reset defaults" restores max tokens and the system prompt. Changes apply from the next request on.
 
 ## Thinking process
 

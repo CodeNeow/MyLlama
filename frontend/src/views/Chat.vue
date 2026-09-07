@@ -48,6 +48,32 @@
           :empty-text="t('chat.noModels')"
           @update:model-value="pickModel"
         />
+        <!-- Generation preset picker (borrowed from unsloth's generation-presets):
+             quick sampling profiles. "默认" sends NO sampling fields (llama-server's
+             saved per-model params apply); any other preset attaches
+             temperature/top_p/top_k/repeat_penalty to the request body. Same
+             ThemedSelect toolbar variant as the model chip so both tiers narrow
+             identically; the bookmark button opens the save-as / delete dialog. -->
+        <ThemedSelect
+          variant="toolbar"
+          class="chat-preset-select"
+          :model-value="genPresetId"
+          :options="genPresetOptions"
+          :disabled="streaming"
+          :label="t('chat.genPreset')"
+          @update:model-value="pickGenPreset"
+        />
+        <button
+          class="chat-icon-btn chat-preset-manage-btn"
+          @click.stop="openPresetDialog"
+          :aria-label="t('chat.presetManage')"
+          :title="t('chat.presetManage')"
+          type="button"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+          </svg>
+        </button>
         <button
           class="chat-icon-btn chat-clear-btn"
           @click="clearChat"
@@ -85,21 +111,13 @@
              (e.g. resizing a desktop window into the tablet band). -->
         <div v-if="showParams && paramsLayout === 'popover'" class="params-popover" @click.stop>
           <div class="params-header">{{ t('chat.settings') }}</div>
-          <div class="params-row">
-            <label class="params-label" for="chat-temp">{{ t('chat.temperature') }}</label>
-            <input id="chat-temp" class="params-input" type="number" step="0.05" min="0" max="2" v-model.number="chatParams.temperature" />
-          </div>
-          <div class="params-row">
-            <label class="params-label" for="chat-topp">{{ t('chat.topP') }}</label>
-            <input id="chat-topp" class="params-input" type="number" step="0.05" min="0" max="1" v-model.number="chatParams.topP" />
-          </div>
-          <div class="params-row">
-            <label class="params-label" for="chat-topk">{{ t('chat.topK') }}</label>
-            <input id="chat-topk" class="params-input" type="number" step="1" min="0" v-model.number="chatParams.topK" />
-          </div>
-          <div class="params-row">
-            <label class="params-label" for="chat-rep">{{ t('chat.repeatPenalty') }}</label>
-            <input id="chat-rep" class="params-input" type="number" step="0.05" min="1" max="2" v-model.number="chatParams.repeatPenalty" />
+          <!-- Sampling fields are owned by the generation preset (toolbar picker):
+               the "默认" preset sends no sampling fields (llama-server's saved
+               per-model params apply), any other preset sends its four values.
+               The panel shows the active preset read-only instead of inputs. -->
+          <div class="params-row params-row-full preset-summary">
+            <span class="preset-summary-label">{{ t('chat.genPreset') }}</span>
+            <span class="preset-summary-value">{{ currentGenPresetLabel }}<template v-if="presetSummaryText"> · {{ presetSummaryText }}</template></span>
           </div>
           <div class="params-row">
             <label class="params-label" for="chat-maxtok">{{ t('chat.maxTokens') }}</label>
@@ -150,67 +168,14 @@
                 <button class="params-reset-link" type="button" @click="resetParams">{{ t('chat.resetDefaults') }}</button>
               </div>
               <div class="params-sheet-body">
-                <div class="psheet-row">
+                <!-- Sampling fields are owned by the generation preset (toolbar
+                     picker): read-only summary here instead of sliders/steppers. -->
+                <div class="psheet-row psheet-row--text preset-summary">
                   <div class="psheet-label">
-                    <span class="psheet-name">{{ t('chat.temperature') }}</span>
-                    <span class="psheet-sub">{{ t('chat.temperatureHint') }}</span>
+                    <span class="psheet-name">{{ t('chat.genPreset') }}</span>
+                    <span class="psheet-sub">{{ t('chat.presetSummaryHint') }}</span>
                   </div>
-                  <div class="psheet-ctl">
-                    <input
-                      class="pslider"
-                      type="range"
-                      min="0"
-                      max="2"
-                      step="0.05"
-                      :value="chatParams.temperature"
-                      :style="{ '--pfill': sliderFillPercent(chatParams.temperature, 0, 2) + '%' }"
-                      :aria-label="t('chat.temperature')"
-                      @input="onSliderInput('temperature', $event)"
-                    />
-                    <span class="psheet-val">{{ formatParamValue(chatParams.temperature) }}</span>
-                  </div>
-                </div>
-                <div class="psheet-row">
-                  <div class="psheet-label">
-                    <span class="psheet-name">{{ t('chat.topP') }}</span>
-                    <span class="psheet-sub">{{ t('chat.topPHint') }}</span>
-                  </div>
-                  <div class="psheet-ctl">
-                    <input
-                      class="pslider"
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.05"
-                      :value="chatParams.topP"
-                      :style="{ '--pfill': sliderFillPercent(chatParams.topP, 0, 1) + '%' }"
-                      :aria-label="t('chat.topP')"
-                      @input="onSliderInput('topP', $event)"
-                    />
-                    <span class="psheet-val">{{ formatParamValue(chatParams.topP) }}</span>
-                  </div>
-                </div>
-                <div class="psheet-row">
-                  <div class="psheet-label">
-                    <span class="psheet-name">{{ t('chat.topK') }}</span>
-                    <span class="psheet-sub">{{ t('chat.topKHint') }}</span>
-                  </div>
-                  <div class="pstepper">
-                    <button class="pstep-btn" type="button" :aria-label="t('chat.stepDown')" @click="chatParams.topK = stepNumber(chatParams.topK, -1, TOP_K_MIN, TOP_K_MAX, 1)">−</button>
-                    <span class="pstep-val">{{ chatParams.topK }}</span>
-                    <button class="pstep-btn" type="button" :aria-label="t('chat.stepUp')" @click="chatParams.topK = stepNumber(chatParams.topK, 1, TOP_K_MIN, TOP_K_MAX, 1)">+</button>
-                  </div>
-                </div>
-                <div class="psheet-row">
-                  <div class="psheet-label">
-                    <span class="psheet-name">{{ t('chat.repeatPenalty') }}</span>
-                    <span class="psheet-sub">{{ t('chat.repeatPenaltyHint') }}</span>
-                  </div>
-                  <div class="pstepper">
-                    <button class="pstep-btn" type="button" :aria-label="t('chat.stepDown')" @click="chatParams.repeatPenalty = stepNumber(chatParams.repeatPenalty, -1, PENALTY_MIN, PENALTY_MAX, 0.05)">−</button>
-                    <span class="pstep-val">{{ formatParamValue(chatParams.repeatPenalty) }}</span>
-                    <button class="pstep-btn" type="button" :aria-label="t('chat.stepUp')" @click="chatParams.repeatPenalty = stepNumber(chatParams.repeatPenalty, 1, PENALTY_MIN, PENALTY_MAX, 0.05)">+</button>
-                  </div>
+                  <span class="preset-summary-value">{{ currentGenPresetLabel }}<template v-if="presetSummaryText"> · {{ presetSummaryText }}</template></span>
                 </div>
                 <div class="psheet-row">
                   <div class="psheet-label">
@@ -236,6 +201,108 @@
                     :aria-label="t('chat.systemPrompt')"
                   ></textarea>
                 </div>
+              </div>
+            </div>
+          </div>
+        </Teleport>
+
+        <!-- Generation preset manager: save-as (captures the active preset's
+             sampling values under a new name) + delete custom presets. Rendered
+             in-app as a centered card on every tier (theme tokens, mobile-friendly
+             width). Conditionally rendered v-if per the Teleport warning above. -->
+        <Teleport v-if="genPresetDialogOpen" to="body">
+          <div class="preset-dialog-root">
+            <div class="preset-dim" @click="closePresetDialog"></div>
+            <div class="preset-dialog" role="dialog" aria-modal="true" :aria-label="t('chat.presetManage')" @click.stop>
+              <div class="preset-dialog-title">{{ t('chat.presetManage') }}</div>
+              <div class="preset-dialog-current">
+                <span class="preset-dialog-label">{{ t('chat.genPreset') }}</span>
+                <span class="preset-summary-value">{{ currentGenPresetLabel }}<template v-if="presetSummaryText"> · {{ presetSummaryText }}</template></span>
+              </div>
+              <template v-if="currentGenPreset.sampling && draftSampling">
+                <label class="preset-dialog-row">
+                  <span class="preset-dialog-label">{{ t('chat.presetSaveAs') }}</span>
+                  <input
+                    v-model="genPresetSaveName"
+                    class="preset-dialog-input"
+                    type="text"
+                    maxlength="40"
+                    :placeholder="t('chat.presetNamePh')"
+                    :aria-label="t('chat.presetSaveAs')"
+                    @keyup.enter="saveAsGenPreset"
+                  />
+                </label>
+                <!-- Editable sampling draft: initialized from the active preset,
+                     clamped on change (lib/genPresets bounds). The builtin
+                     presets themselves stay read-only — editing a value only
+                     affects the SAVED CUSTOM copy, never the builtin. -->
+                <div class="preset-dialog-sampling">
+                  <span class="preset-dialog-label">{{ t('chat.presetSamplingEdit') }}</span>
+                  <div class="preset-dialog-sampling-grid">
+                    <label class="preset-dialog-sfield">
+                      <span class="preset-dialog-slabel">{{ t('chat.temperature') }}</span>
+                      <input
+                        class="preset-dialog-sinput"
+                        type="number"
+                        min="0" max="2" step="0.05"
+                        :value="draftSampling.temperature"
+                        :aria-label="t('chat.temperature')"
+                        @change="onDraftField('temperature', $event)"
+                      />
+                    </label>
+                    <label class="preset-dialog-sfield">
+                      <span class="preset-dialog-slabel">{{ t('chat.topP') }}</span>
+                      <input
+                        class="preset-dialog-sinput"
+                        type="number"
+                        min="0" max="1" step="0.01"
+                        :value="draftSampling.topP"
+                        :aria-label="t('chat.topP')"
+                        @change="onDraftField('topP', $event)"
+                      />
+                    </label>
+                    <label class="preset-dialog-sfield">
+                      <span class="preset-dialog-slabel">{{ t('chat.topK') }}</span>
+                      <input
+                        class="preset-dialog-sinput"
+                        type="number"
+                        min="0" max="200" step="1"
+                        :value="draftSampling.topK"
+                        :aria-label="t('chat.topK')"
+                        @change="onDraftField('topK', $event)"
+                      />
+                    </label>
+                    <label class="preset-dialog-sfield">
+                      <span class="preset-dialog-slabel">{{ t('chat.repeatPenalty') }}</span>
+                      <input
+                        class="preset-dialog-sinput"
+                        type="number"
+                        min="0.5" max="2" step="0.01"
+                        :value="draftSampling.repeatPenalty"
+                        :aria-label="t('chat.repeatPenalty')"
+                        @change="onDraftField('repeatPenalty', $event)"
+                      />
+                    </label>
+                  </div>
+                </div>
+                <p v-if="genPresetError" class="preset-dialog-err">{{ genPresetError }}</p>
+              </template>
+              <div v-if="customGenPresets.length > 0" class="preset-dialog-custom">
+                <div class="preset-dialog-label">{{ t('chat.presetCustomList') }}</div>
+                <div v-for="p in customGenPresets" :key="p.id" class="preset-dialog-item">
+                  <span class="preset-dialog-item-name">{{ p.name }}</span>
+                  <button class="preset-dialog-del" type="button" @click="deleteGenPreset(p.id)">{{ t('chat.presetDelete') }}</button>
+                </div>
+              </div>
+              <div class="preset-dialog-actions">
+                <button class="preset-dialog-btn" type="button" @click="closePresetDialog">{{ t('chat.presetClose') }}</button>
+                <button
+                  v-if="currentGenPreset.sampling"
+                  class="preset-dialog-btn preset-dialog-btn--primary"
+                  type="button"
+                  :disabled="!canSaveGenPreset"
+                  @click="saveAsGenPreset"
+                >{{ t('chat.presetSave') }}</button>
               </div>
             </div>
           </div>
@@ -470,9 +537,25 @@ import {
   modelsToUnload,
   streamChatCompletion,
   tokenRates,
+  type BuildChatBodyOptions,
   type ChatReadiness,
 } from '../lib/chat'
-import { messages, selectedModel, streaming, chatAbortController, persistChat, reconcileSelectedModel, chatParams, persistChatParams, clampStep, sliderFillPercent, formatParamValue, stepNumber, stepMaxTokens, isUnlimitedMaxTokens, type ChatMessage, type ChatParams } from '../lib/chatState'
+import {
+  GEN_PRESET_DEFAULT_ID,
+  clampPresetSamplingField,
+  loadCustomGenPresets,
+  loadSelectedGenPresetId,
+  mergedGenPresets,
+  persistCustomGenPresets,
+  persistSelectedGenPresetId,
+  presetSamplingFields,
+  removeCustomPreset,
+  resolveGenPreset,
+  withNewCustomPreset,
+  type GenPreset,
+  type GenPresetSampling,
+} from '../lib/genPresets'
+import { messages, selectedModel, streaming, chatAbortController, persistChat, reconcileSelectedModel, chatParams, persistChatParams, stepMaxTokens, isUnlimitedMaxTokens, type ChatMessage, type ChatParams } from '../lib/chatState'
 import { nudgeDock } from '../lib/dockNudge'
 import { dockLane, dockWidth } from '../lib/dockSpace'
 import { t } from '../lib/i18n'
@@ -610,27 +693,119 @@ const chipPlaceholder = computed(() =>
 )
 
 /**
- * Phone params-sheet control ranges (design frame ⑤). Slider params are
- * clamped onto a 0.05 grid by lib/chatState clampStep; the steppers reuse the
- * app's existing repeat-penalty bounds ([1, 2], matching the desktop popover
- * validation) and restrict Top K to positive integers.
+ * Phone params-sheet control ranges: max tokens is the only remaining stepper
+ * (the four sampling fields are owned by the generation preset, see below).
  */
-const TOP_K_MIN = 1
-const TOP_K_MAX = 200
-const PENALTY_MIN = 1
-const PENALTY_MAX = 2
-
-/** Slider input: snap the dragged value onto the 0.05 grid within range. */
-function onSliderInput(key: 'temperature' | 'topP', e: Event): void {
-  const raw = parseFloat((e.target as HTMLInputElement).value)
-  if (Number.isNaN(raw)) return
-  const max = key === 'temperature' ? 2 : 1
-  chatParams[key] = clampStep(raw, 0, max, 0.05)
-}
-
 /** Max-tokens stepper with the unlimited (-1) sentinel mapping. */
 function applyMaxTokensStep(dir: -1 | 1): number {
   return stepMaxTokens(chatParams.maxTokens, dir)
+}
+
+// ─── Generation presets (lib/genPresets.ts) ──────────────────────────────────
+// Sampling quick profiles next to the model capsule. "默认" sends NO sampling
+// fields (llama-server's saved per-model params apply); any other preset
+// attaches its temperature/top_p/top_k/repeat_penalty to the request body
+// (verified against llama.cpp b10689: server-schema.cpp evaluates the four
+// field_num entries when present, and oaicompat_chat_params_parse copies
+// them through). The params editor shows the active preset read-only; only
+// max_tokens and the system prompt stay editable per conversation.
+
+const customGenPresets = ref<GenPreset[]>(loadCustomGenPresets())
+const genPresetId = ref(loadSelectedGenPresetId())
+const genPresetDialogOpen = ref(false)
+const genPresetSaveName = ref('')
+const genPresetError = ref('')
+/**
+ * Editable sampling draft of the save-as editor: initialized from the active
+ * preset when the dialog opens; the saved custom preset carries the edited
+ * values (builtins themselves stay read-only). null = default preset (editor
+ * hidden, no sampling to save).
+ */
+const draftSampling = ref<GenPresetSampling | null>(null)
+
+const genPresetList = computed(() => mergedGenPresets(customGenPresets.value))
+
+/** Active preset with delete-fallback to the default entry. */
+const currentGenPreset = computed(() => resolveGenPreset(genPresetList.value, genPresetId.value))
+
+const genPresetOptions = computed<SelectOption[]>(() =>
+  genPresetList.value.map((p) => ({ value: p.id, label: p.builtin ? t(p.nameKey!) : p.name || p.id }))
+)
+
+const currentGenPresetLabel = computed(() => {
+  const p = currentGenPreset.value
+  return p.builtin ? t(p.nameKey!) : p.name || p.id
+})
+
+/** Compact "temp 0.7 / top_p 0.9 / top_k 40 / rep 1.1" readout; '' for default. */
+const presetSummaryText = computed(() => {
+  const f = presetSamplingFields(currentGenPreset.value)
+  if (!f) return ''
+  return `temp ${f.temperature} / top_p ${f.top_p} / top_k ${f.top_k} / rep ${f.repeat_penalty}`
+})
+
+/** Save-as needs a sampling-carrying source (the default preset has none). */
+const canSaveGenPreset = computed(() => !!currentGenPreset.value.sampling)
+
+function pickGenPreset(id: string) {
+  genPresetId.value = id
+  persistSelectedGenPresetId(id)
+}
+
+function openPresetDialog() {
+  genPresetSaveName.value = ''
+  genPresetError.value = ''
+  // The draft starts from the active preset's values (a copy — editing never
+  // touches the builtin definition).
+  const src = currentGenPreset.value.sampling
+  draftSampling.value = src ? { ...src } : null
+  genPresetDialogOpen.value = true
+}
+
+function closePresetDialog() {
+  genPresetDialogOpen.value = false
+  genPresetSaveName.value = ''
+  genPresetError.value = ''
+  draftSampling.value = null
+}
+
+/** Draft field edit: parse and clamp onto the genPresets bounds grid. */
+function onDraftField(field: keyof GenPresetSampling, e: Event): void {
+  if (!draftSampling.value) return
+  const raw = parseFloat((e.target as HTMLInputElement).value)
+  const clamped = clampPresetSamplingField(field, raw)
+  draftSampling.value = { ...draftSampling.value, [field]: clamped }
+  // Reflect the clamped value back into the input (Number inputs keep typed
+  // garbage like "1.2345" otherwise).
+  ;(e.target as HTMLInputElement).value = String(clamped)
+}
+
+/** Save-as: capture the edited draft sampling values under a new name. */
+function saveAsGenPreset() {
+  const src = draftSampling.value
+  if (!src) return
+  const r = withNewCustomPreset(customGenPresets.value, genPresetSaveName.value, src)
+  if (!r.ok) {
+    genPresetError.value =
+      r.reason === 'cap' ? t('chat.presetCapReached')
+      : r.reason === 'sampling' ? t('chat.presetBadSampling')
+      : t('chat.presetBadName')
+    return
+  }
+  customGenPresets.value = r.list
+  persistCustomGenPresets(customGenPresets.value)
+  genPresetId.value = r.preset.id
+  persistSelectedGenPresetId(r.preset.id)
+  closePresetDialog()
+}
+
+function deleteGenPreset(id: string) {
+  customGenPresets.value = removeCustomPreset(customGenPresets.value, id)
+  persistCustomGenPresets(customGenPresets.value)
+  if (genPresetId.value === id) {
+    genPresetId.value = GEN_PRESET_DEFAULT_ID
+    persistSelectedGenPresetId(GEN_PRESET_DEFAULT_ID)
+  }
 }
 
 /**
@@ -958,11 +1133,9 @@ function clearChat() {
 
 /** Reset chat params to defaults (in-flight requests unaffected; takes effect on next send). */
 function resetParams() {
+  // The four sampling fields are owned by the generation preset (toolbar
+  // picker) and are not edited here; reset only covers the editor-owned fields.
   Object.assign(chatParams, {
-    temperature: 0.8,
-    topP: 0.95,
-    topK: 40,
-    repeatPenalty: 1.1,
     maxTokens: -1,
     systemPrompt: '',
   })
@@ -1089,6 +1262,22 @@ async function send() {
   scrollToBottom()
 
   chatAbortController.current = new AbortController()
+  // Generation preset decides the sampling override: a non-default preset sends
+  // its own temperature/top_p/top_k/repeat_penalty; the default preset omits the
+  // four fields entirely (serverSampling) so llama-server applies the per-model
+  // parameters saved in ModelSettings. max_tokens / systemPrompt stay editor-owned.
+  const preset = currentGenPreset.value
+  const presetSampling = preset.sampling
+  const bodyOptions: BuildChatBodyOptions = { serverSampling: !presetSampling }
+  const sendParams: ChatParams = presetSampling
+    ? {
+        ...chatParams,
+        temperature: presetSampling.temperature,
+        topP: presetSampling.topP,
+        topK: presetSampling.topK,
+        repeatPenalty: presetSampling.repeatPenalty,
+      }
+    : { ...chatParams }
   // Per-stream token counters and phase timestamps for tok/s stats; llama-server
   // streams one token per data chunk, so delta counts are exact token counts
   let reasoningTokens = 0
@@ -1125,7 +1314,8 @@ async function send() {
         }
       },
       chatAbortController.current.signal,
-      { ...chatParams }
+      sendParams,
+      bodyOptions
     )
   } catch (e: any) {
     // Stop generation (AbortError): keep generated content; if nothing was generated, remove the empty bubble
@@ -1404,6 +1594,249 @@ html[data-os='ios'] .chat-model-select :deep(button.themed-select__trigger:activ
 
 .chat-clear-btn {
   margin-left: auto;
+}
+
+/* Generation preset picker: same toolbar variant as the model chip, sized
+   narrower (preset names are short); the clear button's auto margin keeps the
+   right-hand icon group pinned. */
+.chat-preset-select {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(200px, 34%);
+}
+
+.chat-preset-select :deep(.themed-select__trigger) {
+  min-height: 40px;
+}
+
+/* Params panel (popover + sheet/modal): read-only active-preset summary row */
+.preset-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+}
+
+.preset-summary-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.preset-summary-value {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  word-break: break-word;
+  font-family: var(--font-mono);
+}
+
+/* Preset manager dialog (centered card, all tiers) */
+.preset-dialog-root {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.preset-dim {
+  position: absolute;
+  inset: 0;
+  background: var(--overlay-50, rgba(0, 0, 0, 0.45));
+}
+
+.preset-dialog {
+  position: relative;
+  width: min(420px, 100%);
+  max-height: min(560px, 86vh);
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg, 0 18px 50px rgba(0, 0, 0, 0.25));
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.preset-dialog-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.preset-dialog-current,
+.preset-dialog-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.preset-dialog-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.preset-dialog-input {
+  width: 100%;
+  padding: 9px 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+}
+
+.preset-dialog-input:focus {
+  border-color: var(--accent);
+}
+
+/* Save-as sampling editor: 2×2 grid of small number fields (one column per
+   pair on the phone band via the dialog's own max-width), reusing the dialog
+   tokens */
+.preset-dialog-sampling {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+}
+
+.preset-dialog-sampling-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 10px;
+}
+
+.preset-dialog-sfield {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.preset-dialog-slabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.preset-dialog-sinput {
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-family: var(--font-mono);
+  outline: none;
+}
+
+.preset-dialog-sinput:focus {
+  border-color: var(--accent);
+}
+
+.preset-dialog-err {
+  margin: 0;
+  font-size: 12px;
+  color: #ef4444;
+}
+
+.preset-dialog-custom {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.preset-dialog-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+}
+
+.preset-dialog-item-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.preset-dialog-del {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  background: transparent;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: var(--radius-sm);
+  color: #ef4444;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.preset-dialog-del:hover {
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.preset-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.preset-dialog-btn {
+  padding: 8px 18px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.preset-dialog-btn:hover:not(:disabled) {
+  background: var(--hover-bg);
+}
+
+.preset-dialog-btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.preset-dialog-btn--primary:hover:not(:disabled) {
+  opacity: 0.88;
+  background: var(--accent);
+}
+
+.preset-dialog-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .chat-settings-btn[aria-expanded='true'] {
@@ -2442,10 +2875,24 @@ html[data-os='ios'] .send-btn:active:not(:disabled) {
   .chat-model-select {
     flex: 0 1 auto;
     min-width: 0;
-    max-width: calc(100% - 112px);
+    /* Phone toolbar row: model capsule + preset picker + 3 icon buttons —
+       the capsule leaves room for the preset picker (min 96px) + icons */
+    max-width: calc(100% - 220px);
   }
 
   .chat-model-select :deep(.themed-select__trigger) {
+    min-height: 44px;
+  }
+
+  /* Preset picker keeps a usable width on the phone band (46px would render
+     only the chevron); long names ellipsize inside the trigger */
+  .chat-preset-select {
+    flex: 0 1 auto;
+    min-width: 96px;
+    max-width: 44%;
+  }
+
+  .chat-preset-select :deep(.themed-select__trigger) {
     min-height: 44px;
   }
 

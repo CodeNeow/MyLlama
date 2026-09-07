@@ -1194,6 +1194,27 @@ func (a *App) UnloadModel(id string) error {
 	return unloadRouterModel(port, id)
 }
 
+// ─── Quantize tool (desktop only) ───────────────────────────────────
+
+// StartQuantize launches one llama-quantize run (desktop only): srcPath is the
+// scanned .gguf to quantize, quant one of q4_k_m / q5_k_m / q8_0 / f16, and
+// outName the output file name (resolved next to the source; a missing .gguf
+// suffix is appended). Single-flight while a task runs.
+func (a *App) StartQuantize(srcPath string, quant string, outName string) error {
+	return StartQuantize(srcPath, quant, outName)
+}
+
+// GetQuantizeStatus snapshots the current quantize task state and the recent
+// log tail (the frontend polls it while the quantize dialog is open).
+func (a *App) GetQuantizeStatus() QuantizeStatus {
+	return GetQuantizeStatus()
+}
+
+// CancelQuantize kills the running llama-quantize child.
+func (a *App) CancelQuantize() error {
+	return CancelQuantize()
+}
+
 // ─── LoRA Adapters ──────────────────────────────────────────────────
 
 // ListLoraAdapters scans the LoRA adapter directory and classifies every .gguf

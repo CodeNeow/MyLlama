@@ -316,13 +316,27 @@ export function tokenRates(
  * present it uses the OpenAI-compatible multimodal format: content becomes a parts
  * array with text first and images after, matching how the llama.cpp webui sends.
  *
- * When params is provided, sampling parameters are injected at the top level of
- * the body; a non-empty systemPrompt is inserted as the first system message.
+ * When params is provided, the request is customized at the top level of the
+ * body: a non-empty systemPrompt is inserted as the first system message and
+ * max_tokens carries the editor value. The four sampling fields
+ * (temperature/top_p/top_k/repeat_penalty) follow generation-preset controls
+ * (lib/genPresets.ts): by default they are sent from the params, and with
+ * `{ serverSampling: true }` they are omitted entirely so llama-server falls
+ * back to the per-model sampling parameters saved in ModelSettings (verified
+ * against llama.cpp b10689: server-schema.cpp field_num("temperature"|"top_p"|
+ * "top_k"|"repeat_penalty") evaluates only fields present in the body, and the
+ * per-request sampling defaults to the server context when absent).
  */
+export interface BuildChatBodyOptions {
+  /** Omit the four sampling override fields (the "default" generation preset). */
+  serverSampling?: boolean
+}
+
 export function buildChatBody(
   model: string,
   messages: { role: string; content: string; images?: string[] }[],
-  params?: ChatParams
+  params?: ChatParams,
+  options?: BuildChatBodyOptions
 ): object {
   const body: Record<string, unknown> = {
     model,
@@ -334,10 +348,12 @@ export function buildChatBody(
   }
 
   if (params) {
-    body.temperature = params.temperature
-    body.top_p = params.topP
-    body.top_k = params.topK
-    body.repeat_penalty = params.repeatPenalty
+    if (!options?.serverSampling) {
+      body.temperature = params.temperature
+      body.top_p = params.topP
+      body.top_k = params.topK
+      body.repeat_penalty = params.repeatPenalty
+    }
     body.max_tokens = params.maxTokens
     if (params.systemPrompt) {
       ;(body.messages as Array<{ role: string; content: string }>).unshift({
@@ -429,12 +445,13 @@ export async function streamChatCompletion(
   onDelta: (text: string) => void,
   onReasoningDelta: (text: string) => void,
   signal: AbortSignal,
-  params?: ChatParams
+  params?: ChatParams,
+  bodyOptions?: BuildChatBodyOptions
 ): Promise<void> {
   const res = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(buildChatBody(model, messages, params)),
+    body: JSON.stringify(buildChatBody(model, messages, params, bodyOptions)),
     signal,
   })
 

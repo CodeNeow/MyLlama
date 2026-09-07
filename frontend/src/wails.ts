@@ -460,6 +460,42 @@ export async function applyLoraRuntime(modelID: string): Promise<void> {
   return app().ApplyLoraRuntime(modelID)
 }
 
+// ─── Quantize tool (desktop only; drives the llama-quantize CLI) ─────────────
+
+// QuantizeLogEntry mirrors the backend core.QuantizeLogEntry: one llama-quantize
+// output line in the ring snapshot.
+export interface QuantizeLogEntry { seq: number; text: string }
+
+// QuantizeStatus mirrors the backend core.QuantizeStatus: the running flag, the
+// terminal result of the most recent task and the recent log tail.
+export interface QuantizeStatus {
+  running: boolean
+  done: boolean
+  success: boolean
+  error: string
+  srcPath: string
+  outPath: string
+  quant: string
+  logs: QuantizeLogEntry[]
+  next: number
+}
+
+// startQuantize launches one llama-quantize run writing outName next to srcPath.
+// Single-flight: rejects while a task is running. Desktop only.
+export async function startQuantize(srcPath: string, quant: string, outName: string): Promise<void> {
+  return app().StartQuantize(srcPath, quant, outName)
+}
+
+// getQuantizeStatus snapshots the current task state and the recent log tail.
+export async function getQuantizeStatus(): Promise<QuantizeStatus> {
+  return app().GetQuantizeStatus()
+}
+
+// cancelQuantize kills the running llama-quantize child.
+export async function cancelQuantize(): Promise<void> {
+  return app().CancelQuantize()
+}
+
 // ─── Remote Docs (Docs page remote-first content) ────────────────────────────
 
 // RemoteDocResult mirrors the backend core.RemoteDocResult: text is the markdown

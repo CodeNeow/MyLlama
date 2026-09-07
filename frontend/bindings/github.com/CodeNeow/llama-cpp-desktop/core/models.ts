@@ -1032,6 +1032,116 @@ export class MonitorStatus {
 }
 
 /**
+ * QuantizeLogEntry is one llama-quantize output line in the ring snapshot.
+ */
+export class QuantizeLogEntry {
+    "seq": number;
+    "text": string;
+
+    /** Creates a new QuantizeLogEntry instance. */
+    constructor($$source: Partial<QuantizeLogEntry> = {}) {
+        if (!("seq" in $$source)) {
+            this["seq"] = 0;
+        }
+        if (!("text" in $$source)) {
+            this["text"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new QuantizeLogEntry instance from a string or object.
+     */
+    static createFrom($$source: any = {}): QuantizeLogEntry {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new QuantizeLogEntry($$parsedSource as Partial<QuantizeLogEntry>);
+    }
+}
+
+/**
+ * QuantizeStatus is the full task state returned by GetQuantizeStatus: the
+ * running flag, the terminal result of the most recent task and a snapshot of
+ * the recent log lines. The frontend polls it while the quantize dialog is open.
+ */
+export class QuantizeStatus {
+    "running": boolean;
+
+    /**
+     * a task finished since process start (success or failure)
+     */
+    "done": boolean;
+
+    /**
+     * meaningful when Done
+     */
+    "success": boolean;
+
+    /**
+     * failure / cancel reason (Done && !Success)
+     */
+    "error": string;
+    "srcPath": string;
+    "outPath": string;
+    "quant": string;
+
+    /**
+     * most recent lines (ring snapshot)
+     */
+    "logs": QuantizeLogEntry[];
+
+    /**
+     * seq the next log line will receive
+     */
+    "next": number;
+
+    /** Creates a new QuantizeStatus instance. */
+    constructor($$source: Partial<QuantizeStatus> = {}) {
+        if (!("running" in $$source)) {
+            this["running"] = false;
+        }
+        if (!("done" in $$source)) {
+            this["done"] = false;
+        }
+        if (!("success" in $$source)) {
+            this["success"] = false;
+        }
+        if (!("error" in $$source)) {
+            this["error"] = "";
+        }
+        if (!("srcPath" in $$source)) {
+            this["srcPath"] = "";
+        }
+        if (!("outPath" in $$source)) {
+            this["outPath"] = "";
+        }
+        if (!("quant" in $$source)) {
+            this["quant"] = "";
+        }
+        if (!("logs" in $$source)) {
+            this["logs"] = [];
+        }
+        if (!("next" in $$source)) {
+            this["next"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new QuantizeStatus instance from a string or object.
+     */
+    static createFrom($$source: any = {}): QuantizeStatus {
+        const $$createField7_0 = $$createType10;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("logs" in $$parsedSource) {
+            $$parsedSource["logs"] = $$createField7_0($$parsedSource["logs"]);
+        }
+        return new QuantizeStatus($$parsedSource as Partial<QuantizeStatus>);
+    }
+}
+
+/**
  * RemoteDocResult is one docs section fetch outcome: the markdown body (empty
  * when Source is "none"), which tier produced it, and the RFC3339 timestamp of
  * the fetch that produced Text ("" when none — the frontend only shows it for
@@ -1225,7 +1335,7 @@ export class ServerLogsPage {
      * Creates a new ServerLogsPage instance from a string or object.
      */
     static createFrom($$source: any = {}): ServerLogsPage {
-        const $$createField0_0 = $$createType10;
+        const $$createField0_0 = $$createType12;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("entries" in $$parsedSource) {
             $$parsedSource["entries"] = $$createField0_0($$parsedSource["entries"]);
@@ -1275,11 +1385,11 @@ export class SystemInfo {
      * Creates a new SystemInfo instance from a string or object.
      */
     static createFrom($$source: any = {}): SystemInfo {
-        const $$createField2_0 = $$createType11;
-        const $$createField3_0 = $$createType12;
-        const $$createField4_0 = $$createType14;
-        const $$createField5_0 = $$createType15;
-        const $$createField6_0 = $$createType16;
+        const $$createField2_0 = $$createType13;
+        const $$createField3_0 = $$createType14;
+        const $$createField4_0 = $$createType16;
+        const $$createField5_0 = $$createType17;
+        const $$createField6_0 = $$createType18;
         const $$createField7_0 = $$createType8;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("cpu" in $$parsedSource) {
@@ -1432,11 +1542,13 @@ const $$createType5 = MonitorGPU.createFrom;
 const $$createType6 = $Create.Array($$createType5);
 const $$createType7 = DiskUsage.createFrom;
 const $$createType8 = $Create.Nullable($$createType7);
-const $$createType9 = ServerLogEntry.createFrom;
+const $$createType9 = QuantizeLogEntry.createFrom;
 const $$createType10 = $Create.Array($$createType9);
-const $$createType11 = CPUInfo.createFrom;
-const $$createType12 = MemoryInfo.createFrom;
-const $$createType13 = GPUInfo.createFrom;
-const $$createType14 = $Create.Array($$createType13);
-const $$createType15 = CUDAInfo.createFrom;
-const $$createType16 = LlamaCppInfo.createFrom;
+const $$createType11 = ServerLogEntry.createFrom;
+const $$createType12 = $Create.Array($$createType11);
+const $$createType13 = CPUInfo.createFrom;
+const $$createType14 = MemoryInfo.createFrom;
+const $$createType15 = GPUInfo.createFrom;
+const $$createType16 = $Create.Array($$createType15);
+const $$createType17 = CUDAInfo.createFrom;
+const $$createType18 = LlamaCppInfo.createFrom;

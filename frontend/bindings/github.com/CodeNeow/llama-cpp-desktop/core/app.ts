@@ -105,6 +105,13 @@ export function CancelDownloadTask(id: string): $CancellablePromise<void> {
 }
 
 /**
+ * CancelQuantize kills the running llama-quantize child.
+ */
+export function CancelQuantize(): $CancellablePromise<void> {
+    return $Call.ByID(1242294765);
+}
+
+/**
  * CheckForUpdate queries the remote repo latest release and returns whether a
  * new version exists along with version info.
  */
@@ -265,6 +272,16 @@ export function GetOS(): $CancellablePromise<{ [_ in string]?: string }> {
 }
 
 /**
+ * GetQuantizeStatus snapshots the current quantize task state and the recent
+ * log tail (the frontend polls it while the quantize dialog is open).
+ */
+export function GetQuantizeStatus(): $CancellablePromise<$models.QuantizeStatus> {
+    return $Call.ByID(3962147273).then(($result: any) => {
+        return $$createType32($result);
+    });
+}
+
+/**
  * GetRemoteDoc fetches one docs section's latest markdown for the Docs page's
  * remote-first content path (online → disk cache → bundled fallback decided
  * here; the bundled tier lives in the frontend). See the file header for the
@@ -273,7 +290,7 @@ export function GetOS(): $CancellablePromise<{ [_ in string]?: string }> {
  */
 export function GetRemoteDoc(lang: string, sectionID: string, force: boolean): $CancellablePromise<$models.RemoteDocResult> {
     return $Call.ByID(2670577276, lang, sectionID, force).then(($result: any) => {
-        return $$createType32($result);
+        return $$createType33($result);
     });
 }
 
@@ -286,13 +303,13 @@ export function GetRemoteDoc(lang: string, sectionID: string, force: boolean): $
  */
 export function GetSafeArea(): $CancellablePromise<$models.SafeArea> {
     return $Call.ByID(4054609944).then(($result: any) => {
-        return $$createType33($result);
+        return $$createType34($result);
     });
 }
 
 export function GetServerConfig(): $CancellablePromise<$models.ServerConfig> {
     return $Call.ByID(922492437).then(($result: any) => {
-        return $$createType34($result);
+        return $$createType35($result);
     });
 }
 
@@ -305,7 +322,7 @@ export function GetServerConfig(): $CancellablePromise<$models.ServerConfig> {
  */
 export function GetServerLogsSince(since: number): $CancellablePromise<$models.ServerLogsPage> {
     return $Call.ByID(2272125646, since).then(($result: any) => {
-        return $$createType35($result);
+        return $$createType36($result);
     });
 }
 
@@ -317,7 +334,7 @@ export function GetServerStatus(): $CancellablePromise<{ [_ in string]?: any }> 
 
 export function GetSystemInfo(): $CancellablePromise<$models.SystemInfo | null> {
     return $Call.ByID(1207510045).then(($result: any) => {
-        return $$createType37($result);
+        return $$createType38($result);
     });
 }
 
@@ -327,7 +344,7 @@ export function GetSystemInfo(): $CancellablePromise<$models.SystemInfo | null> 
  */
 export function GetUpdateDownloadStatus(): $CancellablePromise<$models.UpdateDownloadState | null> {
     return $Call.ByID(1961990283).then(($result: any) => {
-        return $$createType39($result);
+        return $$createType40($result);
     });
 }
 
@@ -348,7 +365,7 @@ export function InstallUpdate(): $CancellablePromise<void> {
  */
 export function ListLoraAdapters(): $CancellablePromise<$models.LoraInfo[]> {
     return $Call.ByID(2823292852).then(($result: any) => {
-        return $$createType41($result);
+        return $$createType42($result);
     });
 }
 
@@ -401,7 +418,7 @@ export function SaveServerConfig(cfg: $models.ServerConfig): $CancellablePromise
  */
 export function SearchDownloads(query: string, filter: string): $CancellablePromise<$models.HFSearchResult[]> {
     return $Call.ByID(3752716797, query, filter).then(($result: any) => {
-        return $$createType43($result);
+        return $$createType44($result);
     });
 }
 
@@ -537,6 +554,16 @@ export function StartLlamaCppDownload(): $CancellablePromise<void> {
     return $Call.ByID(2611530074);
 }
 
+/**
+ * StartQuantize launches one llama-quantize run (desktop only): srcPath is the
+ * scanned .gguf to quantize, quant one of q4_k_m / q5_k_m / q8_0 / f16, and
+ * outName the output file name (resolved next to the source; a missing .gguf
+ * suffix is appended). Single-flight while a task runs.
+ */
+export function StartQuantize(srcPath: string, quant: string, outName: string): $CancellablePromise<void> {
+    return $Call.ByID(970584127, srcPath, quant, outName);
+}
+
 export function StartServer(): $CancellablePromise<void> {
     return $Call.ByID(4115957591);
 }
@@ -630,15 +657,16 @@ const $$createType28 = $Create.Array($$createType27);
 const $$createType29 = $models.MonitorStatus.createFrom;
 const $$createType30 = $Create.Nullable($$createType29);
 const $$createType31 = $Create.Map($Create.Any, $Create.Any);
-const $$createType32 = $models.RemoteDocResult.createFrom;
-const $$createType33 = $models.SafeArea.createFrom;
-const $$createType34 = $models.ServerConfig.createFrom;
-const $$createType35 = $models.ServerLogsPage.createFrom;
-const $$createType36 = $models.SystemInfo.createFrom;
-const $$createType37 = $Create.Nullable($$createType36);
-const $$createType38 = $models.UpdateDownloadState.createFrom;
-const $$createType39 = $Create.Nullable($$createType38);
-const $$createType40 = $models.LoraInfo.createFrom;
-const $$createType41 = $Create.Array($$createType40);
-const $$createType42 = $models.HFSearchResult.createFrom;
-const $$createType43 = $Create.Array($$createType42);
+const $$createType32 = $models.QuantizeStatus.createFrom;
+const $$createType33 = $models.RemoteDocResult.createFrom;
+const $$createType34 = $models.SafeArea.createFrom;
+const $$createType35 = $models.ServerConfig.createFrom;
+const $$createType36 = $models.ServerLogsPage.createFrom;
+const $$createType37 = $models.SystemInfo.createFrom;
+const $$createType38 = $Create.Nullable($$createType37);
+const $$createType39 = $models.UpdateDownloadState.createFrom;
+const $$createType40 = $Create.Nullable($$createType39);
+const $$createType41 = $models.LoraInfo.createFrom;
+const $$createType42 = $Create.Array($$createType41);
+const $$createType43 = $models.HFSearchResult.createFrom;
+const $$createType44 = $Create.Array($$createType43);

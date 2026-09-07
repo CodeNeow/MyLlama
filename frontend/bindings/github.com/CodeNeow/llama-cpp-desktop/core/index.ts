@@ -26,6 +26,8 @@ export {
     ModelInfo,
     MonitorGPU,
     MonitorStatus,
+    QuantizeLogEntry,
+    QuantizeStatus,
     RemoteDocResult,
     SafeArea,
     ServerConfig,
