@@ -322,13 +322,13 @@ function isActive(path: string): boolean {
   transition: max-width 0.2s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
 }
 
-/* Collapsed footer: status area (dot + text) shrinks to zero width, leaving the toggle
-   as the only static flex child centered via justify-content. On expand the toggle returns
-   to absolute right: 12px, tracking the growing right edge smoothly */
+/* Collapsed footer: status area (dot + text) shrinks to zero width, leaving the
+   absolutely-positioned toggle as the only visible child, re-centered via
+   left/top + translate. Padding stays the base value in both states so the
+   footer height does not jump on collapse/expand. */
 .sidebar.collapsed .sidebar-footer {
   justify-content: center;
   gap: 0;
-  padding: 12px 8px;
 }
 
 /* Zero-width dot renders nothing (height stays 8px); pulse animation untouched */
@@ -341,10 +341,13 @@ function isActive(path: string): boolean {
   opacity: 0;
 }
 
-/* Collapsed-state button leaves absolute positioning and centers as a flex child of the footer */
+/* Collapsed-state button stays absolutely positioned (never re-enters the flow,
+   so the footer height is identical in both states) and re-centers in the rail */
 .sidebar.collapsed .collapse-toggle {
-  position: static;
-  transform: none;
+  left: 50%;
+  right: auto;
+  top: 50%;
+  transform: translate(-50%, -50%);
 }
 
 .collapse-toggle {
@@ -413,7 +416,6 @@ function isActive(path: string): boolean {
   .sidebar .sidebar-footer {
     justify-content: center;
     gap: 0;
-    padding: 12px 8px;
   }
 
   .sidebar .status-dot {
@@ -425,9 +427,13 @@ function isActive(path: string): boolean {
     opacity: 0;
   }
 
+  /* Same absolute-centering fix as .sidebar.collapsed: the toggle never
+     re-enters the flow, so the footer height matches the expanded state */
   .sidebar .collapse-toggle {
-    position: static;
-    transform: none;
+    left: 50%;
+    right: auto;
+    top: 50%;
+    transform: translate(-50%, -50%);
   }
 }
 </style>
