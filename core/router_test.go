@@ -201,6 +201,108 @@ func TestUnloadRouterModelEmptyID(t *testing.T) {
 	}
 }
 
+// ─── Authenticated requests (issue #30) ─────────────────────────────
+
+// withCachedAPIKey sets the cached server config's API key for the test and
+// restores the previous config afterwards (same snapshot/restore pattern as
+// saveConfigState).
+func withCachedAPIKey(t *testing.T, key string) {
+	t.Helper()
+	serverConfigMu.Lock()
+	orig := cachedServerConfig
+	cachedServerConfig.APIKey = key
+	serverConfigMu.Unlock()
+	t.Cleanup(func() {
+		serverConfigMu.Lock()
+		cachedServerConfig = orig
+		serverConfigMu.Unlock()
+	})
+}
+
+// TestRouterRequestsAuthHeaderValues pins the exact wire behavior across all
+// three endpoints: with an empty key no Authorization header is sent; with a
+// key set, /models, the /v1/models direct-mode fallback (forced via a 404 on
+// /models) and /models/unload all carry "Authorization: Bearer <key>".
+func TestRouterRequestsAuthHeaderValues(t *testing.T) {
+	var mu sync.Mutex
+	type hit struct {
+		path, auth string
+	}
+	var seen []hit
+	// force404 makes /models answer 404 once, driving fetchRouterModels into
+	// the OpenAI-compatible fallback endpoint.
+	force404 := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch r.URL.Path {
+		case "/models":
+			if force404 {
+				force404 = false
+				http.NotFound(w, r)
+				return
+			}
+			seen = append(seen, hit{r.URL.Path, r.Header.Get("Authorization")})
+			w.Write([]byte(`{"data":[]}`))
+		case "/v1/models":
+			seen = append(seen, hit{r.URL.Path, r.Header.Get("Authorization")})
+			w.Write([]byte(`{"data":[]}`))
+		case "/models/unload":
+			seen = append(seen, hit{r.URL.Path, r.Header.Get("Authorization")})
+			w.Write([]byte(`{"success":true}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	orig := routerBaseURL
+	routerBaseURL = func(port int) string { return srv.URL }
+	defer func() { routerBaseURL = orig }()
+
+	// Pass 1: empty key — no Authorization header anywhere.
+	withCachedAPIKey(t, "")
+	if _, err := fetchRouterModels(8080); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := unloadRouterModel(8080, "m"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Pass 2: key set — /models (via 404 → /v1/models fallback) and
+	// /models/unload all carry the bearer header.
+	withCachedAPIKey(t, "test-key-fixture")
+	mu.Lock()
+	force404 = true
+	mu.Unlock()
+	if _, err := fetchRouterModels(8080); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := unloadRouterModel(8080, "m"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(seen) != 4 {
+		t.Fatalf("recorded %d endpoint hits (%+v), want 4", len(seen), seen)
+	}
+	for _, h := range seen[:2] {
+		if h.auth != "" {
+			t.Errorf("pass 1 %s: auth = %q, want no header", h.path, h.auth)
+		}
+	}
+	wantPaths := []string{"/v1/models", "/models/unload"}
+	for i, h := range seen[2:] {
+		if h.path != wantPaths[i] {
+			t.Errorf("pass 2 hit[%d] path = %q, want %q", i, h.path, wantPaths[i])
+		}
+		if h.auth != "Bearer test-key-fixture" {
+			t.Errorf("pass 2 %s: auth = %q, want %q", h.path, h.auth, "Bearer test-key-fixture")
+		}
+	}
+}
+
 // ─── serverPort read/write ─────────────────────────────────────────
 
 // TestServerPortReadWrite verifies setServerPort / getServerPort round-trip consistency.

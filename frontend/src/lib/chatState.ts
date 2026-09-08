@@ -54,22 +54,34 @@ export function capMessages(msgs: ChatMessage[], cap = DEFAULT_CAP): ChatMessage
 }
 
 /**
+ * What reconcileSelectedModel decided for the persisted selection.
+ * - 'kept': the stored model is still available (or there was nothing to fix).
+ * - 'switched': the stored model is gone — the first available one takes over.
+ * - 'cleared': no models are available at all — the selection is cleared so
+ *   the UI shows the guided "download a model first" state.
+ */
+export type ReconcileAction = 'kept' | 'switched' | 'cleared'
+
+/**
  * Reconcile the persisted selected model against the server's available models.
  *
  * A stored ID still present is kept as-is; a stale ID (model renamed/removed
  * while the app was closed) falls back to the first available model so send()
- * cannot hit "model not found". An empty available list (server not running or
- * no models loaded) keeps the stored choice untouched. Pure: persistence is
- * the caller's job.
+ * cannot hit "model not found"; an empty available list (no scanned models)
+ * clears the stored choice instead of keeping an id the picker cannot resolve
+ * (#33). Pure: persistence and user notices are the caller's job.
  */
-export function reconcileSelectedModel(stored: string, available: string[]): { model: string; changed: boolean } {
+export function reconcileSelectedModel(
+  stored: string,
+  available: string[]
+): { model: string; changed: boolean; action: ReconcileAction } {
   if (available.includes(stored)) {
-    return { model: stored, changed: false }
+    return { model: stored, changed: false, action: 'kept' }
   }
   if (available.length > 0) {
-    return { model: available[0], changed: true }
+    return { model: available[0], changed: true, action: 'switched' }
   }
-  return { model: stored, changed: false }
+  return { model: '', changed: stored !== '', action: 'cleared' }
 }
 
 // ─── Phone params-sheet pure helpers (design frame ⑤) ─────────────────────

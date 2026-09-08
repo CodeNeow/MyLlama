@@ -168,6 +168,11 @@
               <button type="button" class="cfg-done" @click="showCfg = false">{{ t('api.done') }}</button>
             </div>
           </div>
+          <!-- Restart failure banner: a dedicated reactive state instead of a
+               pushed log line — the 1s incremental log poll replaces the view
+               wholesale on retention gaps and would wipe log-pushed errors
+               (issue #28 frontend half). -->
+          <p v-if="restartError" class="restart-error" role="alert">{{ restartError }}</p>
         </div>
 
         <!-- Right column (tablet draft ⑬): the speed island leads on tablet
@@ -275,6 +280,7 @@ import { useRouter } from 'vue-router'
 import { getLoadedModels, getMonitorStatus, getModels, getServerConfig, getServerLogsSince, getServerStatus, refreshModels, saveServerConfig, startServer, startServerWithModel, stopServer, unloadModel } from '../wails'
 import { applyFullLogFetch, appendLogEntries, type ServerLogEntry } from '../lib/serverLog'
 import { modelsToUnload } from '../lib/chat'
+import { restartServer } from '../lib/serverControls'
 import { appendHistory, apiSpeedPlacement, chartPoints, formatPromptTps, formatUptime, showDirectModeTag, type MonitorStatus } from '../lib/monitor'
 import { usePlatform } from '../lib/platform'
 import { locale, t } from '../lib/i18n'
@@ -590,15 +596,22 @@ async function doStop() {
   }
 }
 
-// Restart = sequential stop → start (busy prevents double-clicks during execution)
+// Restart = the shared stop → wait-for-stopped → start routine
+// (lib/serverControls, issue #28): an immediate stop→start used to hit the
+// backend's already-running guard and silently no-op the start half. Failure
+// surfaces in the restartError banner instead of a pushed log line — the 1s
+// incremental log poll replaces serverLog wholesale on retention gaps and
+// would wipe a log-pushed error.
+const restartError = ref('')
+
 async function doRestart() {
   if (busy.value || !serverRunning.value) return
   busy.value = true
+  restartError.value = ''
   try {
-    await stopServer()
-    await startServer()
+    await restartServer()
   } catch (e) {
-    serverLog.value.push(t('api.toggleFailed', { msg: e instanceof Error ? e.message : String(e) }))
+    restartError.value = t('api.restartFailed', { msg: e instanceof Error ? e.message : String(e) })
   } finally {
     busy.value = false
     setTimeout(checkServerStatus, 500)
@@ -1058,6 +1071,14 @@ html[data-theme='dark'] .speed-baseline {
 .ghost-icon[aria-expanded='true'] {
   color: var(--text-primary);
   background: var(--hover-bg);
+}
+
+/* Restart failure banner (#28): red alert line right below the action row */
+.restart-error {
+  margin: -4px 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--danger);
 }
 
 /* ─── Server parameters popover ─── */

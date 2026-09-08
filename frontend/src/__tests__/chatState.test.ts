@@ -22,19 +22,23 @@ describe('capMessages', () => {
 
 describe('reconcileSelectedModel', () => {
   it('stored model still available is kept unchanged', () => {
-    expect(reconcileSelectedModel('m1', ['m1', 'm2'])).toEqual({ model: 'm1', changed: false })
+    expect(reconcileSelectedModel('m1', ['m1', 'm2'])).toEqual({ model: 'm1', changed: false, action: 'kept' })
   })
 
   it('stale stored model falls back to the first available model', () => {
-    expect(reconcileSelectedModel('gone', ['m1', 'm2'])).toEqual({ model: 'm1', changed: true })
+    expect(reconcileSelectedModel('gone', ['m1', 'm2'])).toEqual({ model: 'm1', changed: true, action: 'switched' })
   })
 
-  it('empty available list keeps the stored model unchanged', () => {
-    expect(reconcileSelectedModel('gone', [])).toEqual({ model: 'gone', changed: false })
+  it('empty available list clears the stored selection (guided re-pick)', () => {
+    expect(reconcileSelectedModel('gone', [])).toEqual({ model: '', changed: true, action: 'cleared' })
+  })
+
+  it('empty available list with an empty stored model reports cleared without a change', () => {
+    expect(reconcileSelectedModel('', [])).toEqual({ model: '', changed: false, action: 'cleared' })
   })
 
   it('empty stored model with a non-empty list picks the first model', () => {
-    expect(reconcileSelectedModel('', ['m1'])).toEqual({ model: 'm1', changed: true })
+    expect(reconcileSelectedModel('', ['m1'])).toEqual({ model: 'm1', changed: true, action: 'switched' })
   })
 })
 

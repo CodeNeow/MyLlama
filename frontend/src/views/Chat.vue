@@ -625,9 +625,10 @@ const startErrorCause = ref<'needModels' | 'needRuntime' | ''>('')
  */
 const composerBlocked = computed(() => startErrorCause.value !== '')
 
-/** One floating notice card. Error cards carry the guided-fix cause. */
+/** One floating notice card. Error cards carry the guided-fix cause; 'info'
+ * cards are transient model-list notices (#33). */
 interface PageNotice {
-  kind: 'starting' | 'switching' | 'error'
+  kind: 'starting' | 'switching' | 'error' | 'info'
   text: string
   cause: '' | 'needModels' | 'needRuntime'
 }
@@ -648,6 +649,7 @@ const activeNotices = computed<PageNotice[]>(() => {
   }
   if (switchingModel.value) out.push({ kind: 'switching', text: t('chat.switchingModel'), cause: '' })
   if (startError.value) out.push({ kind: 'error', text: startError.value, cause: startErrorCause.value })
+  if (modelNotice.value) out.push({ kind: 'info', text: modelNotice.value, cause: '' })
   return out
 })
 
@@ -948,6 +950,9 @@ function updateLiveTps(target: Ref<number | null>, tokens: number, startedAt: nu
  * the same strings the picker and the router expose). Runs on mount
  * (independent of server state) and again after a successful auto-start, so a
  * freshly stocked directory is picked up without leaving the page.
+ * Self-heals a stale persisted pick (#33): a vanished model switches to the
+ * first available one with a light notice; an empty directory clears the
+ * selection and points at the downloads.
  */
 async function refreshLocalModels(): Promise<void> {
   try {
@@ -958,16 +963,32 @@ async function refreshLocalModels(): Promise<void> {
     return
   }
   const ids = localModels.value.map((m) => m.alias || m.name)
-  // A persisted model id may be stale (renamed/removed since the last run); only
-  // reconcile against a non-empty list so an empty directory never rewrites
-  // the stored choice
-  if (ids.length > 0) {
-    const reconciled = reconcileSelectedModel(selectedModel.value, ids)
-    if (reconciled.changed) {
-      selectedModel.value = reconciled.model
-      persistChat()
-    }
+  const reconciled = reconcileSelectedModel(selectedModel.value, ids)
+  if (reconciled.action === 'switched') {
+    selectedModel.value = reconciled.model
+    persistChat()
+    const label = modelOptions.value.find((o) => o.value === reconciled.model)?.label || reconciled.model
+    showModelNotice(t('chat.modelSwitched', { name: label }))
+  } else if (reconciled.action === 'cleared') {
+    selectedModel.value = ''
+    persistChat()
+    showModelNotice(t('chat.pickAfterDownload'))
   }
+}
+
+/**
+ * Transient model-list notice (#33): a one-line info card in the notices
+ * stack that auto-dismisses after a few seconds (light toast semantics).
+ */
+const modelNotice = ref('')
+let modelNoticeTimer: ReturnType<typeof setTimeout> | null = null
+
+function showModelNotice(text: string): void {
+  modelNotice.value = text
+  if (modelNoticeTimer) clearTimeout(modelNoticeTimer)
+  modelNoticeTimer = setTimeout(() => {
+    modelNotice.value = ''
+  }, 6000)
 }
 
 /**
@@ -1008,7 +1029,7 @@ async function ensureServerReady(): Promise<boolean> {
     const deadline = Date.now() + (platform.value.isAndroid ? 60000 : 30000)
     while (Date.now() < deadline) {
       try {
-        await fetchRouterModels(cfg.port)
+        await fetchRouterModels(cfg.port, { apiKey: cfg.apiKey })
         // Router answered: the service is ready to stream
         serverRunning.value = true
         await refreshLocalModels()
@@ -1043,7 +1064,7 @@ async function unloadOtherModels(): Promise<void> {
   let toUnload: string[] = []
   try {
     const cfg = await getServerConfig()
-    const loaded = await fetchRouterModels(cfg.port)
+    const loaded = await fetchRouterModels(cfg.port, { apiKey: cfg.apiKey })
     toUnload = modelsToUnload(loaded, selectedModel.value)
   } catch {
     // Router unreachable: let the chat request itself surface the real error
@@ -1081,7 +1102,7 @@ async function ensureDirectModeResident(): Promise<boolean> {
   let needsSwitch: boolean
   try {
     const cfg = await getServerConfig()
-    const loaded = await fetchRouterModels(cfg.port)
+    const loaded = await fetchRouterModels(cfg.port, { apiKey: cfg.apiKey })
     needsSwitch = directModeNeedsSwitch(
       loaded.filter((m) => m.status === 'loaded').map((m) => m.id),
       selectedModel.value
@@ -1287,9 +1308,12 @@ async function send() {
   let requestFailed = false
   liveAnswerTps.value = null
   liveReasoningTps.value = null
+  // One config fetch serves both the endpoint port and the API key: with a
+  // key configured the stream request must carry the bearer header (#29).
+  const sendCfg = await getServerConfig()
   try {
     await streamChatCompletion(
-      (await getServerConfig()).port,
+      sendCfg.port,
       selectedModel.value,
       messages.value.filter(m => m.role !== 'assistant' || m.content).map(m => ({ role: m.role as 'user' | 'assistant', content: m.content, images: m.images })),
       (delta) => {
@@ -1315,7 +1339,8 @@ async function send() {
       },
       chatAbortController.current.signal,
       sendParams,
-      bodyOptions
+      bodyOptions,
+      { apiKey: sendCfg.apiKey }
     )
   } catch (e: any) {
     // Stop generation (AbortError): keep generated content; if nothing was generated, remove the empty bubble
@@ -1400,6 +1425,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   document.removeEventListener('click', onDocClick)
+  if (modelNoticeTimer) clearTimeout(modelNoticeTimer)
 })
 </script>
 

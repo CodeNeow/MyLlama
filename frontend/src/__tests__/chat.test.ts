@@ -6,6 +6,7 @@ import {
   chatContextSummary,
   chatParamsLayout,
   chatReadiness,
+  chatRequestHeaders,
   directModeNeedsSwitch,
   estimateChatTokens,
   estimateConversationTokens,
@@ -14,6 +15,7 @@ import {
   lastReplyTps,
   modelsToUnload,
   parseSSEChunks,
+  streamChatCompletion,
   tokenRates,
   type ChatParams,
 } from '../lib/chat'
@@ -441,6 +443,107 @@ describe('fetchRouterModels', () => {
   it('propagates an error when both /models and /v1/models fail', async () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(jsonResponse(404, {}))))
     await expect(fetchRouterModels(8080)).rejects.toThrow('GET /v1/models failed: 404')
+  })
+})
+
+// ─── API key auth headers (issue #29: 401 with a key set) ────────────────────
+
+describe('chatRequestHeaders', () => {
+  it('adds the Authorization bearer header only for a non-empty key', () => {
+    expect(chatRequestHeaders(undefined)).toEqual({})
+    expect(chatRequestHeaders('')).toEqual({})
+    expect(chatRequestHeaders('test-key-fixture')).toEqual({ Authorization: 'Bearer test-key-fixture' })
+  })
+})
+
+describe('fetchRouterModels auth', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  function jsonResponse(status: number, body: unknown): Response {
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      json: () => Promise.resolve(body),
+    } as unknown as Response
+  }
+
+  it('sends the bearer header when a key is configured', async () => {
+    let captured: RequestInit | undefined
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      captured = init
+      return Promise.resolve(jsonResponse(200, { data: [{ id: 'm1', status: { value: 'loaded' } }] }))
+    }))
+    await fetchRouterModels(8080, { apiKey: 'test-key-fixture' })
+    expect(captured?.headers).toEqual({ Authorization: 'Bearer test-key-fixture' })
+  })
+
+  it('sends no auth header without a key', async () => {
+    let captured: RequestInit | undefined
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      captured = init
+      return Promise.resolve(jsonResponse(200, { data: [{ id: 'm1', status: { value: 'loaded' } }] }))
+    }))
+    await fetchRouterModels(8080)
+    expect(captured?.headers).toEqual({})
+  })
+})
+
+describe('streamChatCompletion auth', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  function sseResponse(): Response {
+    return {
+      ok: true,
+      status: 200,
+      body: {
+        getReader: () => ({
+          read: () => Promise.resolve({ done: true, value: undefined }),
+          releaseLock: () => {},
+        }),
+      },
+    } as unknown as Response
+  }
+
+  it('carries the bearer header alongside Content-Type when a key is configured', async () => {
+    let captured: RequestInit | undefined
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      captured = init
+      expect(url).toBe('http://127.0.0.1:8080/v1/chat/completions')
+      return Promise.resolve(sseResponse())
+    }))
+    const noop = () => {}
+    const controller = new AbortController()
+    await streamChatCompletion(
+      8080,
+      'm1',
+      [{ role: 'user', content: 'hi' }],
+      noop,
+      noop,
+      controller.signal,
+      undefined,
+      undefined,
+      { apiKey: 'test-key-fixture' }
+    )
+    expect(captured?.headers).toEqual({
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer test-key-fixture',
+    })
+  })
+
+  it('keeps the headers unchanged without a key', async () => {
+    let captured: RequestInit | undefined
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      captured = init
+      return Promise.resolve(sseResponse())
+    }))
+    const noop = () => {}
+    const controller = new AbortController()
+    await streamChatCompletion(8080, 'm1', [{ role: 'user', content: 'hi' }], noop, noop, controller.signal)
+    expect(captured?.headers).toEqual({ 'Content-Type': 'application/json' })
   })
 })
 

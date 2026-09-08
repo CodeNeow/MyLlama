@@ -928,10 +928,11 @@ func argValue(args []string, flag string) (string, bool) {
 // buildServerCommand: single-model direct args driven by modelDirectArgs
 // (-m / --alias present, per-model options included) with NO router flags
 // (--models-preset / --models-max must be absent), while the shared service
-// flags (host/port/cont-batching/no-webui/api-key/cache-ram) stay in place.
+// flags (host/port/cont-batching/no-webui/cache-ram) stay in place. The API
+// key never lands on argv — it rides the LLAMA_API_KEY env at spawn time.
 func TestBuildServerCommandAndroidDirect(t *testing.T) {
 	withPlatformGOOS(t, "android")
-	cfg := ServerConfig{AccessMode: accessLocal, Host: "127.0.0.1", Port: 8080, MaxModels: 1, CacheRAM: 512, APIKey: "sk-secret"}
+	cfg := ServerConfig{AccessMode: accessLocal, Host: "127.0.0.1", Port: 8080, MaxModels: 1, CacheRAM: 512, APIKey: "test-key-fixture"}
 	d := &directModel{
 		info: ModelInfo{Name: "Qwen2.5 7B", Path: "/models/q.gguf"},
 		cfg:  ModelConfig{CtxSize: 4096, GPULayers: "99"},
@@ -956,14 +957,14 @@ func TestBuildServerCommandAndroidDirect(t *testing.T) {
 	if v, ok := argValue(args, "--gpu-layers"); !ok || v != "99" {
 		t.Errorf("args missing --gpu-layers 99: %v", args)
 	}
-	for _, banned := range []string{"--models-preset", "--models-max", "--models-dir"} {
+	for _, banned := range []string{"--models-preset", "--models-max", "--models-dir", "--api-key", "test-key-fixture"} {
 		for _, a := range args {
 			if a == banned {
-				t.Errorf("direct mode must not pass %s: %v", banned, args)
+				t.Errorf("direct args must not pass %s on argv (env-delivered): %v", banned, args)
 			}
 		}
 	}
-	for _, want := range []string{"--cont-batching", "--no-webui", "--api-key", "sk-secret", "--cache-ram", "512"} {
+	for _, want := range []string{"--cont-batching", "--no-webui", "--cache-ram", "512"} {
 		found := false
 		for _, a := range args {
 			if a == want {

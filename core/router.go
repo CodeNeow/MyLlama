@@ -87,6 +87,34 @@ func classifyModelType(outputModalities []string) string {
 	return "chat"
 }
 
+// ─── Authenticated request building ─────────────────────────────────
+
+// routerAPIKey returns the configured llama-server API key under
+// serverConfigMu (empty = no authentication), mirroring the other
+// cachedServerConfig readers.
+func routerAPIKey() string {
+	serverConfigMu.Lock()
+	key := cachedServerConfig.APIKey
+	serverConfigMu.Unlock()
+	return key
+}
+
+// newRouterRequest builds an HTTP request against the llama-server router
+// API: a non-empty configured key sets "Authorization: Bearer <key>" — with
+// --api-key set, llama-server enforces bearer auth on every route including
+// /models and /models/unload (issue #30); an empty key sends no header and
+// the request behaves exactly as before.
+func newRouterRequest(method, url string, body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequest(method, url, body)
+	if err != nil {
+		return nil, err
+	}
+	if key := routerAPIKey(); key != "" {
+		req.Header.Set("Authorization", "Bearer "+key)
+	}
+	return req, nil
+}
+
 // ─── Query / Unload ────────────────────────────────────────────────
 
 // fetchRouterModels queries the llama-server router for the model list,
@@ -99,8 +127,12 @@ func fetchRouterModels(port int) ([]LoadedModel, error) {
 	base := routerBaseURL(port)
 	url := base + "/models"
 
+	req, err := newRouterRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("fetch router models: %w", err)
+	}
 	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Get(url)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fetch router models: %w", err)
 	}
@@ -197,7 +229,11 @@ func parseModelsBody(body []byte) ([]LoadedModel, error) {
 // values (type chat, status loaded) — the direct-mode fallback for
 // router-unaware servers.
 func fetchOpenAIModels(client *http.Client, base string) ([]LoadedModel, error) {
-	resp, err := client.Get(base + "/v1/models")
+	req, err := newRouterRequest(http.MethodGet, base+"/v1/models", nil)
+	if err != nil {
+		return nil, fmt.Errorf("fetch router models: %w", err)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fetch router models: %w", err)
 	}
@@ -245,8 +281,13 @@ func unloadRouterModel(port int, id string) error {
 		return fmt.Errorf("unload router model: %w", err)
 	}
 
+	req, err := newRouterRequest(http.MethodPost, url, bytes.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("unload router model: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
 	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Post(url, "application/json", bytes.NewReader(payload))
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("unload router model: %w", err)
 	}

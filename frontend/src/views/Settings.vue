@@ -276,6 +276,23 @@
             </div>
           </div>
         </div>
+
+        <!-- Saved-while-running restart prompt (#32): llama-server reads the
+             key from its LLAMA_API_KEY environment at spawn, so a key saved
+             while the service runs applies only after a restart. Offers the
+             shared restart routine inline; "later" just closes. -->
+        <div v-if="apiKeyRestartPrompt" class="api-key-dialog-root" @click.self="dismissApiKeyRestart">
+          <div class="api-key-dialog" role="dialog" aria-modal="true" :aria-label="t('settings.apiKeySavedTitle')">
+            <div class="api-key-dialog-title">{{ t('settings.apiKeySavedTitle') }}</div>
+            <p class="api-key-dialog-msg">{{ t('settings.apiKeySavedBody') }}</p>
+            <div class="api-key-dialog-actions">
+              <button type="button" class="api-key-dialog-cancel" @click="dismissApiKeyRestart">{{ t('settings.apiKeyLater') }}</button>
+              <button type="button" class="api-key-dialog-primary" :disabled="apiKeyRestarting" @click="restartForApiKey">
+                {{ t('settings.apiKeyRestartNow') }}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Inference GPU selection: pins the llama-server child to the chosen
@@ -473,7 +490,8 @@
 import { computed, onMounted, ref } from 'vue'
 import { appConfig, setTheme, loadConfig, setDownloadSource as applyDownloadSource, setLanguage as applyLanguage, setServerAccessMode as applyServerAccessMode, setApiKey as applyApiKey, setTrayEnabled as applyTrayEnabled } from '../store'
 import { updateState, checkForUpdate } from '../lib/update'
-import { getAppVersion, getLlamaCpp, getSystemInfo, getServerConfig, saveServerConfig, browseLlamaCppDownloadDir, browseModelDownloadDir, setApiRouteMode, getModels } from '../wails'
+import { getAppVersion, getLlamaCpp, getSystemInfo, getServerConfig, getServerStatus, saveServerConfig, browseLlamaCppDownloadDir, browseModelDownloadDir, setApiRouteMode, getModels } from '../wails'
+import { restartServer } from '../lib/serverControls'
 import { accelBuildKey, showTraySetting, showApiRouteSetting, showServingGpuSetting, updateSectionMode, showUpdateCheckActions, usePlatform } from '../lib/platform'
 import { handleLinkClick } from '../lib/linkHandler'
 import { DOCS_ICON } from '../lib/navigation'
@@ -694,16 +712,51 @@ const apiKeySwitching = ref(false)
 const showApiKeySheet = ref(false)
 const showApiKeyDialog = ref(false)
 
+// Saved-while-running restart prompt (#32): llama-server reads the key from
+// its LLAMA_API_KEY environment at spawn, so a save while the service runs
+// takes effect only after a restart — surface that instead of failing silently.
+const apiKeyRestartPrompt = ref(false)
+const apiKeyRestarting = ref(false)
+
 async function saveApiKey() {
   if (apiKeySwitching.value) return
   apiKeySwitching.value = true
   apiKeyError.value = ''
   try {
     await applyApiKey(apiKeyInput.value)
+    // Silent save stays silent only while the service is stopped; running
+    // llama-server keeps the key it was spawned with, so offer the restart.
+    try {
+      const st = await getServerStatus()
+      if (st.running) apiKeyRestartPrompt.value = true
+    } catch {
+      // Status unavailable (standalone vite): keep the silent-save behavior
+    }
   } catch {
     apiKeyError.value = t('settings.apiKeyError')
   } finally {
     apiKeySwitching.value = false
+  }
+}
+
+/** "稍后": just close the prompt — the saved key applies at the next manual restart. */
+function dismissApiKeyRestart() {
+  if (apiKeyRestarting.value) return
+  apiKeyRestartPrompt.value = false
+}
+
+/** "立即重启": run the shared stop → wait → start routine; failures land in the row error line. */
+async function restartForApiKey() {
+  if (apiKeyRestarting.value) return
+  apiKeyRestarting.value = true
+  apiKeyError.value = ''
+  try {
+    await restartServer()
+    apiKeyRestartPrompt.value = false
+  } catch {
+    apiKeyError.value = t('settings.apiKeyRestartFailed')
+  } finally {
+    apiKeyRestarting.value = false
   }
 }
 
@@ -1785,6 +1838,7 @@ async function manualCheck() {
 .api-key-dialog-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
 }
 
 .api-key-dialog-cancel {
@@ -1801,6 +1855,35 @@ async function manualCheck() {
 
 .api-key-dialog-cancel:hover {
   background: var(--accent-glow);
+}
+
+/* Saved-while-running restart prompt (#32): body copy + gradient confirm */
+.api-key-dialog-msg {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.api-key-dialog-primary {
+  padding: 7px 16px;
+  background: var(--grad);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter 0.2s, opacity 0.15s;
+}
+
+.api-key-dialog-primary:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.api-key-dialog-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* ─── Tablet portrait Track A (768–1099px, draft frame ⑯/A16 adapted): a

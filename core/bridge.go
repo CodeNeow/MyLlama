@@ -57,6 +57,26 @@ var serverDone chan struct{}
 // cmdTimeout) so tests can shorten it.
 var stopGrace = 5 * time.Second
 
+// stopExitWait is the bounded period stopServerInternal waits for the wait
+// goroutine to confirm the child's exit (close of the captured serverDone)
+// after a Kill (or a failed interrupt delivery). Bounded so a wedged child
+// can never hang the caller forever; on timeout a [WARN] is logged and the
+// stop proceeds anyway. Declared as a var (same style as stopGrace) so tests
+// can shorten it.
+var stopExitWait = 8 * time.Second
+
+// signalServer is the injection point delivering the stop signal to the
+// llama-server child (same style as killProcessByPid); killServer is the
+// escalation Kill. Tests replace them to simulate delayed exits without real
+// child processes.
+var signalServer = func(cmd *exec.Cmd, sig os.Signal) error {
+	return cmd.Process.Signal(sig)
+}
+
+var killServer = func(cmd *exec.Cmd) error {
+	return cmd.Process.Kill()
+}
+
 // ─── Server start/stop (extracted from HTTP handlers) ────────────
 
 func startServerInternal() error {
@@ -219,6 +239,14 @@ func spawnServerProcess(llamaServer string, args []string, cfg ServerConfig, res
 	// yields nil: the child then inherits the parent environment unchanged.
 	// serverChildEnv additionally carries the Android LD_LIBRARY_PATH anchor.
 	cmd.Env = serverChildEnv(llamaServer, cudaDeviceEnv(cfg.DeviceID))
+	// Deliver the optional bearer-token API key through the LLAMA_API_KEY
+	// environment variable instead of argv: llama.cpp b10689 reads --api-key's
+	// value from LLAMA_API_KEY (common/arg.cpp .set_env), and an env entry
+	// stays invisible in process lists and the startup log line, unlike a
+	// plaintext "--api-key <value>" argument pair (#26/#31). An empty key
+	// appends nothing, so the no-auth start path inherits the environment
+	// unchanged.
+	cmd.Env = append(cmd.Env, apiKeyEnv(cfg.APIKey)...)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	serverLogsMu.Lock()
@@ -226,7 +254,7 @@ func spawnServerProcess(llamaServer string, args []string, cfg ServerConfig, res
 	serverLogsMu.Unlock()
 	serverMu.Unlock()
 
-	addServerLog(fmt.Sprintf("[INFO] Starting llama-server: %s %s", llamaServer, strings.Join(args, " ")))
+	addServerLog(fmt.Sprintf("[INFO] Starting llama-server: %s %s", llamaServer, redactAPIKeyArg(strings.Join(args, " "))))
 
 	if err := cmd.Start(); err != nil {
 		logFile.Close() // the child never inherited the handle; do not leak the fd
@@ -356,12 +384,10 @@ func buildServerCommand(cfg ServerConfig, presetPath string, d *directModel) (st
 		if cfg.CacheRAM > 0 {
 			args = append(args, "--cache-ram", strconv.Itoa(cfg.CacheRAM))
 		}
-		// Optional bearer-token authentication for the inference API: only
-		// passed when set; empty keeps llama-server's default
-		// no-authentication behavior. Both flags are valid in direct mode.
-		if cfg.APIKey != "" {
-			args = append(args, "--api-key", cfg.APIKey)
-		}
+		// Optional bearer-token authentication for the inference API is NOT
+		// passed on argv: the key is delivered through the LLAMA_API_KEY
+		// environment variable at spawn time (see spawnServerProcess) so it
+		// never appears in process lists or the startup log line (#26).
 		return llamaServer, args, nil
 	}
 
@@ -381,11 +407,10 @@ func buildServerCommand(cfg ServerConfig, presetPath string, d *directModel) (st
 	if cfg.CacheRAM > 0 {
 		args = append(args, "--cache-ram", strconv.Itoa(cfg.CacheRAM))
 	}
-	// Optional bearer-token authentication for the inference API: only passed
-	// when set; empty keeps llama-server's default no-authentication behavior.
-	if cfg.APIKey != "" {
-		args = append(args, "--api-key", cfg.APIKey)
-	}
+	// Optional bearer-token authentication for the inference API is NOT passed
+	// on argv: the key is delivered through the LLAMA_API_KEY environment
+	// variable at spawn time (see spawnServerProcess) so it never appears in
+	// process lists or the startup log line (#26).
 	return llamaServer, args, nil
 }
 
@@ -409,6 +434,35 @@ func serverChildEnv(llamaServer string, cudaExtra []string) []string {
 		env = append(env, ld...)
 	}
 	return env
+}
+
+// apiKeyEnv builds the environment entries delivering the llama-server API
+// key: a non-empty key yields the single LLAMA_API_KEY entry (llama.cpp b10689
+// common/arg.cpp reads --api-key's value from that variable), an empty key
+// yields nil so the no-auth child inherits the parent environment unchanged.
+// Declared as a var (same style as platformGOOS) so tests can assert the
+// spawn-side delivery without launching a real child.
+var apiKeyEnv = func(key string) []string {
+	if key == "" {
+		return nil
+	}
+	return []string{"LLAMA_API_KEY=" + key}
+}
+
+// redactAPIKeyArg masks the value of any "--api-key <value>" pair in a joined
+// command line. buildServerCommand no longer puts the key on argv (it rides
+// the LLAMA_API_KEY environment instead), so the startup log cannot leak it
+// today; this pure helper is a defensive net in case a future argument
+// reintroduces the pair (issue #31).
+func redactAPIKeyArg(line string) string {
+	parts := strings.Split(line, " ")
+	for i := 0; i < len(parts)-1; i++ {
+		if parts[i] == "--api-key" {
+			parts[i+1] = "[REDACTED]"
+			i++ // skip the masked value so an adjacent pair is not double-consumed
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 // cudaDeviceEnv builds the child-process environment for llama-server from the
@@ -524,35 +578,58 @@ func stopServerInternal() error {
 
 	addServerLog("[INFO] Stopping llama-server...")
 
-	if err := cmd.Process.Signal(osInterrupt); err != nil {
+	if err := signalServer(cmd, osInterrupt); err != nil {
 		// The interrupt could not even be delivered (e.g. the process already
-		// finished): keep the historical behavior — escalate straight to Kill.
-		cmd.Process.Kill()
-		return nil
+		// finished): keep the historical behavior — escalate straight to Kill,
+		// then share the bounded exit wait below so this call still returns
+		// only after the child is reaped (#28).
+		if err := killServer(cmd); err != nil {
+			log.Printf("[WARN] failed to kill llama-server after failed interrupt: %v", err)
+		}
+	} else {
+		// done == nil means no completion handle exists (a startServerInternal
+		// child always registers one; only forged test state omits it) — keep
+		// the historical fire-and-forget behavior then.
+		if done == nil {
+			return nil
+		}
+		// Uniform graceful-stop sequence on every platform, no runtime.GOOS
+		// branch: give the child a bounded grace period to exit on its own after
+		// the interrupt, and only then escalate to Kill ("force never implicit").
+		// On Windows osInterrupt IS os.Kill, so the child dies from the signal
+		// itself and done always wins the select — the escalation branch stays
+		// dormant there by construction, and the wait completes immediately after
+		// the kill. done is closed only after the wait goroutine cleared the
+		// lifecycle state under serverMu, so returning via done never races the
+		// state cleanup.
+		select {
+		case <-done:
+			// The child exited within the grace period; nothing more to do.
+			return nil
+		case <-time.After(stopGrace):
+			log.Printf("[WARN] llama-server did not exit within %v, killed", stopGrace)
+			if err := killServer(cmd); err != nil && !errors.Is(err, os.ErrProcessDone) {
+				log.Printf("[WARN] failed to kill llama-server after grace period: %v", err)
+			}
+		}
 	}
 
-	// Uniform graceful-stop sequence on every platform, no runtime.GOOS
-	// branch: give the child a bounded grace period to exit on its own after
-	// the interrupt, and only then escalate to Kill ("force never implicit").
-	// On Windows osInterrupt IS os.Kill, so the child dies from the signal
-	// itself and done always wins the select — the escalation branch stays
-	// dormant there by construction, and the wait completes immediately after
-	// the kill. done is closed only after the wait goroutine cleared the
-	// lifecycle state under serverMu, so returning via done never races the
-	// state cleanup. done == nil means no completion handle exists (a
-	// startServerInternal child always registers one; only forged test state
-	// omits it) — keep the historical fire-and-forget behavior then.
+	// Bounded exit confirmation (#28): stopServerInternal must not return
+	// while the child can still be observed as running. done is closed
+	// strictly AFTER the wait goroutine cleared serverRunning/serverCmd under
+	// serverMu, so waiting on it keeps the StartServer already-running guard
+	// from seeing a stale running=true and silently no-op'ing a subsequent
+	// "stop then start" restart. Never holds serverMu (the wait goroutine
+	// needs it to clear the state); bounded so a wedged child cannot hang the
+	// UI forever — on timeout the wait goroutine still finishes in the
+	// background and only a [WARN] is logged.
 	if done == nil {
 		return nil
 	}
 	select {
 	case <-done:
-		// The child exited within the grace period; nothing more to do.
-	case <-time.After(stopGrace):
-		log.Printf("[WARN] llama-server did not exit within %v, killed", stopGrace)
-		if err := cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
-			log.Printf("[WARN] failed to kill llama-server after grace period: %v", err)
-		}
+	case <-time.After(stopExitWait):
+		log.Printf("[WARN] llama-server exit not confirmed within %v; continuing", stopExitWait)
 	}
 	return nil
 }

@@ -389,6 +389,25 @@ export function buildMessageContent(text: string, images?: string[]): string | A
 }
 
 /**
+ * Transport-level options for direct llama-server HTTP requests: when the
+ * server was started with an API key, every request must carry the bearer
+ * token or it answers 401 (issue #29).
+ */
+export interface ChatAuthOptions {
+  /** Configured llama-server API key; empty/undefined sends no auth header. */
+  apiKey?: string
+}
+
+/** Build the request headers for a direct llama-server call: adds the Authorization bearer header only for a non-empty key. */
+export function chatRequestHeaders(apiKey?: string): Record<string, string> {
+  const headers: Record<string, string> = {}
+  if (apiKey) {
+    headers['Authorization'] = `Bearer ${apiKey}`
+  }
+  return headers
+}
+
+/**
  * Fetch the router's currently available model list (excluding failed entries).
  *
  * A 404 from GET /models means the server was started in direct mode (older
@@ -401,10 +420,10 @@ export function buildMessageContent(text: string, images?: string[]): string | A
  * (modelsToUnload only acts on 'loaded'), and only a genuinely empty data
  * array yields an empty list (router mode with nothing loaded).
  */
-export async function fetchRouterModels(port: number): Promise<RouterModel[]> {
-  const res = await fetch(`http://127.0.0.1:${port}/models`)
+export async function fetchRouterModels(port: number, auth?: ChatAuthOptions): Promise<RouterModel[]> {
+  const res = await fetch(`http://127.0.0.1:${port}/models`, { headers: chatRequestHeaders(auth?.apiKey) })
   if (res.status === 404) {
-    return fetchOpenAIModels(port)
+    return fetchOpenAIModels(port, auth)
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
@@ -422,8 +441,8 @@ export async function fetchRouterModels(port: number): Promise<RouterModel[]> {
  * values with status 'loaded' (direct servers always have their model in
  * memory).
  */
-async function fetchOpenAIModels(port: number): Promise<RouterModel[]> {
-  const res = await fetch(`http://127.0.0.1:${port}/v1/models`)
+async function fetchOpenAIModels(port: number, auth?: ChatAuthOptions): Promise<RouterModel[]> {
+  const res = await fetch(`http://127.0.0.1:${port}/v1/models`, { headers: chatRequestHeaders(auth?.apiKey) })
   if (!res.ok) {
     throw new Error(`GET /v1/models failed: ${res.status}`)
   }
@@ -436,6 +455,9 @@ async function fetchOpenAIModels(port: number): Promise<RouterModel[]> {
  * Streaming chat completion: POST /v1/chat/completions, invoking onDelta per
  * answer token and onReasoningDelta per thinking token (reasoning_content).
  *
+ * @param auth When the server runs with an API key, pass it here so the
+ *        request carries the Authorization bearer header (issue #29);
+ *        empty/undefined keeps the header set unchanged.
  * @throws On non-2xx, reads error.message from the body and throws it.
  */
 export async function streamChatCompletion(
@@ -446,11 +468,12 @@ export async function streamChatCompletion(
   onReasoningDelta: (text: string) => void,
   signal: AbortSignal,
   params?: ChatParams,
-  bodyOptions?: BuildChatBodyOptions
+  bodyOptions?: BuildChatBodyOptions,
+  auth?: ChatAuthOptions
 ): Promise<void> {
   const res = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...chatRequestHeaders(auth?.apiKey) },
     body: JSON.stringify(buildChatBody(model, messages, params, bodyOptions)),
     signal,
   })

@@ -25,7 +25,7 @@ These two paths decide where **new** content lands; to reuse model files already
 
 **Server Access Scope**: `Local (127.0.0.1)` keeps the service to this machine; `LAN (0.0.0.0)` opens it to devices on the same network. Changes apply the next time the service starts.
 
-**API Key**: an optional Bearer token. When set, every inference request must carry it; leave empty for no authentication. Even for purely local use, a key stops other local programs from calling the service freely.
+**API Key**: an optional Bearer token. When set, every inference request must carry it; leave empty for no authentication. Even for purely local use, a key stops other local programs from calling the service freely. The key applies the **next time the service starts** — saving while the service is running asks whether to restart immediately.
 
 **Inference GPU**: on multi-GPU machines, choose which NVIDIA card llama-server runs on (stored as a stable UUID and passed to the service process via `CUDA_VISIBLE_DEVICES`). With no NVIDIA GPU the selector is disabled and the service uses the default device. One-click auto-tune budgets VRAM against the card chosen here. Windows only.
 

@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -186,9 +187,11 @@ func TestBuildServerCommandOmitsModelsDir(t *testing.T) {
 	}
 }
 
-// TestBuildServerCommandAPIKey verifies the optional --api-key flag: an empty
-// APIKey (default, no authentication) omits the flag entirely; a non-empty one
-// appends the adjacent "--api-key <value>" argument pair.
+// TestBuildServerCommandAPIKey verifies the API key never lands on argv: the
+// key is delivered through the LLAMA_API_KEY environment variable at spawn
+// time (llama.cpp b10689 reads --api-key's value from that variable), so the
+// command line carries no credential regardless of the configuration, and an
+// empty APIKey (default, no authentication) is indistinguishable on argv.
 func TestBuildServerCommandAPIKey(t *testing.T) {
 	saveServerState(t)
 
@@ -198,27 +201,66 @@ func TestBuildServerCommandAPIKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, a := range args {
-		if a == "--api-key" {
-			t.Fatalf("empty APIKey should omit --api-key, actual args = %v", args)
-		}
+	if argsContain(args, "--api-key") {
+		t.Fatalf("empty APIKey should omit --api-key, actual args = %v", args)
 	}
 
-	// non-empty APIKey → adjacent "--api-key" value pair
-	cfg.APIKey = "sk-secret"
-	// err already validated above; only the args shape matters here
+	// non-empty APIKey → argv STILL has no --api-key pair (env-delivered)
+	cfg.APIKey = "test-key-fixture"
 	_, args, _ = buildServerCommand(cfg, "/tmp/preset.ini", nil)
-	found := false
-	for i, a := range args {
-		if a == "--api-key" {
-			found = true
-			if i+1 >= len(args) || args[i+1] != "sk-secret" {
-				t.Fatalf("--api-key should be followed by its value, actual args = %v", args)
-			}
-		}
+	if argsContain(args, "--api-key") {
+		t.Fatalf("API key must not appear on argv (env-delivered), actual args = %v", args)
 	}
-	if !found {
-		t.Fatalf("non-empty APIKey should add --api-key, actual args = %v", args)
+}
+
+// TestAPIKeyEnv verifies the spawn-side API-key delivery: a non-empty key
+// yields exactly the LLAMA_API_KEY entry (b10689 .set_env name), an empty key
+// yields nil so the no-auth child inherits the environment unchanged.
+func TestAPIKeyEnv(t *testing.T) {
+	if got := apiKeyEnv(""); got != nil {
+		t.Errorf("apiKeyEnv(\"\") = %v, want nil", got)
+	}
+	got := apiKeyEnv("test-key-fixture")
+	if len(got) != 1 || got[0] != "LLAMA_API_KEY=test-key-fixture" {
+		t.Errorf("apiKeyEnv(test-key-fixture) = %v, want [LLAMA_API_KEY=test-key-fixture]", got)
+	}
+}
+
+// TestRedactAPIKeyArg verifies the defensive startup-log redaction: any
+// "--api-key <value>" pair in a joined command line has its value masked,
+// other arguments pass through untouched, and a line without the flag is
+// returned unchanged (issue #31).
+func TestRedactAPIKeyArg(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			"masks the pair",
+			"llama-server --host 127.0.0.1 --api-key test-key-fixture --port 8080",
+			"llama-server --host 127.0.0.1 --api-key [REDACTED] --port 8080",
+		},
+		{
+			"masks at end of line",
+			"llama-server --api-key test-key-fixture",
+			"llama-server --api-key [REDACTED]",
+		},
+		{
+			"handles adjacent pairs",
+			"llama-server --api-key k1 --api-key k2",
+			"llama-server --api-key [REDACTED] --api-key [REDACTED]",
+		},
+		{
+			"no flag unchanged",
+			"llama-server --host 127.0.0.1 --port 8080",
+			"llama-server --host 127.0.0.1 --port 8080",
+		},
+	}
+	for _, tt := range cases {
+		if got := redactAPIKeyArg(tt.in); got != tt.want {
+			t.Errorf("%s: redactAPIKeyArg(%q) = %q, want %q", tt.name, tt.in, got, tt.want)
+		}
 	}
 }
 
@@ -512,5 +554,162 @@ func TestStopServerInternalKillsRunningProcess(t *testing.T) {
 		// process terminated, as expected
 	case <-time.After(5 * time.Second):
 		t.Fatal("surrogate process was not terminated after stopServerInternal")
+	}
+}
+
+// saveStopSeams snapshots and restores the stopServerInternal injection
+// points and timing knobs the wait-behavior tests swap out.
+func saveStopSeams(t *testing.T) (origSignal func(*exec.Cmd, os.Signal) error, origKill func(*exec.Cmd) error) {
+	t.Helper()
+	origSignal = signalServer
+	origKill = killServer
+	origGrace, origExit := stopGrace, stopExitWait
+	serverMu.Lock()
+	origDone := serverDone
+	serverMu.Unlock()
+	t.Cleanup(func() {
+		signalServer = origSignal
+		killServer = origKill
+		stopGrace, stopExitWait = origGrace, origExit
+		serverMu.Lock()
+		serverDone = origDone
+		serverMu.Unlock()
+	})
+	return
+}
+
+// forgeRunningState registers a running-server lifecycle without a real child:
+// serverCmd is an unstarted exec.Cmd (never touched — the seams intercept
+// Signal/Kill), done is the completion channel the wait tests control.
+func forgeRunningState(t *testing.T) (cmd *exec.Cmd, done chan struct{}) {
+	t.Helper()
+	saveServerState(t)
+	cmd = exec.Command("llama-server-test-surrogate")
+	done = make(chan struct{})
+	serverMu.Lock()
+	serverRunning = true
+	serverCmd = cmd
+	serverDone = done
+	serverMu.Unlock()
+	return cmd, done
+}
+
+// TestStopServerInternalWaitsForDone verifies the #28 fix: stopServerInternal
+// returns only after the wait goroutine's done channel is closed, so the
+// StartServer already-running guard can no longer observe a stale
+// running=true after a stop-then-start restart. Uses the signalServer seam to
+// simulate a delivered interrupt and a delayed child exit without a real
+// process; the graceful path must not escalate to Kill.
+func TestStopServerInternalWaitsForDone(t *testing.T) {
+	saveStopSeams(t)
+	_, done := forgeRunningState(t)
+
+	delivered := make(chan struct{})
+	signalServer = func(*exec.Cmd, os.Signal) error {
+		close(delivered)
+		return nil
+	}
+	kills := 0
+	killServer = func(*exec.Cmd) error {
+		kills++
+		return nil
+	}
+
+	// Child "exits" (done closes) 120ms after the interrupt — well within the
+	// default 5s grace period.
+	go func() {
+		<-delivered
+		time.Sleep(120 * time.Millisecond)
+		close(done)
+	}()
+
+	start := time.Now()
+	if err := stopServerInternal(); err != nil {
+		t.Fatalf("stopServerInternal returned error: %v", err)
+	}
+	elapsed := time.Since(start)
+
+	select {
+	case <-done:
+		// done closed by the delayed-exit goroutine, as expected
+	default:
+		t.Fatal("stopServerInternal returned before the done channel was closed")
+	}
+	if elapsed < 100*time.Millisecond {
+		t.Errorf("stopServerInternal returned after %v, want it to wait for the child exit (~120ms)", elapsed)
+	}
+	if kills != 0 {
+		t.Errorf("graceful exit within the grace period must not escalate to Kill (%d kills)", kills)
+	}
+}
+
+// TestStopServerInternalExitWaitTimeout verifies the bounded escalation path:
+// when the child ignores the interrupt past the grace period, stopServerInternal
+// escalates to Kill exactly once and then waits a bounded stopExitWait for the
+// exit confirmation; on timeout it logs a [WARN] and returns instead of hanging
+// the caller forever (#28).
+func TestStopServerInternalExitWaitTimeout(t *testing.T) {
+	saveStopSeams(t)
+	_, done := forgeRunningState(t)
+	_ = done // never closed: simulates a child that outlives the whole stop
+
+	signalServer = func(*exec.Cmd, os.Signal) error { return nil } // interrupt "delivered"
+	kills := 0
+	killServer = func(*exec.Cmd) error {
+		kills++
+		return nil
+	}
+	stopGrace = 30 * time.Millisecond
+	stopExitWait = 60 * time.Millisecond
+
+	start := time.Now()
+	if err := stopServerInternal(); err != nil {
+		t.Fatalf("stopServerInternal returned error: %v", err)
+	}
+	elapsed := time.Since(start)
+
+	if kills != 1 {
+		t.Errorf("escalation Kill calls = %d, want exactly 1 after the grace timeout", kills)
+	}
+	if elapsed < 80*time.Millisecond {
+		t.Errorf("stopServerInternal returned after %v, want it to hold through the bounded exit wait", elapsed)
+	}
+	if elapsed > 5*time.Second {
+		t.Errorf("stopServerInternal blocked %v; the exit wait must stay bounded", elapsed)
+	}
+}
+
+// TestStopServerInternalFailedSignalWaitsForDone verifies the failed-interrupt
+// branch shares the exit wait: after the Signal error escalates to Kill, the
+// call still returns only after done closes (or the bounded wait lapses) —
+// never immediately with the child state still uncleared (#28).
+func TestStopServerInternalFailedSignalWaitsForDone(t *testing.T) {
+	saveStopSeams(t)
+	_, done := forgeRunningState(t)
+
+	signalServer = func(*exec.Cmd, os.Signal) error {
+		return errors.New("signal: process already finished")
+	}
+	kills := 0
+	killServer = func(*exec.Cmd) error {
+		kills++
+		return nil
+	}
+	stopExitWait = 5 * time.Second
+
+	go func() {
+		time.Sleep(80 * time.Millisecond)
+		close(done)
+	}()
+
+	start := time.Now()
+	if err := stopServerInternal(); err != nil {
+		t.Fatalf("stopServerInternal returned error: %v", err)
+	}
+	if time.Since(start) < 60*time.Millisecond {
+		t.Errorf("stopServerInternal returned immediately after the failed interrupt; want it to wait for the exit confirmation")
+	}
+	if kills != 1 {
+		t.Errorf("failed-interrupt escalation Kill calls = %d, want 1", kills)
 	}
 }
