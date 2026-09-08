@@ -1,12 +1,18 @@
 <div align="center">
 
-<img src="docs/branding/icon.png" width="88" alt="MyLlama" />
+<img src="docs/design/logo.png" width="96" alt="MyLlama" />
 
 # MyLlama
 
-**A cross-platform GUI client for local LLM inference, built on [llama.cpp](https://github.com/ggml-org/llama.cpp)** — visually tune GGUF models, serve many models behind one OpenAI-compatible endpoint, with built-in model downloads, local chat, and real-time monitoring. One codebase across Windows / Android / Linux.
+**One-click tuning for GGUF models, many models behind one OpenAI-compatible endpoint**
 
-Windows x64 · Android arm64 · Linux x64/arm64 · GPL-3.0
+A cross-platform local-LLM client built on [llama.cpp](https://github.com/ggml-org/llama.cpp): scan local GGUF files → configure inference parameters visually (or one-click auto-tune) → generate llama-server presets → serve one OpenAI-compatible endpoint for the built-in chat and any OpenAI client. Model downloads, local chat and live monitoring are built in — everything stays on your machine.
+
+<img src="docs/design/promo.png" width="100%" alt="MyLlama across Windows, Linux and Android"/>
+
+Windows x64 · Android arm64 · Linux x64 · GPL-3.0
+
+[简体中文](README.md) · English
 
 [![GitHub release](https://img.shields.io/github/v/release/CodeNeow/llama-cpp-desktop?logo=github&color=blue)](https://github.com/CodeNeow/llama-cpp-desktop/releases)
 [![Downloads](https://img.shields.io/github/downloads/CodeNeow/llama-cpp-desktop/total?logo=github&label=downloads&color=blue)](https://github.com/CodeNeow/llama-cpp-desktop/releases)
@@ -18,84 +24,215 @@ Windows x64 · Android arm64 · Linux x64/arm64 · GPL-3.0
 
 </div>
 
-[简体中文](README.md)
+---
 
-<div align="center">
+## ✨ Why MyLlama
 
-![MyLlama local chat](docs/screenshots/en/chat.png)
+<table>
+<tr>
+<td width="50%" valign="top">
 
-*Local chat: streaming conversation straight to the local llama-server; the service auto-starts on demand*
+**🔒 Local-first · Privacy by design**<br/>
+Models, conversations and inference data never leave your machine: no telemetry, no cloud dependency, fully usable offline — you decide where your data goes.
 
-</div>
+</td>
+<td width="50%" valign="top">
 
-## 🖥️ One Experience, Three Platforms
+**🎯 One-click smart tuning**<br/>
+Reads real GGUF metrics (layers, attention heads, KV geometry, trained context, MoE expert split) and combines them with a hardware snapshot plus a measured RAM-bandwidth calibration to plan inference parameters per model.
 
-The same Go + Vue 3 codebase delivers a consistent UI and interaction model on all three platforms.
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
 
-**Windows**
+**⚡ Inference performance details**<br/>
+n-gram speculative decoding with zero extra VRAM, q8_0 KV-cache quantization for longer contexts, a flash-attention toggle, multi-GPU split modes, Windows full-offload launch pins — validated per model with llama-bench.
 
-| System Environment | Models |
-| :---: | :---: |
-| ![System Environment](docs/screenshots/en/home.png) | ![Models](docs/screenshots/en/models.png) |
+</td>
+<td width="50%" valign="top">
 
-| API Router | Model Settings |
-| :---: | :---: |
-| ![API Router](docs/screenshots/en/api.png) | ![Model Settings](docs/screenshots/en/model-settings.png) |
+**🖥️ One experience, three platforms**<br/>
+A single Go + Vue 3 codebase covers Windows / Linux / Android: the phone tier switches to bottom navigation with safe-area support, and themes, the zh / en UI and the built-in tutorial are consistent everywhere.
 
-**Android**
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
 
-| Home | Chat |
-| :---: | :---: |
-| ![Android home](docs/screenshots/en/android-home.png) | ![Android chat](docs/screenshots/en/android-chat.png) |
+**🔁 OpenAI-compatible ecosystem**<br/>
+llama-server runs in router mode, serving every GGUF in your directory behind one OpenAI-compatible endpoint: models lazy-load on demand, unload in one click when idle, and any OpenAI client just plugs in.
 
-| Models | Settings |
-| :---: | :---: |
-| ![Android models](docs/screenshots/en/android-models.png) | ![Android settings](docs/screenshots/en/android-settings.png) |
+</td>
+<td width="50%" valign="top">
 
-**Linux**
+**📦 Model discovery and management**<br/>
+Dual-source search across HF Mirror and ModelScope, batch downloads through a resumable queue that survives restarts, GGUF metadata parsing (architecture / quantization at a glance) and imported external directories.
 
-| System Environment | Models |
-| :---: | :---: |
-| ![Linux system environment](docs/screenshots/en/linux-home.png) | ![Linux models](docs/screenshots/en/linux-models.png) |
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
 
-| API Router | Preferences |
-| :---: | :---: |
-| ![Linux API router](docs/screenshots/en/linux-api.png) | ![Linux preferences](docs/screenshots/en/linux-settings.png) |
+**📊 Visual monitoring**<br/>
+Dual prompt-processing / generation tok/s metrics with a 60-second speed chart, live GPU / memory / CPU sampling, and a server-log console with cursor-based incremental refresh persisted to disk.
 
-<div align="center">
+</td>
+<td width="50%" valign="top">
 
-| Help & Tutorial |
-| :---: |
-| ![Linux help & tutorial](docs/screenshots/en/linux-docs.png) |
+**💤 Headless API mode**<br/>
+(Windows) One toggle switches to background-only operation (tray + llama-server): GUI ↔ headless switches hand the server process over with zero downtime, and a loopback-only control plane serves health, status, logs and stop.
 
-</div>
+</td>
+</tr>
+</table>
 
-<div align="center">
+<details>
+<summary><b>📖 Table of Contents</b></summary>
 
-The floating task dock at the bottom-right corner: download progress plus one-click unload for in-memory models, identical on desktop and phone.
+- [✨ Why MyLlama](#-why-myllama)
+- [🎨 UI and Design](#-ui-and-design)
+- [🚀 Getting Started](#-getting-started)
+  - [Windows](#windows) · [Android](#android) · [Linux](#linux) · [macOS](#macos)
+  - [First Run in Three Steps](#first-run-in-three-steps)
+- [🧠 One-Click Auto-Tune](#-one-click-auto-tune)
+- [🔌 API Access](#-api-access)
+- [🔧 Configuration](#-configuration)
+- [🧱 Architecture](#-architecture)
+- [🔨 Build from Source](#-build-from-source)
+- [❓ FAQ](#-faq)
+- [📄 License and Acknowledgements](#-license-and-acknowledgements)
 
-![Task Dock](docs/screenshots/en/task-dock.png)
+</details>
 
-</div>
+---
 
-## ✨ Highlights
+## 🎨 UI and Design
 
-- **One endpoint, many models** — runs llama-server in router mode (`--models-dir` / `--models-preset` / `--models-max`), serving every GGUF in your models directory over a single OpenAI-compatible API (default `http://127.0.0.1:8080/v1`).
-- **On-demand loading & one-click unload** — models load into VRAM / memory only when first requested, no manual preloading; loaded models are listed in the task dock, each with a one-click unload button, so switching models never requires restarting the service.
-- **One codebase, three platforms** — the same Go + Vue 3 code runs on Windows (WebView2), Linux (WebKitGTK) and Android (system WebView); the phone tier automatically switches to a bottom navigation bar with an adaptive layout, honoring system safe areas (notches / gesture bars).
-- **Headless API-route mode (Windows)** — one toggle restarts the app as a background-only process (Go backend + system tray + llama-server, no GUI): across GUI ↔ headless switches the llama-server process is handed over seamlessly, inference never stops, the OpenAI API stays available, and the tray menu's "Show Main Window" brings the full UI back anytime.
-- **Copy-paste model IDs** — the API `model` field is exactly the name shown in the UI (e.g. `Qwen3.6-29B-REAP-Opus-Reasoning-Distill-MTP-Q4_K_M`); copy it from the "My Models" tab of the Models page, the API Router or the Chat page and it just works.
-- **Hardware-aware auto-tune** — reads real GGUF metrics (block count, GQA/MLA KV geometry, trained context, MoE expert ratio) and snapshots GPU/CPU/RAM to plan GPU layers, context length, threads and cache types per model in one click.
-- **SoC-aware tuning (Android)** — detects Snapdragon / Dimensity SoC identities and big.LITTLE performance-core counts to cap threads on phones and plan the CPU / GPU split for MoE experts.
-- **In-app self-update on Android** — new versions are downloaded in place and installed through a system PackageInstaller session, no manual uninstall / reinstall.
-- **CUDA compatibility guidance** — the System Environment page compares GPU compute capability against the installed CUDA runtime and states the verdict outright; Blackwell cards are told they need CUDA 12.8+, so you never chase a mismatched runtime.
-- **Built-in chat** — streaming conversations straight to the local endpoint: sending a message auto-starts the local service and loads the selected model on demand, no manual start; switching models unloads the previous one automatically. Markdown rendering, a live reasoning view, image attachments for multimodal models, and per-session sampling controls (temperature, top-p / top-k, repeat penalty, max tokens, system prompt).
-- **Model discovery and downloads** — the "Download" tab of the Models page searches HF Mirror (hf-mirror.com), Hugging Face and ModelScope, expands repositories into file lists, and batch-downloads through a resumable queue (pause / resume / cancel) that survives restarts.
-- **Per-model inference presets** — GPU layers, KV cache types, long-context RoPE settings, speculative decoding and more, persisted per model and written into the llama-server preset on save.
-- **Live service monitor** — server log console plus prompt-processing / generation token-speed metrics, refreshed every second — all pinned in the viewport, no page scrolling.
-- **Task dock** — a collapsible card floating at the bottom-right corner shows download progress at a glance (llama.cpp / model files / app updates) alongside the models currently loaded in memory, each with a one-click unload button.
-- **Desktop & mobile niceties** — Windows system tray, light / dark themes, and a zh / en / auto UI language; both Windows and Android support in-app update checks.
-- **Built-in bilingual docs** — the "Help & Tutorial" card at the top of Preferences opens a full zh / en tutorial whose content updates online — fresh documentation without upgrading the app.
+> The images below are renders of the UI design mockups (desktop 1280×800, phone 390×844, light and dark themes; source drafts in [docs/branding](docs/branding)). They showcase layout and visual style; the shipped UI on each platform is the reference.
+
+**Desktop · Light theme**
+
+<table>
+<tr>
+<td width="50%" align="center">
+
+<img src="docs/design/desktop-light-home.png" width="100%" alt="Home · System Info"/><br/>
+<i>Home · system info & quick start</i>
+
+</td>
+<td width="50%" align="center">
+
+<img src="docs/design/desktop-light-chat.png" width="100%" alt="Local Chat"/><br/>
+<i>Local chat · streaming with deep-thinking blocks</i>
+
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
+
+<img src="docs/design/desktop-light-models.png" width="100%" alt="Models"/><br/>
+<i>Models · downloads & my models</i>
+
+</td>
+<td width="50%" align="center">
+
+<img src="docs/design/desktop-light-api.png" width="100%" alt="API Router"/><br/>
+<i>API router · service control & live monitoring</i>
+
+</td>
+</tr>
+</table>
+
+**Desktop · Dark theme**
+
+<table>
+<tr>
+<td width="50%" align="center">
+
+<img src="docs/design/desktop-dark-home.png" width="100%" alt="Home · System Info (dark theme)"/><br/>
+<i>Home · system info (dark theme)</i>
+
+</td>
+<td width="50%" align="center">
+
+<img src="docs/design/desktop-dark-chat.png" width="100%" alt="Local Chat (dark theme)"/><br/>
+<i>Local chat (dark theme)</i>
+
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
+
+<img src="docs/design/desktop-dark-models.png" width="100%" alt="Models (dark theme)"/><br/>
+<i>Models (dark theme)</i>
+
+</td>
+<td width="50%" align="center">
+
+<img src="docs/design/desktop-dark-api.png" width="100%" alt="API Router (dark theme)"/><br/>
+<i>API router (dark theme)</i>
+
+</td>
+</tr>
+</table>
+
+**Android · Direct mode**
+
+<table>
+<tr>
+<td width="33%" align="center">
+
+<img src="docs/design/android-home.png" width="100%" alt="Android home"/><br/>
+<i>Home</i>
+
+</td>
+<td width="33%" align="center">
+
+<img src="docs/design/android-chat.png" width="100%" alt="Android chat"/><br/>
+<i>Chat</i>
+
+</td>
+<td width="33%" align="center">
+
+<img src="docs/design/android-models.png" width="100%" alt="Android models"/><br/>
+<i>Models</i>
+
+</td>
+</tr>
+<tr>
+<td width="33%" align="center">
+
+<img src="docs/design/android-api.png" width="100%" alt="Android API router"/><br/>
+<i>API router</i>
+
+</td>
+<td width="33%" align="center">
+
+<img src="docs/design/android-settings.png" width="100%" alt="Android preferences"/><br/>
+<i>Preferences</i>
+
+</td>
+<td width="33%" align="center">
+
+<img src="docs/design/android-capsule.png" width="100%" alt="Task dock"/><br/>
+<i>Task dock · the floating capsule</i>
+
+</td>
+</tr>
+</table>
+
+**Pages at a glance**
+
+| Page | Purpose |
+| --- | --- |
+| **Home** | "System Info" detects CPU / memory / GPU / CUDA with live sampling (including Blackwell compatibility verdicts); "Runtime Environment" one-click downloads llama.cpp or points at a custom directory, with a smart landing tab |
+| **Chat** | Streaming local conversations: Markdown rendering, foldable deep-thinking blocks, image attachments, generation presets (precision / balanced / creative / random + custom) and per-session sampling; sending auto-starts the service |
+| **Models** | "Download": tri-source search (HF Mirror / Hugging Face / ModelScope) with a file-level resumable queue; "My Models": scan & parse (architecture / quantization / multimodal detection), one-click auto-tune and per-model settings |
+| **API** | Start / stop the service, dual tok/s metrics and the speed chart, cursor-incremental server log, loaded-model management with one-click unload; port / max-concurrency / prompt-cache options |
+| **Settings** | Theme / language (zh · en · auto) / download source / directories / access scope & serving GPU / Windows tray / API-route mode / update check; the "Help & Tutorial" card opens the built-in bilingual tutorial (updated online) |
+
+---
 
 ## 🚀 Getting Started
 
@@ -111,51 +248,41 @@ Grab `MyLlama-*-android-arm64.apk` from the [latest release](https://github.com/
 
 ### Linux
 
-Releases ship `.deb` packages for Ubuntu 22.04 / 24.04: download `myllama_*_amd64.deb` and install it (`sudo apt install ./myllama_*_amd64.deb`); the GTK / WebKit runtime libraries are resolved automatically through package dependencies. Other distributions can build from source as described below.
+Releases ship `.deb` packages for Ubuntu 22.04 / 24.04: download `myllama_*_amd64.deb` and install it (`sudo apt install ./myllama_*_amd64.deb`); the GTK / WebKit runtime libraries are resolved automatically through package dependencies. Other distributions can [build from source](#-build-from-source).
 
-### Build from source
+### macOS
 
-- [Git](https://git-scm.com/), [Go](https://go.dev/dl/) 1.25+, [Node.js](https://nodejs.org/) 18+
-- Wails v3 CLI (matching the v3 version in go.mod):
+No prebuilt distribution for now; the codebase still builds from source (Apple Silicon uses Metal acceleration). See [Build from Source](#-build-from-source).
 
-  ```bash
-  go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.16
-  ```
+### First Run in Three Steps
 
-- Platform dependencies:
-  - **Windows**: WebView2 Runtime (usually preinstalled on Windows 10/11);
-  - **Linux**: GTK4 and WebKitGTK 6.0 development packages, e.g. `sudo apt install libgtk-4-dev libwebkitgtk-6.0-dev pkg-config` (Debian/Ubuntu; the released `.deb` packages are built with the `-tags gtk3` variant, i.e. GTK3 + WebKit2GTK 4.1);
-  - **Android**: JDK 17 plus the Android SDK / NDK (`sdkmanager "ndk;26.3.11579264" "platforms;android-35"`); see the android section of [Taskfile.yml](Taskfile.yml) and the [CI configuration](.github/workflows/ci.yml).
+1. **Install the runtime** — on **Home**, in the "Runtime Environment" tab, click "Download llama.cpp" to fetch the latest release from GitHub (resumable), or point the app at an existing llama.cpp directory.
+2. **Get a model** — on the **Models** page's "Download" tab, search HF Mirror / Hugging Face / ModelScope and download a GGUF file into the models directory (`LLM-Models/` by default); progress shows up in the floating task dock at the bottom-right corner.
+3. **Chat** — open **Chat**, pick the model, and just send a message — sending auto-starts the local service and loads the selected model on demand, no manual start needed.
 
-Clone and build:
+> Next step: to connect other OpenAI-compatible clients or manage the service by hand, click "Start Server" on the **API** page (default `127.0.0.1:8080`); see [API Access](#-api-access).
 
-```bash
-git clone https://github.com/CodeNeow/llama-cpp-desktop.git
-cd llama-cpp-desktop
-wails3 task build            # Windows / Linux desktop build
-wails3 task android:package  # Android arm64 APK (build the frontend first; output in build/bin/)
-```
+---
 
-Dev mode (Go backend + Vite frontend with hot reload, dev server pinned to `http://localhost:5173`):
+## 🧠 One-Click Auto-Tune
 
-```bash
-wails3 task dev
-```
+"How should this model run on my machine?" — one click on **Auto-Tune** in the Model Settings page, and MyLlama answers with real data.
 
-**First steps (same on all platforms):**
+**Input: measured + parsed**
 
-1. On **System Environment**, in the "Runtime Environment" tab, click "Download llama.cpp" to fetch the latest release from GitHub (resumable), or point the app at an existing llama.cpp directory.
-2. On the **Models** page's "Download" tab, search HF Mirror, Hugging Face or ModelScope and download a GGUF file into the models directory (`LLM-Models/` by default); progress shows up in the task dock at the bottom-right corner.
-3. Open **Local Chat**, pick the model, and just send a message — sending auto-starts the local service and loads the selected model on demand, no manual start needed.
-4. To connect other OpenAI-compatible clients or manage the service by hand, click "Start Server" on the **API Router** page (default `127.0.0.1:8080`).
+| Input | Source |
+| --- | --- |
+| Layer count, attention heads, KV geometry, trained context, MoE expert split | GGUF header parsing |
+| GPU vendor & VRAM, RAM, CPU cores; on Android the SoC identity and big.LITTLE performance-core count | Hardware snapshot |
+| All-core streaming-read RAM bandwidth (cached per hardware fingerprint, rejected across machines) | Bandwidth calibration |
 
-## 🧭 Usage
+**Output: an executable inference plan**
 
-- **System Environment** — two tabs, "System Info" and "Runtime Environment": System Info detects CPU, memory, GPU and CUDA with live samples and flags CUDA compatibility for Blackwell GPUs; Runtime Environment shows the llama.cpp installation status (main program and CUDA runtime components) with one-click resumable download or a custom directory. The landing tab is chosen smartly: Runtime first when llama.cpp is missing, System Info once installed.
-- **Local Chat** — streaming chat with markdown rendering and image attachments; when the service is stopped, sending a message auto-starts it and loads the selected model on demand (guided prompts when models or the runtime are missing), switching models unloads the previous one, and load / unload changes show up in the task dock in real time.
-- **Models** — the "Download" tab: tri-source search (HF Mirror / Hugging Face / ModelScope, switchable in Preferences), file-level selection and a persistent, resumable download queue; the "My Models" tab: scans the models directory for GGUF files (architecture, quantization, multimodal / embedding detection) with one-click hardware-aware auto-tune; each model links to its settings page (basic / inference / memory / multi-GPU / long-context / advanced tabs).
-- **API Router** — start / stop / restart llama-server, watch the server log and dual token-speed metrics, edit the port / max concurrent models / prompt cache, and see which models are currently loaded; the access scope and inference GPU are configured under Preferences.
-- **Preferences** — theme, UI language (zh / en / auto), download source, download & import directories, server options such as access scope and the inference GPU, Windows tray toggle, API-route mode, and check for updates; the "Help & Tutorial" card opens the built-in tutorial.
+- Automatically picks among **full GPU offload / MoE `--cpu-moe` split / partial offload / CPU-only**: when a full offload leaves the context cramped, it flips to "cpu-moe + large context";
+- Plans the context ladder and KV-cache quantization (q8_0) to fit the longest context into your VRAM budget;
+- Results fill the settings form in real time for further tweaks; "Deep benchmark" runs the bundled llama-bench for a real decode-speed verdict on the saved plan.
+
+---
 
 ## 🔌 API Access
 
@@ -166,14 +293,25 @@ OPENAI_BASE_URL="http://127.0.0.1:8080/v1"
 OPENAI_API_KEY="sk-any-placeholder"   # no auth by default; an optional API key can be set in Preferences
 ```
 
-Set `model` to the name shown in the UI (for example `Qwen3.6-29B-REAP-Opus-Reasoning-Distill-MTP-Q4_K_M`) — the tags on the API Router page are copy-paste ready; llama-server loads and unloads models on demand. In-memory models can also be unloaded from the task dock.
+Set `model` to the name shown in the UI (copy it from the model tags on the API page or the "My Models" tab) — llama-server loads and unloads models on demand, and in-memory models can also be unloaded from the task dock. Quick smoke test:
 
-## ⚙️ Configuration
+```bash
+curl http://127.0.0.1:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"model-name","messages":[{"role":"user","content":"hello"}]}'
+```
+
+In Windows headless (API-route) mode the endpoint stays available, plus a loopback-only control plane at `127.0.0.1:1900` (`/health`, `/status`, `/logs`, `/stop`, optional token auth) for scripts and external tools to manage the background service.
+
+---
+
+## 🔧 Configuration
 
 Runtime settings are persisted to `llama-desktop-config.json`, whose location differs per platform (resolved centrally in `core/paths.go`):
 
 - **Windows**: the process working directory (typically the install directory);
 - **Linux**: the app-data directory `~/.config/llama-desktop/`;
+- **macOS** (source builds): `~/Library/Application Support/llama-desktop/`;
 - **Android**: the app-private data directory (`/data/data/<package>/files/`).
 
 Key fields:
@@ -190,7 +328,9 @@ Key fields:
 
 Also stored: `llamaCppDownloadDir` / `modelDownloadDir` (download paths) and `llamaCppDir` / `modelDir` (imported external directories), `modelConfigs` (per-model inference parameters), `downloadTasks` (the download queue, recovered on restart) and `onboardingDismissed` (whether the home quick-start checklist was closed).
 
-## 🏗️ Architecture
+---
+
+## 🧱 Architecture
 
 ```mermaid
 flowchart LR
@@ -211,9 +351,39 @@ flowchart LR
     B0 -.-> A
 ```
 
-The frontend is a Vue 3 single-page app that talks to the Go backend through the Wails v3 bridge (TypeScript bindings generated at build time); the same frontend renders inside WebView2 on Windows, WebKitGTK on Linux and the system WebView on Android. The backend scans the model directories, parses GGUF metadata, generates per-model inference presets and launches llama-server. Running in router mode, llama-server serves every GGUF in the directory behind one OpenAI-compatible endpoint, loading and unloading models on demand — the built-in chat and any OpenAI client connect to that same endpoint.
+The frontend is a Vue 3 single-page app that talks to the Go backend through the Wails v3 bridge (TypeScript bindings generated at build time); the same frontend renders inside WebView2 on Windows, WebKitGTK on Linux and the system WebView on Android. The backend scans the model directories, parses GGUF metadata, generates per-model inference presets and launches llama-server. Running in router mode, llama-server serves every GGUF in the directory behind one OpenAI-compatible endpoint, loading and unloading models on demand — the built-in chat and any OpenAI client connect to that same endpoint (Android runs direct mode: one resident model, started from the Chat page).
 
-## 🛠️ Development
+---
+
+## 🔨 Build from Source
+
+- [Git](https://git-scm.com/), [Go](https://go.dev/dl/) 1.25+, [Node.js](https://nodejs.org/) 18+
+- Wails v3 CLI (matching the v3 version in go.mod):
+
+  ```bash
+  go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.16
+  ```
+
+- Platform dependencies:
+  - **Windows**: WebView2 Runtime (usually preinstalled on Windows 10/11);
+  - **Linux**: GTK4 and WebKitGTK 6.0 development packages, e.g. `sudo apt install libgtk-4-dev libwebkitgtk-6.0-dev pkg-config` (Debian/Ubuntu; the released `.deb` packages are built with the `-tags gtk3` variant, i.e. GTK3 + WebKit2GTK 4.1);
+  - **Android**: JDK 17 plus the Android SDK / NDK (`sdkmanager "ndk;26.3.11579264" "platforms;android-35"`); see the android section of [Taskfile.yml](Taskfile.yml) and the [CI configuration](.github/workflows/ci.yml);
+  - **macOS**: no prebuilt distribution; source builds work (Apple Silicon uses Metal).
+
+Clone and build:
+
+```bash
+git clone https://github.com/CodeNeow/llama-cpp-desktop.git
+cd llama-cpp-desktop
+wails3 task build            # Windows / Linux / macOS desktop build
+wails3 task android:package  # Android arm64 APK (build the frontend first; output in build/bin/)
+```
+
+Dev mode (Go backend + Vite frontend with hot reload, dev server pinned to `http://localhost:5173`):
+
+```bash
+wails3 task dev
+```
 
 Combined quality gate:
 
@@ -224,6 +394,8 @@ make check                                                                  # PO
 
 The gate runs `go build` / `go test` / `gofmt` / `golangci-lint` on the backend and `npm run build` (vue-tsc + vite) on the frontend; the PowerShell script also runs the vitest suite (`npm test`). Backend tests live in `core/*_test.go` (standard library `testing`, including service-chain E2E against a real llama-server), frontend tests in `frontend/src/__tests__/`. See [AGENTS.md](AGENTS.md) and [CONTRIBUTING.md](CONTRIBUTING.md) for conventions, commit format and the collaboration workflow.
 
+---
+
 ## ❓ FAQ
 
 **The app reports it is already running at startup.**
@@ -232,14 +404,14 @@ The app enforces a single-instance mutex, so duplicate launches are blocked (the
 **`wails3 task dev` reports the port is already in use.**
 The Vite dev server binds `localhost:5173` (`VITE_PORT` in the Taskfile, overridable via the `WAILS_VITE_PORT` environment variable). End the process occupying it and retry.
 
-**"Start" on the API Router page fails with "no models found".**
-Startup scans the models directory and generates presets first, so an empty directory is an error. Put GGUF files into `LLM-Models/` (check the "My Models" tab of the Models page) and try again. Also confirm llama.cpp is installed, as shown in the "Runtime Environment" tab of the System Environment page.
+**"Start Server" on the API page fails with "no models found".**
+Startup scans the models directory and generates presets first, so an empty directory is an error. Put GGUF files into `LLM-Models/` (check the "My Models" tab of the Models page) and try again. Also confirm llama.cpp is installed, as shown in the "Runtime Environment" tab of the Home page.
 
 **API calls fail with `model not found`.**
-The `model` field must match the name shown in the UI exactly (the service matches case-sensitively). Copy-paste from the API Router model tags or the "My Models" tab of the Models page instead of typing it by hand.
+The `model` field must match the name shown in the UI exactly (the service matches case-sensitively). Copy-paste from the API page model tags or the "My Models" tab of the Models page instead of typing it by hand.
 
 **Every backend call fails when running the frontend with `npm run dev` standalone.**
-The frontend calls the Go backend through Wails v3 bindings generated at build time; Vite without `wails3 task dev` has no bridge to the backend, so calls fail at the request stage — this is expected. Use `wails3 task dev` to debug the UI with the backend attached.
+The frontend calls the Go backend through Wails v3 bindings generated at build time; Vite without `wails3 task dev` has no bridge to the backend, so calls fail at the request stage — this is expected. Use `wails3 task dev` to debug the UI with the backend attached (or `npm run dev:mock` for a browser-only preview backed by the in-repo mock).
 
 **The Linux source build fails with missing GTK / WebKit dependencies.**
 The Wails v3 Linux build goes through cgo: the default path needs the GTK4 and WebKitGTK 6.0 development packages (`libgtk-4-dev`, `libwebkitgtk-6.0-dev`), while the `-tags gtk3` variant needs `libgtk-3-dev` and `libwebkit2gtk-4.1-dev`. Install the packages matching your build variant — plus `pkg-config` — via your package manager and build again.
@@ -248,10 +420,21 @@ The Wails v3 Linux build goes through cgo: the default path needs the GTK4 and W
 Installing the APK requires allowing "install unknown apps". In-app self-update requires the installed version and the new APK to share one signature — release APKs are signed with a stable key, while debug-signed local builds or APKs from other sources cannot upgrade each other; when signatures differ, uninstall the old version first. The app is sideload-only (not on any app store) and always fetches updates from GitHub Releases.
 
 **Downloading llama.cpp is slow or fails.**
-The download comes from GitHub Releases; it supports pause / resume with resumable transfers. On a restricted network, download the release package for your platform manually, extract it, and select the directory via "Custom" in the "Runtime Environment" tab of the System Environment page.
+The download comes from GitHub Releases; it supports pause / resume with resumable transfers. On a restricted network, download the release package for your platform manually, extract it, and select the directory via "Custom" in the "Runtime Environment" tab of the Home page.
 
-## 📄 License
+---
+
+## 📄 License and Acknowledgements
 
 Copyright © 2026 [CodeNeow](https://github.com/CodeNeow/llama-cpp-desktop)
 
 This project is licensed under the [GNU General Public License v3](LICENSE).
+
+MyLlama stands on the shoulders of these open-source projects — thank you:
+
+- [llama.cpp](https://github.com/ggml-org/llama.cpp) (the ggml / GGUF ecosystem) — the high-performance local inference engine;
+- [Wails](https://wails.io/) — the framework for building cross-platform desktop / mobile apps with Go + web technologies;
+- [Vue](https://vuejs.org/) and [Vite](https://vitejs.dev/) — the frontend framework and toolchain;
+- [hf-mirror.com](https://hf-mirror.com), [Hugging Face](https://huggingface.co) and [ModelScope](https://modelscope.cn) — the open model ecosystem.
+
+Third-party model files remain the property of their respective authors; follow each model's own license when downloading and using them.
