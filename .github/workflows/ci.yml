@@ -626,6 +626,13 @@ jobs:
           pattern: MyLlama-*
           path: artifacts
           merge-multiple: true
+      - name: Purge non-release APKs (smoke / debug builds)
+        # Belt-and-suspenders: the download pattern (MyLlama-*) already excludes
+        # the smoke-android-apk artifact, but if a future rename ever lets a
+        # smoke / debug APK into artifacts/, purge it here so it can never be
+        # attached to a Release. The 4-artifact count check below still fails
+        # on any UNEXPECTED extra file.
+        run: rm -f artifacts/*smoke*.apk artifacts/*debug*.apk
       - name: Extract release notes from CHANGELOG.md
         # This repo commits directly to main with no PRs, so --generate-notes only aggregates a
         # bare "Full Changelog" compare link. The authoritative notes live in CHANGELOG.md:
