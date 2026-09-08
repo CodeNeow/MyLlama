@@ -1101,6 +1101,90 @@ func TestTuneModelConfigAndroidThreadCap(t *testing.T) {
 	}
 }
 
+// TestTuneModelConfigPlatformPins verifies the platform-scoped launch pins:
+// the Windows full-offload plan pins --threads 2 and disables context
+// checkpoints (memory-bus contention, unsloth #5692; the app never calls the
+// restore API), every Android plan disables context checkpoints (unified
+// memory: each auto-checkpoint copies KV state into host RAM), and the
+// cpu-moe / partial / Apple / non-Windows plans keep their own thread rules
+// with both pins off.
+func TestTuneModelConfigPlatformPins(t *testing.T) {
+	// 4B dense fixture fully offloads the 12 GB NVIDIA budget (ctx 65536 via
+	// the q8_0 plan), so the full-offload emission branch fires.
+	tm4B := tuneModel{WeightsBytes: 2765 << 20, Layers: 36, KVBytesPerTokPerLayerF16: 4096, TrainCtx: 262144}
+	// Cramped MoE fixture on the same budget only fits at ctx 4096; the fast
+	// measured RAM bandwidth flips the plan to cpu-moe (experts fit RAM).
+	tmCrampedMoE := tuneModel{
+		WeightsBytes: 11328 << 20, Layers: 32, KVBytesPerTokPerLayerF16: 512,
+		TrainCtx: 131072, ExpertBytes: 9000 << 20, DenseBytes: 2328 << 20,
+		ExpertUsedFrac: 0.25,
+	}
+
+	// (1) Windows full offload: threads pinned to 2, checkpoints disabled.
+	hw := tuneHardware{GPUVendor: vendorNvidia, VRAMMB: 12288, RAMTotalGB: 31, RAMFreeGB: 18, PhysicalCores: 8, LogicalCPUs: 16, WindowsPlatform: true}
+	cfg := tuneModelConfig(hw, tm4B)
+	if cfg.GPULayers != "all" {
+		t.Fatalf("expected the full-offload plan, got GPULayers %q", cfg.GPULayers)
+	}
+	if cfg.Threads != 2 {
+		t.Errorf("windows full offload: threads = %d, want 2", cfg.Threads)
+	}
+	if !cfg.CtxCheckpointsOff {
+		t.Error("windows full offload: ctx checkpoints must be disabled")
+	}
+
+	// (2) Windows cramped-flip cpu-moe plan: keeps auto threads and the
+	// checkpoint default — the pin is scoped to the full-offload branch.
+	hw.RAMBandwidthGBs = 40
+	cfg = tuneModelConfig(hw, tmCrampedMoE)
+	if !cfg.CPUMoe {
+		t.Fatalf("expected the cpu-moe flip plan, got %+v", cfg)
+	}
+	if cfg.Threads != 0 {
+		t.Errorf("windows cpu-moe plan: threads = %d, want 0 (auto)", cfg.Threads)
+	}
+	if cfg.CtxCheckpointsOff {
+		t.Error("windows cpu-moe plan must keep the checkpoint default")
+	}
+
+	// (3) Linux (all platform flags false) full offload: physical-core
+	// threads and the checkpoint default are untouched.
+	hw = tuneHardware{GPUVendor: vendorNvidia, VRAMMB: 12288, RAMTotalGB: 31, RAMFreeGB: 18, PhysicalCores: 8, LogicalCPUs: 16}
+	cfg = tuneModelConfig(hw, tm4B)
+	if cfg.GPULayers != "all" {
+		t.Fatalf("expected the full-offload plan, got GPULayers %q", cfg.GPULayers)
+	}
+	if cfg.Threads != 8 {
+		t.Errorf("non-windows full offload: threads = %d, want 8 (physical cores)", cfg.Threads)
+	}
+	if cfg.CtxCheckpointsOff {
+		t.Error("non-windows full offload must keep the checkpoint default")
+	}
+
+	// (4) Android CPU-only plan: checkpoints always disabled (unified memory).
+	hw = tuneHardware{GPUVendor: vendorNone, RAMTotalGB: 12, RAMFreeGB: 6, PhysicalCores: 8, LogicalCPUs: 8, AndroidPlatform: true}
+	cfg = tuneModelConfig(hw, tm4B)
+	if cfg.GPULayers != "0" {
+		t.Fatalf("expected the CPU-only plan, got GPULayers %q", cfg.GPULayers)
+	}
+	if !cfg.CtxCheckpointsOff {
+		t.Error("android plans must always disable ctx checkpoints")
+	}
+
+	// (5) Apple Metal plan: neither pin applies.
+	hw = tuneHardware{GPUVendor: vendorApple, RAMTotalGB: 32, RAMFreeGB: 24, PhysicalCores: 10, LogicalCPUs: 10}
+	cfg = tuneModelConfig(hw, tm4B)
+	if cfg.GPULayers != "all" {
+		t.Fatalf("expected the metal plan, got GPULayers %q", cfg.GPULayers)
+	}
+	if cfg.Threads != 10 {
+		t.Errorf("apple plan: threads = %d, want 10 (physical cores)", cfg.Threads)
+	}
+	if cfg.CtxCheckpointsOff {
+		t.Error("apple plan must keep the checkpoint default")
+	}
+}
+
 // TestTuneNeedsRAMBandwidth verifies the calibration skip: the measured
 // bandwidth only gates the CUDA-centric cpu-moe flip, so Apple Silicon (Metal
 // plan) and Android (cpu-only plan) skip the benchmark while desktop GPU hosts

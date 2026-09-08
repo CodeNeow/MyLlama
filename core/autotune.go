@@ -520,6 +520,11 @@ type tuneHardware struct {
 	// sizing core stays free of globals and the cap stays unit-testable on
 	// desktop dev machines.
 	AndroidPlatform bool
+	// WindowsPlatform mirrors runtime.GOOS == "windows". Explicit input like
+	// AndroidPlatform: the full-offload plan pins --threads 2 and disables
+	// context checkpoints there (measured memory-bus contention, unsloth
+	// #5692), and the rule must stay unit-testable on every dev machine.
+	WindowsPlatform bool
 	// CPUModel is CPUInfo.Model, feeding the RAM-bandwidth cache
 	// fingerprint: the CPU package is the most identifying component of the
 	// memory subsystem (see hardwareFingerprint).
@@ -773,7 +778,22 @@ func estimateCPUMoeTPS(ramBandwidthGBs, expertBytesPerToken float64) float64 {
 }
 
 // tuneModelConfig computes hardware-aware llama-server parameters for one
-// model. Pure and deterministic: same inputs, same ModelConfig.
+// model. Pure and deterministic: same inputs, same ModelConfig. The plan body
+// (tuneModelConfigPlan) is post-processed with the platform-level pins that
+// apply to every plan shape:
+//   - Android (unified memory): context checkpoints are always disabled.
+//     llama-server copies KV state into host RAM at each auto-checkpoint and
+//     the app never calls the restore API, so on 8-12 GB phones they are pure
+//     RAM pressure.
+func tuneModelConfig(hw tuneHardware, m tuneModel) ModelConfig {
+	cfg := tuneModelConfigPlan(hw, m)
+	if hw.AndroidPlatform {
+		cfg.CtxCheckpointsOff = true
+	}
+	return cfg
+}
+
+// tuneModelConfigPlan is the sizing core of tuneModelConfig.
 //
 // Strategy:
 //  1. No usable GPU → CPU-only plan: GPULayers=0, FlashAttn off, f16 cache
@@ -790,7 +810,12 @@ func estimateCPUMoeTPS(ramBandwidthGBs, expertBytesPerToken float64) float64 {
 //     at estimateCPUMoeTPS >= tuneCPUMoeMinTPS t/s, the cpu-moe plan of step
 //     3 is preferred instead: a huge-context expert-in-RAM plan beats a
 //     cramped-context full offload. Without a measurement (bandwidth 0) or
-//     below the t/s floor the flip never engages.
+//     below the t/s floor the flip never engages. On Windows the emitted
+//     full-offload plan additionally pins Threads=2 (an explicit large
+//     --threads contends on the memory bus, unsloth #5692 measurement) and
+//     disables context checkpoints (the app never restores them; each
+//     auto-checkpoint copies KV state into host RAM) — the pin never touches
+//     the cpu-moe, partial-offload, Apple or non-Windows plans.
 //  3. Full offload impossible (or flipped away from in step 2) but the model
 //     is MoE (ExpertBytes > 0) and the experts fit usable RAM → cpu-moe
 //     plan: experts stay on CPU (--cpu-moe), the GPU carries dense weights +
@@ -804,7 +829,7 @@ func estimateCPUMoeTPS(ramBandwidthGBs, expertBytesPerToken float64) float64 {
 //     layers, keeping the CPU-side remainder within usable RAM; cache stays
 //     f16.
 //  5. Even partial offload impossible → CPU-only plan.
-func tuneModelConfig(hw tuneHardware, m tuneModel) ModelConfig {
+func tuneModelConfigPlan(hw tuneHardware, m tuneModel) ModelConfig {
 	const MB = 1 << 20
 	// GB in bytes: RAMTotalGB/RAMFreeGB are GiB values (getTotalMemoryGB and
 	// getFreeMemoryGB divide by 1024^3), so GiB -> bytes is x1024xMB.
@@ -984,6 +1009,17 @@ func tuneModelConfig(hw tuneHardware, m tuneModel) ModelConfig {
 		if useB {
 			cfg.CacheTypeK, cfg.CacheTypeV = "q8_0", "q8_0"
 		}
+		// Windows full-offload pins: an explicit large --threads contends on
+		// the memory bus under full GPU offload (unsloth #5692 measurement),
+		// so pin 2 worker threads; and llama-server auto-creates context
+		// checkpoints during prompt processing (each copies KV state into
+		// host RAM, b10689) while the app never calls the restore API, so
+		// disable them too. Scoped to this branch only: the cpu-moe, partial
+		// and Apple plans keep their own thread rules.
+		if hw.WindowsPlatform {
+			cfg.Threads = 2
+			cfg.CtxCheckpointsOff = true
+		}
 		return cfg
 	}
 
@@ -1141,6 +1177,7 @@ func (a *App) tuneHardware() tuneHardware {
 		CPUModel:        cpu.Model,
 		PerfCores:       cpu.PerfCores,
 		AndroidPlatform: runtime.GOOS == "android",
+		WindowsPlatform: runtime.GOOS == "windows",
 	}
 
 	// Serving-GPU selection: read the persisted DeviceID under serverConfigMu

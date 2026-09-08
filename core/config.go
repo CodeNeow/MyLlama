@@ -164,20 +164,27 @@ type ModelConfig struct {
 	FlashAttn     bool    `json:"flashAttn"`
 	CacheTypeK    string  `json:"cacheTypeK"`
 	CacheTypeV    string  `json:"cacheTypeV"`
-	LoadMode      string  `json:"loadMode"`         // "", none, mmap, mlock, mmap+mlock, dio
-	CPUMoe        bool    `json:"cpuMoe"`           // keep all MoE experts on CPU
-	NCpuMoe       int     `json:"nCpuMoe"`          // keep first N MoE layers on CPU, 0=disabled
-	SplitMode     string  `json:"splitMode"`        // "", none, layer, row, tensor
-	TensorSplit   string  `json:"tensorSplit"`      // e.g. "3,1"
-	MainGPU       int     `json:"mainGpu"`          // default 0
-	RopeScaling   string  `json:"ropeScaling"`      // "", none, linear, yarn
-	RopeScale     float64 `json:"ropeScale"`        // 0=disabled
-	MMProj        string  `json:"mmproj"`           // explicit mmproj path override, empty=auto-detect
-	Reasoning     bool    `json:"reasoning"`        // disable thinking (writes reasoning = off)
-	SpecType      string  `json:"specType"`         // "", draft-mtp
-	SpecDraftNMax int     `json:"specDraftNMax"`    // >0 writes spec-draft-n-max
-	MLock         bool    `json:"mlock,omitempty"`  // deprecated, kept only to migrate old configs
-	NoMMap        bool    `json:"noMmap,omitempty"` // deprecated, kept only to migrate old configs
+	LoadMode      string  `json:"loadMode"`      // "", none, mmap, mlock, mmap+mlock, dio
+	CPUMoe        bool    `json:"cpuMoe"`        // keep all MoE experts on CPU
+	NCpuMoe       int     `json:"nCpuMoe"`       // keep first N MoE layers on CPU, 0=disabled
+	SplitMode     string  `json:"splitMode"`     // "", none, layer, row, tensor
+	TensorSplit   string  `json:"tensorSplit"`   // e.g. "3,1"
+	MainGPU       int     `json:"mainGpu"`       // default 0
+	RopeScaling   string  `json:"ropeScaling"`   // "", none, linear, yarn
+	RopeScale     float64 `json:"ropeScale"`     // 0=disabled
+	MMProj        string  `json:"mmproj"`        // explicit mmproj path override, empty=auto-detect
+	Reasoning     bool    `json:"reasoning"`     // disable thinking (writes reasoning = off)
+	SpecType      string  `json:"specType"`      // "", draft-mtp, ngram-simple, ngram-mod
+	SpecDraftNMax int     `json:"specDraftNMax"` // >0 writes spec-draft-n-max
+	// CtxCheckpointsOff disables llama-server's context checkpoints
+	// (writes ctx-checkpoints = 0; upstream default 32): each auto-checkpoint
+	// copies KV state into host RAM during prompt processing and the app never
+	// calls the restore API. Set by the auto-tuner (Windows full-offload
+	// plans, every Android plan); zero value keeps the upstream default, and
+	// omitempty keeps old config JSONs loading byte-compatibly.
+	CtxCheckpointsOff bool `json:"ctxCheckpointsOff,omitempty"`
+	MLock             bool `json:"mlock,omitempty"`  // deprecated, kept only to migrate old configs
+	NoMMap            bool `json:"noMmap,omitempty"` // deprecated, kept only to migrate old configs
 	// LoraAdapters lists the LoRA adapter files mounted onto this model at
 	// llama-server start. Names are bare file names resolved against the LoRA
 	// directory (loraDir); Scale is the upstream --lora-scaled weight clamped

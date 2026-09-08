@@ -669,9 +669,10 @@ func (a *App) SaveModelConfig(modelID string, config ModelConfig) error {
 	if !validIniValue(config.MMProj) {
 		return fmt.Errorf(tr("非法 MMProj %q：不能包含换行或首尾空白", "invalid MMProj %q: must not contain newlines or leading/trailing whitespace"), config.MMProj)
 	}
-	// spec-type allowlist: only empty or draft-mtp.
+	// spec-type allowlist: empty, draft-mtp, or the n-gram self-speculation
+	// types (no draft model needed).
 	if !validSpecTypeValue(config.SpecType) {
-		return fmt.Errorf(tr("非法 SpecType %q：仅允许 draft-mtp", "invalid SpecType %q: only draft-mtp"), config.SpecType)
+		return fmt.Errorf(tr("非法 SpecType %q：仅允许 draft-mtp / ngram-simple / ngram-mod", "invalid SpecType %q: only draft-mtp / ngram-simple / ngram-mod"), config.SpecType)
 	}
 	if config.SpecDraftNMax < 0 {
 		return fmt.Errorf(tr("非法 SpecDraftNMax %d：不能为负数", "invalid SpecDraftNMax %d: must not be negative"), config.SpecDraftNMax)

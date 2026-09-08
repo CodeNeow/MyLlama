@@ -71,12 +71,13 @@ func validRopeScalingValue(s string) bool {
 	return false
 }
 
-// validSpecTypeValue validates the spec-type whitelist (MTP multi-token
-// prediction strategy; empty means llama-server's default single-token
-// prediction).
+// validSpecTypeValue validates the spec-type whitelist: draft-mtp is MTP
+// multi-token prediction; ngram-simple / ngram-mod are n-gram
+// self-speculation (no draft model, zero extra VRAM). Empty means
+// llama-server's default single-token prediction.
 func validSpecTypeValue(s string) bool {
 	switch s {
-	case "", "draft-mtp":
+	case "", "draft-mtp", "ngram-simple", "ngram-mod":
 		return true
 	}
 	return false
@@ -128,6 +129,14 @@ func modelPresetKV(m ModelInfo, cfg ModelConfig) ([]presetKV, error) {
 		}
 		if cfg.Threads > 0 {
 			kvs = append(kvs, presetKV{key: "threads", value: strconv.Itoa(cfg.Threads)})
+		}
+		// Context checkpoints: llama-server auto-creates them during prompt
+		// processing (each copies KV state into host RAM, upstream default 32)
+		// and the app never calls the restore API, so CtxCheckpointsOff pins
+		// ctx-checkpoints = 0. The server prompt cache (cache-ram) is a
+		// different mechanism and is deliberately untouched here.
+		if cfg.CtxCheckpointsOff {
+			kvs = append(kvs, presetKV{key: "ctx-checkpoints", value: "0"})
 		}
 		if cfg.GPULayers != "" && cfg.GPULayers != "auto" {
 			if !validIniValue(cfg.GPULayers) {
@@ -207,7 +216,7 @@ func modelPresetKV(m ModelInfo, cfg ModelConfig) ([]presetKV, error) {
 		}
 		if cfg.SpecType != "" {
 			if !validSpecTypeValue(cfg.SpecType) {
-				return nil, fmt.Errorf(tr("非法 SpecType 值 %q：仅允许 draft-mtp", "invalid SpecType value %q: only draft-mtp"), cfg.SpecType)
+				return nil, fmt.Errorf(tr("非法 SpecType 值 %q：仅允许 draft-mtp / ngram-simple / ngram-mod", "invalid SpecType value %q: only draft-mtp / ngram-simple / ngram-mod"), cfg.SpecType)
 			}
 			kvs = append(kvs, presetKV{key: "spec-type", value: cfg.SpecType})
 		}

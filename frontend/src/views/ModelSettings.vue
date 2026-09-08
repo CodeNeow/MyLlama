@@ -514,6 +514,10 @@ export interface ModelConfig {
   reasoning: boolean
   specType: string
   specDraftNMax: number
+  // Set by the backend auto-tuner (Windows full-offload / Android plans);
+  // optional because old configs and the saved JSON omit it. No UI control:
+  // the form only round-trips the value so manual saves never wipe it.
+  ctxCheckpointsOff?: boolean
 }
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
@@ -538,6 +542,9 @@ const defaults: ModelConfig = {
   reasoning: false,
   specType: '',
   specDraftNMax: 0,
+  // Round-trip key: loadConfig copies only Object.keys(defaults) onto cfg, so
+  // the tuner-set flag must be a defaults key to reach save() unsent-wiped.
+  ctxCheckpointsOff: false,
 }
 
 // ─── Route params ───────────────────────────────────────────────────────────────
@@ -753,6 +760,8 @@ const ropeScalingOptions: SelectOption[] = [
 const specTypeOptions: SelectOption[] = [
   { value: '', label: t('modelSettings.specOff') },
   { value: 'draft-mtp', label: 'draft-mtp' },
+  { value: 'ngram-simple', label: 'ngram-simple' },
+  { value: 'ngram-mod', label: 'ngram-mod' },
 ]
 
 // ─── Phone summary island (frame ⑫ "参数速览") ────────────────────────────────

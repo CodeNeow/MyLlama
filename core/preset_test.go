@@ -409,14 +409,16 @@ func TestValidRopeScalingValue(t *testing.T) {
 	}
 }
 
-// TestValidSpecTypeValue verifies spec-type whitelist (MTP multi-token prediction).
+// TestValidSpecTypeValue verifies spec-type whitelist (MTP multi-token
+// prediction plus the n-gram self-speculation types, which need no draft
+// model and no extra VRAM).
 func TestValidSpecTypeValue(t *testing.T) {
-	for _, v := range []string{"", "draft-mtp"} {
+	for _, v := range []string{"", "draft-mtp", "ngram-simple", "ngram-mod"} {
 		if !validSpecTypeValue(v) {
 			t.Errorf("validSpecTypeValue(%q) should be true", v)
 		}
 	}
-	for _, v := range []string{"draft", "mtp", "draft-mtp2", " draft-mtp"} {
+	for _, v := range []string{"draft", "mtp", "draft-mtp2", " draft-mtp", "ngram", "ngram-simple2", "ngram-mod "} {
 		if validSpecTypeValue(v) {
 			t.Errorf("validSpecTypeValue(%q) should be false", v)
 		}
@@ -612,6 +614,7 @@ func TestModelDirectArgs(t *testing.T) {
 		TensorSplit: "3,1", MainGPU: 1, RopeScaling: "yarn", RopeScale: 2.0,
 		MMProj: "/models/proj.gguf", Reasoning: true,
 		SpecType: "draft-mtp", SpecDraftNMax: 4,
+		CtxCheckpointsOff: true,
 	}
 	m := ModelInfo{Name: "Qwen2.5 7B", Path: "/models/q.gguf"}
 
@@ -627,6 +630,7 @@ func TestModelDirectArgs(t *testing.T) {
 		"--batch-size", "512",
 		"--ubatch-size", "256",
 		"--threads", "8",
+		"--ctx-checkpoints", "0",
 		"--gpu-layers", "99",
 		"--flash-attn", "on",
 		"--cache-type-k", "q8_0",
@@ -723,12 +727,14 @@ func TestModelDirectArgsRejectsInjection(t *testing.T) {
 // with the platformGOOS seam pinned to android, GPU-only flags from persisted
 // desktop-era configs (flash-attn / cpu-moe / n-cpu-moe) are dropped from the
 // direct-mode command line — the android build ships no GPU backend — while
-// neutral options (--ctx-size) survive untouched.
+// neutral options (--ctx-size) and the CPU-safe checkpoint pin
+// (--ctx-checkpoints 0) survive untouched.
 func TestModelDirectArgsAndroidSkipsGPUOnlyFlags(t *testing.T) {
 	withPlatformGOOS(t, "android")
 	cfg := ModelConfig{
 		CtxSize: 8192, FlashAttn: true,
 		CPUMoe: true, NCpuMoe: 3,
+		CtxCheckpointsOff: true,
 	}
 	args, err := modelDirectArgs("m", ModelInfo{Name: "m", Path: "/m.gguf"}, cfg)
 	if err != nil {
@@ -742,5 +748,42 @@ func TestModelDirectArgsAndroidSkipsGPUOnlyFlags(t *testing.T) {
 	}
 	if !strings.Contains(joined, "--ctx-size 8192") {
 		t.Errorf("android args must keep --ctx-size: %v", args)
+	}
+	if !strings.Contains(joined, "--ctx-checkpoints 0") {
+		t.Errorf("android args must keep the CPU-safe --ctx-checkpoints 0: %v", args)
+	}
+}
+
+// TestGenerateModelsPresetFromCtxCheckpoints verifies the checkpoint pin is
+// written into the INI iff CtxCheckpointsOff is set: the zero value stays
+// silent so llama-server's own default (32 checkpoints) applies, and old
+// configs without the field keep generating byte-identical presets.
+func TestGenerateModelsPresetFromCtxCheckpoints(t *testing.T) {
+	models := []ModelInfo{{Name: "m", Path: "/models/m.gguf"}}
+
+	path, err := generateModelsPresetFrom(models, map[string]ModelConfig{"m": {CtxCheckpointsOff: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Remove(path)
+	if !strings.Contains(string(data), "ctx-checkpoints = 0\n") {
+		t.Errorf("preset missing \"ctx-checkpoints = 0\": %q", string(data))
+	}
+
+	path, err = generateModelsPresetFrom(models, map[string]ModelConfig{"m": {}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(path)
+	data, err = os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "ctx-checkpoints") {
+		t.Errorf("zero config must not emit ctx-checkpoints: %q", string(data))
 	}
 }

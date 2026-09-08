@@ -43,6 +43,7 @@
 | KV 缓存类型 | `q8_0` 几乎无损且省显存，推荐；默认 f16 |
 | 加载方式 | 默认 mmap 加载最快；内存充裕可选 mlock 防换页 |
 | 切分方式 | 单卡选 `none`；多卡默认 `layer` 稳定 |
+| 投机解码 | 「高级」标签。`ngram-simple` / `ngram-mod` 为 n-gram 自投机：无需草稿模型、零额外显存，对重复/结构化输出（代码、模板文本）有加速，其他场景可能变慢；`draft-mtp` 为 MTP 投机预测，需模型支持；留空关闭 |
 
 > 注：Android 为纯 CPU 构建，页面不显示 GPU 层数、Flash Attention、cpu-moe 等 GPU 专属参数；「加载方式」中的 `dio` 仅 Windows / Linux 提供。Android 会自动识别 SoC 型号（如骁龙 / 天玑，来自系统属性）；「一键调优」在安卓上线程数上限为性能核数量（big.LITTLE 小核不参与推理线程），且纯 CPU 方案的调优结果提示不再显示 GPU 层字段。
 
