@@ -237,16 +237,10 @@ func spawnServerProcess(llamaServer string, args []string, cfg ServerConfig, res
 	// GPU. The env entry is appended after os.Environ() so it overrides any
 	// inherited CUDA_VISIBLE_DEVICES (last entry wins). Empty DeviceID (auto)
 	// yields nil: the child then inherits the parent environment unchanged.
-	// serverChildEnv additionally carries the Android LD_LIBRARY_PATH anchor.
-	cmd.Env = serverChildEnv(llamaServer, cudaDeviceEnv(cfg.DeviceID))
-	// Deliver the optional bearer-token API key through the LLAMA_API_KEY
-	// environment variable instead of argv: llama.cpp b10689 reads --api-key's
-	// value from LLAMA_API_KEY (common/arg.cpp .set_env), and an env entry
-	// stays invisible in process lists and the startup log line, unlike a
-	// plaintext "--api-key <value>" argument pair (#26/#31). An empty key
-	// appends nothing, so the no-auth start path inherits the environment
-	// unchanged.
-	cmd.Env = append(cmd.Env, apiKeyEnv(cfg.APIKey)...)
+	// buildChildEnv additionally carries the Android LD_LIBRARY_PATH anchor
+	// and the LLAMA_API_KEY API-key entry, preserving the inheritance
+	// contract for every override combination.
+	cmd.Env = buildChildEnv(llamaServer, cfg)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	serverLogsMu.Lock()
@@ -419,6 +413,25 @@ func buildServerCommand(cfg ServerConfig, presetPath string, d *directModel) (st
 // style as pathsGOOS in paths.go).
 var platformGOOS = runtime.GOOS
 
+// mergeChildEnv appends extra entries to a child environment while preserving
+// the nil-means-inherit contract: a nil base with non-empty extra must first
+// be materialized from os.Environ(), because setting cmd.Env replaces the
+// inherited environment wholesale — a bare append to nil would hand the child
+// ONLY the extra entries (no SystemRoot/PATH/USERPROFILE/...), which made a
+// real llama-server abort at startup ("Failed to determine HF cache
+// directory"). A nil base with no extra stays nil so the no-override paths
+// keep inheriting unchanged, and a non-nil base is returned with the extra
+// entries appended.
+func mergeChildEnv(base, extra []string) []string {
+	if len(extra) == 0 {
+		return base
+	}
+	if base == nil {
+		base = os.Environ()
+	}
+	return append(base, extra...)
+}
+
 // serverChildEnv assembles the llama-server child environment from the CUDA
 // device pin (cudaDeviceEnv, windows-only; empty = plain inheritance) plus,
 // on Android, the LD_LIBRARY_PATH anchor pointing at the binary's directory
@@ -434,6 +447,19 @@ func serverChildEnv(llamaServer string, cudaExtra []string) []string {
 		env = append(env, ld...)
 	}
 	return env
+}
+
+// buildChildEnv is the single assembly point for the llama-server child
+// environment, called by spawnServerProcess: the CUDA device pin
+// (cudaDeviceEnv, windows-only; empty = plain inheritance) plus the Android
+// LD_LIBRARY_PATH anchor (androidLdEnv) plus the optional LLAMA_API_KEY entry
+// (apiKeyEnv). Delivering the bearer-token API key through the environment
+// instead of argv keeps it out of process lists and the startup log line
+// (llama.cpp b10689 reads --api-key's value from LLAMA_API_KEY, #26/#31).
+// mergeChildEnv preserves the nil-means-inherit contract for every override
+// combination, so the no-override child environment stays exactly nil.
+func buildChildEnv(llamaServer string, cfg ServerConfig) []string {
+	return mergeChildEnv(serverChildEnv(llamaServer, cudaDeviceEnv(cfg.DeviceID)), apiKeyEnv(cfg.APIKey))
 }
 
 // apiKeyEnv builds the environment entries delivering the llama-server API

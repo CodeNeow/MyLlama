@@ -226,6 +226,126 @@ func TestAPIKeyEnv(t *testing.T) {
 	}
 }
 
+// envHasPrefix reports whether the environment list contains an entry whose
+// "NAME=" prefix matches, case-insensitively: Windows env names are
+// case-insensitive and their casing depends on how the parent process was
+// launched (SystemRoot vs SYSTEMROOT), while our own entries are fixed.
+func envHasPrefix(env []string, prefix string) bool {
+	for _, e := range env {
+		if len(e) >= len(prefix) && strings.EqualFold(e[:len(prefix)], prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// baselineEnvPrefix names a variable every parent environment carries, for
+// asserting that a child environment still inherits the parent environment
+// (SystemRoot on Windows, PATH elsewhere).
+func baselineEnvPrefix() string {
+	if runtime.GOOS == "windows" {
+		return "SystemRoot="
+	}
+	return "PATH="
+}
+
+// TestMergeChildEnv verifies the nil-means-inherit contract of the env merge:
+// nil + nil stays nil; a nil base with extra entries is materialized from
+// os.Environ() — a bare append to nil would REPLACE the inherited environment
+// with only the extra entries (the real-server regression: llama-server
+// aborted without SystemRoot/PATH); a non-nil base simply gains the extras.
+func TestMergeChildEnv(t *testing.T) {
+	if got := mergeChildEnv(nil, nil); got != nil {
+		t.Errorf("mergeChildEnv(nil, nil) = %v, want nil", got)
+	}
+	if got := mergeChildEnv(nil, []string{}); got != nil {
+		t.Errorf("mergeChildEnv(nil, empty) = %v, want nil", got)
+	}
+
+	base := []string{"A=1"}
+	if got := mergeChildEnv(base, nil); len(got) != 1 || got[0] != "A=1" {
+		t.Errorf("mergeChildEnv(base, nil) = %v, want base unchanged", got)
+	}
+
+	got := mergeChildEnv(nil, []string{"LLAMA_API_KEY=test-key-fixture"})
+	if len(got) != len(os.Environ())+1 {
+		t.Errorf("nil base materialization: len = %d, want len(os.Environ())+1 = %d", len(got), len(os.Environ())+1)
+	}
+	if !envHasPrefix(got, baselineEnvPrefix()) {
+		t.Errorf("nil base materialization lost the parent baseline (%s…)", baselineEnvPrefix())
+	}
+	if !envHasPrefix(got, "LLAMA_API_KEY=test-key-fixture") {
+		t.Errorf("nil base materialization lost the extra entry: %v", got)
+	}
+
+	got = mergeChildEnv([]string{"A=1"}, []string{"B=2"})
+	if len(got) != 2 || got[0] != "A=1" || got[1] != "B=2" {
+		t.Errorf("mergeChildEnv([A=1], [B=2]) = %v, want [A=1 B=2]", got)
+	}
+}
+
+// TestBuildChildEnvKeepsInheritance drives the exact env assembly
+// spawnServerProcess uses across every override combination. Regression test
+// for the real-server finding: on the desktop no-pin path serverChildEnv
+// returned nil and a bare append produced an environment containing ONLY
+// LLAMA_API_KEY, so the child lost SystemRoot/PATH/... and llama-server
+// aborted at startup ("Failed to determine HF cache directory").
+func TestBuildChildEnvKeepsInheritance(t *testing.T) {
+	baseline := baselineEnvPrefix()
+	const key = "test-key-fixture"
+
+	t.Run("desktop no pin with key keeps parent environment", func(t *testing.T) {
+		withPlatformGOOS(t, "linux") // cudaDeviceEnv nil, androidLdEnv nil
+		env := buildChildEnv("llama-server", ServerConfig{DeviceID: "", APIKey: key})
+		if !envHasPrefix(env, baseline) {
+			t.Errorf("child env lost the parent baseline (%s…): %d entries", baseline, len(env))
+		}
+		if !envHasPrefix(env, "LLAMA_API_KEY="+key) {
+			t.Errorf("child env missing LLAMA_API_KEY: %d entries", len(env))
+		}
+	})
+
+	t.Run("desktop no pin empty key stays nil", func(t *testing.T) {
+		withPlatformGOOS(t, "linux")
+		env := buildChildEnv("llama-server", ServerConfig{DeviceID: "", APIKey: ""})
+		if env != nil {
+			t.Errorf("no-override child env = %v, want nil (inherit unchanged)", env)
+		}
+	})
+
+	t.Run("windows cuda pin with key combines all entries", func(t *testing.T) {
+		withPlatformGOOS(t, "windows")
+		env := buildChildEnv("llama-server", ServerConfig{DeviceID: "GPU-uuid", APIKey: key})
+		if !envHasPrefix(env, "CUDA_VISIBLE_DEVICES=GPU-uuid") {
+			t.Errorf("child env missing CUDA pin: %d entries", len(env))
+		}
+		if !envHasPrefix(env, baseline) {
+			t.Errorf("cuda-pin child env lost the parent baseline (%s…)", baseline)
+		}
+		if !envHasPrefix(env, "LLAMA_API_KEY="+key) {
+			t.Errorf("cuda-pin child env missing LLAMA_API_KEY")
+		}
+	})
+
+	t.Run("android ld anchor with key combines all entries", func(t *testing.T) {
+		withPlatformGOOS(t, "android") // cudaDeviceEnv nil off windows
+		withPathsSeams(t, "android", "", nil, nil)
+		env := buildChildEnv("/data/bin/llama-server", ServerConfig{APIKey: key})
+		// Same derivation as androidLdEnv: filepath.Dir of the binary path
+		// (host-separator dependent, so computed rather than a literal).
+		wantLD := "LD_LIBRARY_PATH=" + filepath.Dir("/data/bin/llama-server")
+		if !envHasPrefix(env, wantLD) {
+			t.Errorf("child env missing %s: %d entries", wantLD, len(env))
+		}
+		if !envHasPrefix(env, baseline) {
+			t.Errorf("android child env lost the parent baseline (%s…)", baseline)
+		}
+		if !envHasPrefix(env, "LLAMA_API_KEY="+key) {
+			t.Errorf("android child env missing LLAMA_API_KEY")
+		}
+	})
+}
+
 // TestRedactAPIKeyArg verifies the defensive startup-log redaction: any
 // "--api-key <value>" pair in a joined command line has its value masked,
 // other arguments pass through untouched, and a line without the flag is
