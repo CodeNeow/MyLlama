@@ -93,6 +93,7 @@
               :options="languageOptions"
               :placeholder="t('settings.language')"
               variant="field"
+              menu-class="settings-sheet-menu"
               :label="t('settings.language')"
               @update:model-value="setLanguagePref"
             />
@@ -127,6 +128,7 @@
               :options="sourceOptions"
               :placeholder="t('settings.downloadSource')"
               variant="field"
+              menu-class="settings-sheet-menu"
               :label="t('settings.downloadSource')"
               @update:model-value="setSource"
             />
@@ -206,6 +208,7 @@
               :options="accessOptions"
               :placeholder="t('settings.accessScope')"
               variant="field"
+              menu-class="settings-sheet-menu"
               :label="t('settings.accessScope')"
               @update:model-value="setAccessScope"
             />
@@ -1100,6 +1103,31 @@ async function manualCheck() {
   align-items: center;
 }
 
+/* API-key row tail (the "设置 ›" dialog trigger): base recipe mirrors the
+   .api-key-dialog-cancel button (13px/600 accent text, hairline border,
+   subtle fill + glow hover); the phone block below only overrides the
+   frame-⑯ compact touch skin and the 44px touch target */
+.row-tail-api-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: auto;
+  padding: 7px 14px;
+  background: var(--active-bg);
+  border: 1px solid var(--overlay-20);
+  border-radius: 8px;
+  color: var(--accent-light);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.row-tail-api-key:hover {
+  background: var(--accent-glow);
+}
+
 /* Footnote / error lines under a row */
 .row-foot {
   font-size: 11.5px;
@@ -1603,35 +1631,35 @@ async function manualCheck() {
     min-height: 36px;
   }
 
-  .row-tail-select :deep(.themed-select__menu) {
+  /* Phone row-tail menus are fixed bottom sheets (frame ⑯). The menu is
+     teleported to <body> and marked via the ThemedSelect menu-class prop — a
+     teleported node is no longer a descendant of .row-tail-select, so the
+     former :deep() rule cannot reach it. The !important flags are required to
+     beat the component's inline fixed-position style (left/width/top computed
+     from the trigger rect). */
+  :global(.settings-sheet-menu) {
     position: fixed;
-    left: 10px;
+    left: 10px !important;
     right: 10px;
-    top: auto;
-    bottom: calc(var(--mobile-nav-height, 0px) + 10px + var(--keyboard-inset, 0px));
-    width: auto;
+    top: auto !important;
+    bottom: calc(var(--mobile-nav-height, 0px) + 10px + var(--keyboard-inset, 0px)) !important;
+    width: auto !important;
     max-height: 50vh;
     border-radius: var(--r-lg);
     border: none;
     box-shadow: 0 24px 60px rgba(15, 17, 28, 0.40);
   }
 
-  /* API key row tail (frame ⑯): compact button showing current auth state */
+  /* API key row tail (frame ⑯): the shared button recipe lives at the top
+     level; only the compact touch skin + 44px touch target differ here */
   .row-tail-api-key {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    width: auto;
     min-height: 44px;
     padding: 6px 12px;
     background: var(--surface-2);
-    border: 1px solid var(--border);
+    border-color: var(--border);
     border-radius: 10px;
     color: var(--text-secondary);
     font-size: 12px;
-    font-weight: 600;
-    font-family: inherit;
-    cursor: pointer;
   }
 
   /* API key bottom sheet (frame ⑯) */

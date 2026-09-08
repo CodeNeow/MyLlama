@@ -939,6 +939,16 @@ onUnmounted(() => {
     grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
     gap: 16px;
     align-items: start;
+    /* Sparse auto-placement never backfills: when the v-if'd quick-start
+       checklist (dismissed) or resident-model card is absent, the placement
+       cursor is already past row 1 and the first right-column item (storage)
+       lands at r2c2, leaving an empty hole at r1c2. `dense` lets each item
+       backfill the earliest free row of its own column; column ownership is
+       still decided by the explicit grid-column rules below, and with ALL
+       cards present every item finds its column's first free row in the same
+       documented order (left: hero -> minis -> resident -> GPU; right:
+       checklist -> storage -> CUDA -> system), so dense changes nothing there. */
+    grid-auto-flow: row dense;
   }
 
   /* Hero, memory/CPU mini cards -> left column */

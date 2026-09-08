@@ -17,31 +17,44 @@
         <polyline points="6 9 12 15 18 9"/>
       </svg>
     </button>
-    <div v-if="open" class="themed-select__menu" role="listbox">
-      <button
-        v-for="(opt, i) in options"
-        :key="opt.value"
-        :id="`${idPrefix}-opt-${i}`"
-        :ref="(el) => setOptionRef(el, i)"
-        type="button"
-        class="themed-select__option"
-        :class="{
-          'themed-select__option--selected': opt.value === modelValue,
-          'themed-select__option--highlighted': open && i === highlightIndex,
-        }"
-        role="option"
-        :aria-selected="opt.value === modelValue"
-        tabindex="-1"
-        @click="select(opt.value)"
-        @mouseenter="highlightIndex = i"
+    <!-- The menu is teleported to <body> and position:fixed: pages like Settings
+         clip absolutely-positioned menus with `overflow: hidden` on their cards.
+         The inline style (computed from the trigger rect on open) carries
+         left/width and top-or-bottom; scrolling or resizing the viewport closes. -->
+    <Teleport to="body">
+      <div
+        v-if="open"
+        ref="menuRef"
+        class="themed-select__menu"
+        :class="menuClass"
+        role="listbox"
+        :style="menuStyle"
       >
-        <span class="themed-select__option-label">{{ opt.label }}</span>
-        <svg v-if="opt.value === modelValue" class="themed-select__option-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="20 6 9 17 4 12"/>
-        </svg>
-      </button>
-      <div v-if="options.length === 0" class="themed-select__empty">{{ emptyText }}</div>
-    </div>
+        <button
+          v-for="(opt, i) in options"
+          :key="opt.value"
+          :id="`${idPrefix}-opt-${i}`"
+          :ref="(el) => setOptionRef(el, i)"
+          type="button"
+          class="themed-select__option"
+          :class="{
+            'themed-select__option--selected': opt.value === modelValue,
+            'themed-select__option--highlighted': open && i === highlightIndex,
+          }"
+          role="option"
+          :aria-selected="opt.value === modelValue"
+          tabindex="-1"
+          @click="select(opt.value)"
+          @mouseenter="highlightIndex = i"
+        >
+          <span class="themed-select__option-label">{{ opt.label }}</span>
+          <svg v-if="opt.value === modelValue" class="themed-select__option-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        </button>
+        <div v-if="options.length === 0" class="themed-select__empty">{{ emptyText }}</div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -52,7 +65,7 @@ let themedSelectCount = 0
 </script>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted, type CSSProperties } from 'vue'
 import { selectDisplayLabel } from '../lib/selectOptions'
 
 export interface SelectOption {
@@ -69,6 +82,11 @@ const props = withDefaults(defineProps<{
   emptyText?: string
   /** 'field' matches form inputs (ModelSettings), 'toolbar' matches the chat toolbar */
   variant?: 'field' | 'toolbar'
+  /** Extra class for the teleported menu element. A menu teleported to <body>
+      can no longer be reached through the consumer's descendant selectors, so
+      consumers that restyle the fixed menu for their own layout (e.g. the
+      Settings phone bottom-sheet) mark their instances with this class. */
+  menuClass?: string
 }>(), {
   modelValue: '',
   placeholder: '',
@@ -76,6 +94,7 @@ const props = withDefaults(defineProps<{
   label: '',
   emptyText: '',
   variant: 'field',
+  menuClass: '',
 })
 
 const emit = defineEmits<{
@@ -89,6 +108,12 @@ const highlightIndex = ref(-1)
 const idPrefix = `themed-select-${++themedSelectCount}`
 /** Trigger button element: refocused after selecting so focus never falls to <body>. */
 const triggerRef = ref<HTMLButtonElement | null>(null)
+/** Teleported menu element: lets the scroll-close guard ignore scrolls that
+ * happen inside the menu's own 300px scrollable viewport. */
+const menuRef = ref<HTMLElement | null>(null)
+/** Fixed-position style for the teleported menu, computed from the trigger's
+ * bounding rect on open (see positionMenu). */
+const menuStyle = ref<CSSProperties>({})
 /** Rendered option elements by index, used to scroll the highlight into view. */
 const optionEls: (HTMLElement | null)[] = []
 
@@ -103,11 +128,54 @@ function initialHighlightIndex(): number {
 function openMenu(): void {
   open.value = true
   highlightIndex.value = props.options.length > 0 ? initialHighlightIndex() : -1
+  positionMenu()
+  // While the fixed menu is open, any scroll outside it or a viewport resize
+  // moves it away from its anchor — close instead of tracking (simple and
+  // predictable; the capture flag also catches scrolls of inner containers).
+  // Listeners are removed again in closeMenu, so they are only active while open.
+  window.addEventListener('scroll', onViewportScroll, { capture: true })
+  window.addEventListener('resize', onViewportResize)
 }
 
 function closeMenu(): void {
   open.value = false
   highlightIndex.value = -1
+  window.removeEventListener('scroll', onViewportScroll, { capture: true })
+  window.removeEventListener('resize', onViewportResize)
+}
+
+/**
+ * Fixed positioning for the teleported menu: stretch to the trigger's rect
+ * (left + width; the CSS min-width still wins for narrow toolbar triggers)
+ * and drop 6px below it, flipping above when the open menu (max-height 300
+ * + 6 gap) would overflow the viewport bottom.
+ */
+function positionMenu(): void {
+  const el = triggerRef.value
+  if (!el) return
+  const rect = el.getBoundingClientRect()
+  const style: CSSProperties = {
+    left: rect.left + 'px',
+    width: rect.width + 'px',
+  }
+  if (rect.bottom + 306 > window.innerHeight) {
+    style.bottom = (window.innerHeight - rect.top + 6) + 'px'
+  } else {
+    style.top = rect.bottom + 6 + 'px'
+  }
+  menuStyle.value = style
+}
+
+/** Scroll capture handler: close on any scroll that moves the menu away from
+ * its anchor, EXCEPT scrolls inside the menu's own scrollable viewport (the
+ * event target is the menu or one of its descendants there). */
+function onViewportScroll(e: Event): void {
+  if (e.target instanceof Node && menuRef.value?.contains(e.target)) return
+  closeMenu()
+}
+
+function onViewportResize(): void {
+  closeMenu()
 }
 
 function select(value: string) {
@@ -186,14 +254,14 @@ function onDocClick() {
 }
 
 onMounted(() => document.addEventListener('click', onDocClick))
-onUnmounted(() => document.removeEventListener('click', onDocClick))
+onUnmounted(() => {
+  document.removeEventListener('click', onDocClick)
+  window.removeEventListener('scroll', onViewportScroll, { capture: true })
+  window.removeEventListener('resize', onViewportResize)
+})
 </script>
 
 <style scoped>
-.themed-select {
-  position: relative;
-}
-
 /* ─── Trigger ─── */
 .themed-select__trigger {
   display: flex;
@@ -291,14 +359,15 @@ html[data-os='ios'] .themed-select--toolbar .themed-select__trigger:active:not(:
 }
 
 /* ─── Menu (in-app so it follows the theme in both light and dark).
+       Teleported to <body> + position:fixed so `overflow: hidden` cards
+       (Settings groups) can never clip it. The inline style computed on open
+       carries left/width and top-or-bottom from the trigger's rect. z-index 60
+       sits above page overlays (the Settings api-key dialog root uses 39).
        Glass floating layer (design draft v2 rule 2): translucent panel +
        backdrop blur + glass hairline + deep floating shadow. ─── */
 .themed-select__menu {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: calc(100% + 6px);
-  z-index: 30;
+  position: fixed;
+  z-index: 60;
   min-width: 240px;
   max-height: 300px;
   overflow-y: auto;
@@ -382,8 +451,8 @@ html[data-os='ios'] .themed-select--toolbar .themed-select__trigger:active:not(:
 
   .themed-select__menu {
     /* Keep the 240px option-list floor from exceeding the viewport on
-       narrow (<=360px) screens; the trigger-anchored left/right positioning
-       above is untouched */
+       narrow (<=360px) screens; left/width still come from the trigger-rect
+       inline style, top-or-bottom likewise */
     min-width: min(240px, calc(100vw - 24px));
   }
 

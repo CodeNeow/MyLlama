@@ -198,6 +198,9 @@ export const messages: Record<Locale, Record<string, string>> = {
     // Phone-tier "About the runtime" island (design draft frame ③)
     'runtime.aboutTitle': '关于运行时',
     'runtime.aboutBody': 'Android 版使用应用内存储，路径由系统管理。llama.cpp 发布新版本时，可在此页直接下载升级（支持断点续传）。',
+    // Desktop variant of the about body: no app-sandbox wording, mentions the
+    // Settings custom-directory alternative instead
+    'runtime.aboutBodyDesktop': 'llama.cpp 发布新版本时，可在此页直接下载升级（支持断点续传）。也可以在设置中指定本地已有的 llama.cpp 目录，无需重复下载。',
     // Read-only install-paths card in the Runtime tab's tablet right rail
     // (design draft frame B③: 安装路径（只读）island)
     'runtime.pathsTitle': '安装路径（只读）',
@@ -933,6 +936,9 @@ export const messages: Record<Locale, Record<string, string>> = {
     // Phone-tier "About the runtime" island (design draft frame ③)
     'runtime.aboutTitle': 'About the runtime',
     'runtime.aboutBody': 'The Android build uses app-internal storage with system-managed paths. When a new llama.cpp version is released, you can download the upgrade right from this page (resumable download supported).',
+    // Desktop variant of the about body: no app-sandbox wording, mentions the
+    // Settings custom-directory alternative instead
+    'runtime.aboutBodyDesktop': 'When llama.cpp publishes a new version, download the upgrade right on this page (resumable). You can also point Settings at a local llama.cpp directory instead of downloading.',
     // Read-only install-paths card in the Runtime tab's tablet right rail
     // (design draft frame B③: 安装路径（只读）island)
     'runtime.pathsTitle': 'Install paths (read-only)',

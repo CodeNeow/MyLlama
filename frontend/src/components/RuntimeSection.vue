@@ -255,7 +255,9 @@
            it into its right column (rt-installed split) -->
       <section class="runtime-about">
         <h4>{{ t('runtime.aboutTitle') }}</h4>
-        <p>{{ t('runtime.aboutBody') }}</p>
+        <!-- Android keeps its app-internal-storage wording; every other platform
+             gets the desktop variant (download + Settings custom-directory) -->
+        <p>{{ platformState.isAndroid ? t('runtime.aboutBody') : t('runtime.aboutBodyDesktop') }}</p>
       </section>
       </div>
     </template>
