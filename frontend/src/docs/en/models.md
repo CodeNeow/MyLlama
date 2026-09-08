@@ -9,17 +9,9 @@ The list merges two sources, distinguished by a label:
 
 Each model card shows the name, architecture (e.g. `qwen2`), quantization (e.g. `Q4_K_M`), size and full path. Multimodal-capable models carry a "Multimodal" badge (an mmproj file was found next to them). Click "Refresh" to rescan after files change.
 
-## Local quantization (desktop only)
-
-In "My Models", **right-click a model card** and pick "Quantize…" to convert the model into a smaller quantized variant with llama.cpp's own llama-quantize tool: the target supports the q4_k_m / q5_k_m / q8_0 / f16 levels (q4_k_m is the best size/quality balance, f16 is lossless), the output is auto-named `<original>-<quant>.gguf` (editable) and lands in the source file's directory. While running, the dialog shows a live log and offers a cancel; when finished, the new file appears next to the source and "My Models" refreshes automatically.
-
-This feature is desktop-only (the quantize tool ships in the full llama.cpp release package next to llama-server; the Android package does not include it). Note that re-quantizing an already-quantized model requires a high-precision source — otherwise llama-quantize reports the error in the log.
-
 ## Opening model settings
 
-Click the gear icon on a model card to open that model's dedicated settings page. Parameters are organized into seven tabs — Basic / LoRA Adapters / Inference / Memory-Loading / Multi-GPU / Long Context / Advanced — each with its own usage hint.
-
-The "LoRA Adapters" tab manages the LoRA mounts **specific to this model**: drop LoRA adapter GGUFs trained and exported by Unsloth and friends into the "model download dir/lora" folder and click "Rescan" — every file is listed with its size and Alpha, and its GGUF metadata is checked to tell real adapters apart from ordinary models. Flip the switch, set the weight (scale, 0–4, default 1.0) and click "Save Adapters"; the adapters then mount onto this model via `--lora-scaled` when the service starts (each model carries its own set; an adapter must match its base model's architecture to load). While the service is running, "Apply to Running Service" hot-applies the saved weights: Android direct mode applies them immediately, while on desktop the pinned llama.cpp router cannot accept runtime updates and the page answers with the "takes effect on the next service start" hint — just restart the service.
+Click the gear icon on a model card to open that model's dedicated settings page. Parameters are organized into six tabs — Basic / Inference / Memory-Loading / Multi-GPU / Long Context / Advanced — each with its own usage hint.
 
 ## One-click auto-tune
 

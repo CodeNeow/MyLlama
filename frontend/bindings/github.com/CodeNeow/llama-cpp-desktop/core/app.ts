@@ -15,29 +15,6 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 import * as $models from "./models.js";
 
 /**
- * ApplyLoraRuntime hot-applies the model's current enabled adapter weights to
- * the RUNNING llama-server via POST /lora-adapters (best effort):
- * 
- *   - Android direct mode (single model process, no proxy): the runtime
- *     endpoint accepts the plain array body, so a matching loaded-adapter set
- *     applies immediately.
- *   - Desktop router mode: GET works per-model via ?model=, but the POST
- *     cannot pass the router at the pinned llama.cpp (the proxy wants a
- *     "model" field inside the body while the child requires a plain array —
- *     mutually exclusive upstream shapes), so the call fails with an explicit
- *     "takes effect on next service start" error.
- * 
- * The running server's loaded list (GET) is matched against the persisted
- * references by adapter file name; loaded-but-now-disabled adapters are
- * omitted from the POST, which resets their scale to 0 (upstream replace
- * semantics). A server started before the adapters were configured has an
- * empty / mismatching loaded list — reported as a degrade error too.
- */
-export function ApplyLoraRuntime(modelID: string): $CancellablePromise<void> {
-    return $Call.ByID(1353709832, modelID);
-}
-
-/**
  * BenchmarkModel measures the real token-generation speed of modelID on this
  * machine by running the llama-bench binary installed next to llama-server
  * with the model's CURRENT SAVED ModelConfig (a model without a saved config
@@ -102,13 +79,6 @@ export function BrowseModelsDir(): $CancellablePromise<string> {
 
 export function CancelDownloadTask(id: string): $CancellablePromise<void> {
     return $Call.ByID(1195596959, id);
-}
-
-/**
- * CancelQuantize kills the running llama-quantize child.
- */
-export function CancelQuantize(): $CancellablePromise<void> {
-    return $Call.ByID(1242294765);
 }
 
 /**
@@ -197,26 +167,15 @@ export function GetLoadedModels(): $CancellablePromise<$models.LoadedModel[]> {
     });
 }
 
-/**
- * GetLoraConfig returns the LoRA references persisted for one model (empty
- * slice when the model has no config entry yet). modelID is the scanned model
- * name — the same id the ModelSettings page addresses.
- */
-export function GetLoraConfig(modelID: string): $CancellablePromise<$models.LoraRef[]> {
-    return $Call.ByID(2164216874, modelID).then(($result: any) => {
-        return $$createType21($result);
-    });
-}
-
 export function GetMemory(): $CancellablePromise<$models.MemoryInfo | null> {
     return $Call.ByID(3935674743).then(($result: any) => {
-        return $$createType23($result);
+        return $$createType21($result);
     });
 }
 
 export function GetModelConfig(modelID: string): $CancellablePromise<$models.ModelConfig> {
     return $Call.ByID(3379369827, modelID).then(($result: any) => {
-        return $$createType24($result);
+        return $$createType22($result);
     });
 }
 
@@ -235,7 +194,7 @@ export function GetModelDescription(modelID: string): $CancellablePromise<string
  */
 export function GetModelFiles(modelID: string): $CancellablePromise<$models.HFFileOut[]> {
     return $Call.ByID(3059698428, modelID).then(($result: any) => {
-        return $$createType26($result);
+        return $$createType24($result);
     });
 }
 
@@ -250,7 +209,7 @@ export function GetModelMaxFileSize(modelID: string): $CancellablePromise<number
 
 export function GetModels(): $CancellablePromise<$models.ModelInfo[]> {
     return $Call.ByID(3623107510).then(($result: any) => {
-        return $$createType28($result);
+        return $$createType26($result);
     });
 }
 
@@ -261,23 +220,13 @@ export function GetModels(): $CancellablePromise<$models.ModelInfo[]> {
  */
 export function GetMonitorStatus(): $CancellablePromise<$models.MonitorStatus | null> {
     return $Call.ByID(1406400820).then(($result: any) => {
-        return $$createType30($result);
+        return $$createType28($result);
     });
 }
 
 export function GetOS(): $CancellablePromise<{ [_ in string]?: string }> {
     return $Call.ByID(1828890902).then(($result: any) => {
-        return $$createType31($result);
-    });
-}
-
-/**
- * GetQuantizeStatus snapshots the current quantize task state and the recent
- * log tail (the frontend polls it while the quantize dialog is open).
- */
-export function GetQuantizeStatus(): $CancellablePromise<$models.QuantizeStatus> {
-    return $Call.ByID(3962147273).then(($result: any) => {
-        return $$createType32($result);
+        return $$createType29($result);
     });
 }
 
@@ -290,7 +239,7 @@ export function GetQuantizeStatus(): $CancellablePromise<$models.QuantizeStatus>
  */
 export function GetRemoteDoc(lang: string, sectionID: string, force: boolean): $CancellablePromise<$models.RemoteDocResult> {
     return $Call.ByID(2670577276, lang, sectionID, force).then(($result: any) => {
-        return $$createType33($result);
+        return $$createType30($result);
     });
 }
 
@@ -303,13 +252,13 @@ export function GetRemoteDoc(lang: string, sectionID: string, force: boolean): $
  */
 export function GetSafeArea(): $CancellablePromise<$models.SafeArea> {
     return $Call.ByID(4054609944).then(($result: any) => {
-        return $$createType34($result);
+        return $$createType31($result);
     });
 }
 
 export function GetServerConfig(): $CancellablePromise<$models.ServerConfig> {
     return $Call.ByID(922492437).then(($result: any) => {
-        return $$createType35($result);
+        return $$createType32($result);
     });
 }
 
@@ -322,7 +271,7 @@ export function GetServerConfig(): $CancellablePromise<$models.ServerConfig> {
  */
 export function GetServerLogsSince(since: number): $CancellablePromise<$models.ServerLogsPage> {
     return $Call.ByID(2272125646, since).then(($result: any) => {
-        return $$createType36($result);
+        return $$createType33($result);
     });
 }
 
@@ -334,7 +283,7 @@ export function GetServerStatus(): $CancellablePromise<{ [_ in string]?: any }> 
 
 export function GetSystemInfo(): $CancellablePromise<$models.SystemInfo | null> {
     return $Call.ByID(1207510045).then(($result: any) => {
-        return $$createType38($result);
+        return $$createType35($result);
     });
 }
 
@@ -344,7 +293,7 @@ export function GetSystemInfo(): $CancellablePromise<$models.SystemInfo | null> 
  */
 export function GetUpdateDownloadStatus(): $CancellablePromise<$models.UpdateDownloadState | null> {
     return $Call.ByID(1961990283).then(($result: any) => {
-        return $$createType40($result);
+        return $$createType37($result);
     });
 }
 
@@ -358,17 +307,6 @@ export function InstallUpdate(): $CancellablePromise<void> {
     return $Call.ByID(2348643066);
 }
 
-/**
- * ListLoraAdapters scans the LoRA adapter directory and classifies every .gguf
- * file as a LoRA adapter or not (via the GGUF header keys llama.cpp's own
- * loader enforces). A missing directory yields an empty list, not an error.
- */
-export function ListLoraAdapters(): $CancellablePromise<$models.LoraInfo[]> {
-    return $Call.ByID(2823292852).then(($result: any) => {
-        return $$createType42($result);
-    });
-}
-
 export function PauseDownloadTask(id: string): $CancellablePromise<void> {
     return $Call.ByID(2431111255, id);
 }
@@ -379,7 +317,7 @@ export function PauseLlamaCppDownload(): $CancellablePromise<void> {
 
 export function RefreshModels(): $CancellablePromise<$models.ModelInfo[]> {
     return $Call.ByID(879778009).then(($result: any) => {
-        return $$createType28($result);
+        return $$createType26($result);
     });
 }
 
@@ -418,7 +356,7 @@ export function SaveServerConfig(cfg: $models.ServerConfig): $CancellablePromise
  */
 export function SearchDownloads(query: string, filter: string): $CancellablePromise<$models.HFSearchResult[]> {
     return $Call.ByID(3752716797, query, filter).then(($result: any) => {
-        return $$createType44($result);
+        return $$createType39($result);
     });
 }
 
@@ -471,16 +409,6 @@ export function SetLanguage(language: string): $CancellablePromise<string> {
  */
 export function SetLlamaCppDownloadDir(dir: string): $CancellablePromise<void> {
     return $Call.ByID(1234016213, dir);
-}
-
-/**
- * SetLoraAdapters validates and persists the LoRA references of one model,
- * preserving every other field of the model's config. References are clamped
- * to the supported shape: bare file names (validLoraRefName) and scales within
- * [0,4]; duplicate names are rejected.
- */
-export function SetLoraAdapters(modelID: string, refs: $models.LoraRef[]): $CancellablePromise<void> {
-    return $Call.ByID(812703148, modelID, refs);
 }
 
 /**
@@ -554,16 +482,6 @@ export function StartLlamaCppDownload(): $CancellablePromise<void> {
     return $Call.ByID(2611530074);
 }
 
-/**
- * StartQuantize launches one llama-quantize run (desktop only): srcPath is the
- * scanned .gguf to quantize, quant one of q4_k_m / q5_k_m / q8_0 / f16, and
- * outName the output file name (resolved next to the source; a missing .gguf
- * suffix is appended). Single-flight while a task runs.
- */
-export function StartQuantize(srcPath: string, quant: string, outName: string): $CancellablePromise<void> {
-    return $Call.ByID(970584127, srcPath, quant, outName);
-}
-
 export function StartServer(): $CancellablePromise<void> {
     return $Call.ByID(4115957591);
 }
@@ -611,7 +529,7 @@ export function StopUpdateDownload(): $CancellablePromise<void> {
  */
 export function TuneModelConfig(modelID: string): $CancellablePromise<$models.ModelConfig> {
     return $Call.ByID(769524497, modelID).then(($result: any) => {
-        return $$createType24($result);
+        return $$createType22($result);
     });
 }
 
@@ -645,28 +563,23 @@ const $$createType16 = $models.DownloadState.createFrom;
 const $$createType17 = $Create.Nullable($$createType16);
 const $$createType18 = $models.LoadedModel.createFrom;
 const $$createType19 = $Create.Array($$createType18);
-const $$createType20 = $models.LoraRef.createFrom;
-const $$createType21 = $Create.Array($$createType20);
-const $$createType22 = $models.MemoryInfo.createFrom;
-const $$createType23 = $Create.Nullable($$createType22);
-const $$createType24 = $models.ModelConfig.createFrom;
-const $$createType25 = $models.HFFileOut.createFrom;
+const $$createType20 = $models.MemoryInfo.createFrom;
+const $$createType21 = $Create.Nullable($$createType20);
+const $$createType22 = $models.ModelConfig.createFrom;
+const $$createType23 = $models.HFFileOut.createFrom;
+const $$createType24 = $Create.Array($$createType23);
+const $$createType25 = $models.ModelInfo.createFrom;
 const $$createType26 = $Create.Array($$createType25);
-const $$createType27 = $models.ModelInfo.createFrom;
-const $$createType28 = $Create.Array($$createType27);
-const $$createType29 = $models.MonitorStatus.createFrom;
-const $$createType30 = $Create.Nullable($$createType29);
-const $$createType31 = $Create.Map($Create.Any, $Create.Any);
-const $$createType32 = $models.QuantizeStatus.createFrom;
-const $$createType33 = $models.RemoteDocResult.createFrom;
-const $$createType34 = $models.SafeArea.createFrom;
-const $$createType35 = $models.ServerConfig.createFrom;
-const $$createType36 = $models.ServerLogsPage.createFrom;
-const $$createType37 = $models.SystemInfo.createFrom;
-const $$createType38 = $Create.Nullable($$createType37);
-const $$createType39 = $models.UpdateDownloadState.createFrom;
-const $$createType40 = $Create.Nullable($$createType39);
-const $$createType41 = $models.LoraInfo.createFrom;
-const $$createType42 = $Create.Array($$createType41);
-const $$createType43 = $models.HFSearchResult.createFrom;
-const $$createType44 = $Create.Array($$createType43);
+const $$createType27 = $models.MonitorStatus.createFrom;
+const $$createType28 = $Create.Nullable($$createType27);
+const $$createType29 = $Create.Map($Create.Any, $Create.Any);
+const $$createType30 = $models.RemoteDocResult.createFrom;
+const $$createType31 = $models.SafeArea.createFrom;
+const $$createType32 = $models.ServerConfig.createFrom;
+const $$createType33 = $models.ServerLogsPage.createFrom;
+const $$createType34 = $models.SystemInfo.createFrom;
+const $$createType35 = $Create.Nullable($$createType34);
+const $$createType36 = $models.UpdateDownloadState.createFrom;
+const $$createType37 = $Create.Nullable($$createType36);
+const $$createType38 = $models.HFSearchResult.createFrom;
+const $$createType39 = $Create.Array($$createType38);

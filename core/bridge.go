@@ -125,7 +125,6 @@ func startServerInternalWithModel(requested string) error {
 
 	var llamaServer string
 	var args []string
-	var workDir string
 	var err error
 	resident := "" // direct-mode resident model name (android); "" on desktop
 	if platformGOOS == "android" {
@@ -150,7 +149,7 @@ func startServerInternalWithModel(requested string) error {
 				return err
 			}
 		}
-		llamaServer, args, workDir, err = buildServerCommand(cfg, "", &directModel{info: m, cfg: cfgs[m.Name]})
+		llamaServer, args, err = buildServerCommand(cfg, "", &directModel{info: m, cfg: cfgs[m.Name]})
 		if err != nil {
 			return err
 		}
@@ -165,24 +164,22 @@ func startServerInternalWithModel(requested string) error {
 		if err != nil {
 			return fmt.Errorf(tr("生成模型预设失败: %w", "failed to generate models preset: %w"), err)
 		}
-		llamaServer, args, workDir, err = buildServerCommand(cfg, presetPath, nil)
+		llamaServer, args, err = buildServerCommand(cfg, presetPath, nil)
 		if err != nil {
 			return err
 		}
 	}
 
-	return spawnServerProcess(llamaServer, args, workDir, cfg, resident)
+	return spawnServerProcess(llamaServer, args, cfg, resident)
 }
 
 // spawnServerProcess is the shared spawn/log/tail/wait machinery behind every
 // llama-server start (router and direct mode alike): builds the exec.Command,
 // binds the shared log-file capture, starts the child, registers the
 // lifecycle state (serverRunning/serverCmd/serverPort and, in direct mode,
-// the resident model) and starts the wait goroutine that clears it. A
-// non-empty workDir pins the child's working directory (the LoRA adapter
-// directory when any enabled adapter exists — preset/direct args carry bare
-// adapter file names that must resolve there); "" keeps the inherited cwd.
-func spawnServerProcess(llamaServer string, args []string, workDir string, cfg ServerConfig, resident string) error {
+// the resident model) and starts the wait goroutine that clears it. The child
+// inherits the app's working directory.
+func spawnServerProcess(llamaServer string, args []string, cfg ServerConfig, resident string) error {
 	// Stop a leftover tailer from a previous server (e.g. an adopted one not
 	// stopped through the normal path) so it cannot double-append the new
 	// child's lines into the ring alongside the tailer started below.
@@ -214,15 +211,6 @@ func spawnServerProcess(llamaServer string, args []string, workDir string, cfg S
 	}
 	cmd := exec.Command(llamaServer, args...)
 	hideWindow(cmd)
-	// LoRA working-directory pin: the --lora-scaled values are bare adapter
-	// file names, resolved by llama-server against its own working directory.
-	// Pinning the child to the LoRA directory keeps every other command-line
-	// path (absolute) unaffected and avoids Windows drive-letter colons in the
-	// upstream FNAME:SCALE parsing (arg.cpp splits on every ':' and rejects
-	// anything but exactly 2 parts).
-	if workDir != "" {
-		cmd.Dir = workDir
-	}
 	// Serving-GPU pinning: when the server config selects a device by stable
 	// UUID, CUDA_VISIBLE_DEVICES remaps CUDA device 0 to that card, so
 	// llama-server needs no extra flag — its default device 0 IS the chosen
@@ -335,11 +323,8 @@ type directModel struct {
 // llama-cpp/ download dir, then PATH) and builds its argument list from the
 // server config. The preset path points at the generated models INI file
 // (desktop router mode); on Android the direct-mode branch ignores it and
-// assembles single-model serving args from d instead. The third return value
-// is the child working directory: the LoRA adapter directory when any model
-// config enables an adapter (the preset/direct args then carry bare adapter
-// file names), "" otherwise — the historical inherit-cwd behavior.
-func buildServerCommand(cfg ServerConfig, presetPath string, d *directModel) (string, []string, string, error) {
+// assembles single-model serving args from d instead.
+func buildServerCommand(cfg ServerConfig, presetPath string, d *directModel) (string, []string, error) {
 	// Shares resolveLlamaServerBin with getLlamaCppInfo to keep llama.cpp
 	// install-location resolution consistent in both places (download dir is
 	// ready to serve immediately after extraction); falls back to the bare
@@ -347,14 +332,6 @@ func buildServerCommand(cfg ServerConfig, presetPath string, d *directModel) (st
 	llamaServer := resolveLlamaServerBin()
 	if llamaServer == "" {
 		llamaServer = "llama-server"
-	}
-
-	// LoRA working-directory pin (see spawnServerProcess): only when some
-	// model config actually enables an adapter, so the no-adapter start is
-	// byte-identical to the historical behavior.
-	workDir := ""
-	if hasEnabledLoraRefs() {
-		workDir = effectiveLoraDir()
 	}
 
 	if platformGOOS == "android" {
@@ -366,7 +343,7 @@ func buildServerCommand(cfg ServerConfig, presetPath string, d *directModel) (st
 		// switching models restarts the process (see directStartDecision).
 		modelArgs, err := modelDirectArgs(sanitizeAlias(d.info.Name), d.info, d.cfg)
 		if err != nil {
-			return "", nil, "", err
+			return "", nil, err
 		}
 		args := append([]string{
 			"--host", effectiveHost(cfg.AccessMode),
@@ -385,7 +362,7 @@ func buildServerCommand(cfg ServerConfig, presetPath string, d *directModel) (st
 		if cfg.APIKey != "" {
 			args = append(args, "--api-key", cfg.APIKey)
 		}
-		return llamaServer, args, workDir, nil
+		return llamaServer, args, nil
 	}
 
 	args := []string{
@@ -409,7 +386,7 @@ func buildServerCommand(cfg ServerConfig, presetPath string, d *directModel) (st
 	if cfg.APIKey != "" {
 		args = append(args, "--api-key", cfg.APIKey)
 	}
-	return llamaServer, args, workDir, nil
+	return llamaServer, args, nil
 }
 
 // platformGOOS is the OS branch selector (runtime.GOOS in production); a var

@@ -35,7 +35,6 @@ const config: Record<string, any> = {
   modelsDir: 'C:\\Users\\demo\\LLM-Models',
   llamaCppDownloadDir: 'C:\\Users\\demo\\llama.cpp-dl',
   modelDownloadDir: 'C:\\Users\\demo\\model-downloads',
-  loraDir: 'C:\\Users\\demo\\model-downloads\\lora',
   downloadSource: 'hf',
   language: 'zh',
   resolvedLanguage: 'zh',
@@ -48,8 +47,8 @@ const config: Record<string, any> = {
 // ─── System probes (android semantics: no GPU/CUDA, CPU-only accel) ─────────
 
 // Walkthrough persona: the default preview is the Android phone layout (?sc=
-// desktop switches to a Windows desktop persona so the desktop-gated UI —
-// e.g. the right-click quantize menu — can be exercised in the mock too).
+// desktop switches to a Windows desktop persona so the desktop-gated UI can be
+// exercised in the mock too).
 const os = new URLSearchParams(window.location.search).get('sc') === 'desktop'
   ? { os: 'windows', arch: 'x86_64' }
   : { os: 'android', arch: 'arm64' }
@@ -493,78 +492,6 @@ const defaultModelConfig: Record<string, any> = {
 
 const modelConfigs: Record<string, Record<string, any>> = {}
 
-// ─── LoRA adapters (ModelSettings LoRA tab) ──────────────────────────────────
-// Fake scan of the LoRA directory: two valid adapter GGUFs (Unsloth-export
-// style metadata) plus one regular model GGUF that must show as invalid. The
-// per-model persisted refs live in loraRefs; SetLoraAdapters mirrors the
-// backend validation (plain file names, scale 0–4) so the mock rejects loudly.
-
-const mockLoraDir = 'C:\\Users\\demo\\model-downloads\\lora'
-
-const loraScan = [
-  {
-    name: 'qwen3-4b-sql-lora.gguf',
-    path: mockLoraDir + '\\qwen3-4b-sql-lora.gguf',
-    sizeBytes: 168_000_000,
-    sizeHuman: '160.2 MB',
-    alpha: 16,
-    hasAlpha: true,
-    arch: 'qwen2',
-    valid: true,
-  },
-  {
-    name: 'qwen3-4b-roleplay-lora.gguf',
-    path: mockLoraDir + '\\qwen3-4b-roleplay-lora.gguf',
-    sizeBytes: 84_000_000,
-    sizeHuman: '80.1 MB',
-    alpha: 8,
-    hasAlpha: true,
-    arch: 'qwen2',
-    valid: true,
-  },
-  {
-    name: 'not-an-adapter.gguf',
-    path: mockLoraDir + '\\not-an-adapter.gguf',
-    sizeBytes: 3_800_000_000,
-    sizeHuman: '3.5 GB',
-    alpha: 0,
-    hasAlpha: false,
-    arch: 'qwen2',
-    valid: false,
-  },
-]
-
-const loraRefs: Record<string, Array<{ name: string; scale: number; enabled: boolean }>> = {
-  [residentModel]: [
-    { name: 'qwen3-4b-sql-lora.gguf', scale: 1, enabled: true },
-    { name: 'qwen3-4b-roleplay-lora.gguf', scale: 0.5, enabled: false },
-  ],
-}
-
-// Fake llama-quantize task state (mirrors the Go QuantizeStatus shape).
-const quantizeMock: {
-  running: boolean
-  done: boolean
-  success: boolean
-  error: string
-  srcPath: string
-  outPath: string
-  quant: string
-  logs: Array<{ seq: number; text: string }>
-  seq: number
-  timer?: ReturnType<typeof setInterval>
-} = {
-  running: false,
-  done: false,
-  success: false,
-  error: '',
-  srcPath: '',
-  outPath: '',
-  quant: '',
-  logs: [],
-  seq: 0,
-}
-
 // ─── Chat SSE sample answer (POST /v1/chat/completions via the mock runtime) ─
 // Language-aware demo replies, written in the voice of a local model so the
 // mock chat reads naturally in walkthrough captures of either locale.
@@ -741,99 +668,6 @@ export const handlers: Record<string, (...args: any[]) => any> = {
   BenchmarkModel: async () => {
     await sleep(2000)
     return { tgTps: 8.4, ngl: '999', threads: 0, usedCpuMoe: true, elapsedS: 74.6 }
-  },
-
-  // ── LoRA adapters ──
-  ListLoraAdapters: () => loraScan.map((a) => ({ ...a })),
-  GetLoraConfig: (modelID: string) => (loraRefs[modelID] ?? []).map((r) => ({ ...r })),
-  SetLoraAdapters: (modelID: string, refs: Array<{ name: string; scale: number; enabled: boolean }>) => {
-    for (const ref of refs ?? []) {
-      if (!ref.name || ref.name.includes('/') || ref.name.includes('\\') || ref.name.includes(':')) {
-        throw new Error('invalid LoRA adapter name: ' + ref.name)
-      }
-      if (typeof ref.scale !== 'number' || !(ref.scale >= 0 && ref.scale <= 4)) {
-        throw new Error('invalid LoRA scale: ' + ref.scale)
-      }
-    }
-    loraRefs[modelID] = (refs ?? []).map((r) => ({ ...r }))
-  },
-  ApplyLoraRuntime: (modelID: string) => {
-    if (!serverRunning) {
-      throw new Error('llama-server is not running (mock)')
-    }
-    const active = (loraRefs[modelID] ?? []).filter((r) => r.enabled)
-    mockAddServerLog(`[INFO] LoRA adapters hot-applied for model "${modelID}" (${active.length} active) (mock)`)
-  },
-
-  // ── Quantize tool (desktop only; fake llama-quantize run) ──
-  StartQuantize: (srcPath: string, quant: string, outName: string) => {
-    if (quantizeMock.running) {
-      throw new Error('a quantization task is already running (mock)')
-    }
-    if (!['q4_k_m', 'q5_k_m', 'q8_0', 'f16'].includes(quant)) {
-      throw new Error('invalid quantization type: ' + quant)
-    }
-    const base = srcPath.replace(/[/\\][^/\\]+$/, '') ?? ''
-    const out = outName.replace(/\.gguf$/i, '') + '.gguf'
-    quantizeMock.running = true
-    quantizeMock.done = false
-    quantizeMock.success = false
-    quantizeMock.error = ''
-    quantizeMock.srcPath = srcPath
-    quantizeMock.outPath = (base ? base + '\\' : '') + out
-    quantizeMock.quant = quant
-    quantizeMock.logs = []
-    const steps = [
-      'llama-quantize: quantizing "' + srcPath.split(/[\\/]/).pop() + '" -> ' + out,
-      'load_tensors: loading 291 tensors (2.4 GiB) (mock)',
-      '[   1/291] output.output_q6_K - type q6_K',
-      '[  36/291] blk.0.attn_q.weight - type q4_K',
-      '[  92/291] blk.5.ffn_down.weight - type q5_K',
-      '[ 148/291] blk.11.attn_v.weight - type q4_K',
-      '[ 205/291] blk.17.ffn_gate.weight - type q4_K',
-      '[ 259/291] blk.23.ffn_up.weight - type q4_K',
-      '[ 291/291] output_norm.weight - type f32',
-      'save_tensors: writing ' + out + ' (1.5 GiB) (mock)',
-      'quantize: done in 6.2s (mock)',
-    ]
-    let i = 0
-    quantizeMock.timer = setInterval(() => {
-      if (i < steps.length) {
-        quantizeMock.logs.push({ seq: quantizeMock.seq++, text: steps[i] })
-        i++
-      } else {
-        clearInterval(quantizeMock.timer)
-        quantizeMock.timer = undefined
-        quantizeMock.running = false
-        quantizeMock.done = true
-        quantizeMock.success = true
-      }
-    }, 700)
-  },
-  GetQuantizeStatus: () => ({
-    running: quantizeMock.running,
-    done: quantizeMock.done,
-    success: quantizeMock.success,
-    error: quantizeMock.error,
-    srcPath: quantizeMock.srcPath,
-    outPath: quantizeMock.outPath,
-    quant: quantizeMock.quant,
-    logs: quantizeMock.logs.map((l) => ({ ...l })),
-    next: quantizeMock.seq,
-  }),
-  CancelQuantize: () => {
-    if (!quantizeMock.running) {
-      throw new Error('no quantization task is running (mock)')
-    }
-    if (quantizeMock.timer) {
-      clearInterval(quantizeMock.timer)
-      quantizeMock.timer = undefined
-    }
-    quantizeMock.running = false
-    quantizeMock.done = true
-    quantizeMock.success = false
-    quantizeMock.error = 'llama-quantize exited abnormally (possibly cancelled, see the log)'
-    quantizeMock.logs.push({ seq: quantizeMock.seq++, text: '[cancelled] killed by user (mock)' })
   },
 
   // ── Server ──

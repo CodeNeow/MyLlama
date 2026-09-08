@@ -936,7 +936,7 @@ func TestBuildServerCommandAndroidDirect(t *testing.T) {
 		info: ModelInfo{Name: "Qwen2.5 7B", Path: "/models/q.gguf"},
 		cfg:  ModelConfig{CtxSize: 4096, GPULayers: "99"},
 	}
-	bin, args, _, err := buildServerCommand(cfg, "", d)
+	bin, args, err := buildServerCommand(cfg, "", d)
 	if err != nil {
 		t.Fatal(err)
 	}

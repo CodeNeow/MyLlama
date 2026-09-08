@@ -49,12 +49,6 @@ func defaultModelConfig() ModelConfig {
 	}
 }
 
-// loraDirOverride is the user-chosen LoRA adapter directory (empty means
-// unset, use the default <model download dir>/lora). loraDirMu guards its
-// reads/writes, consistent with the style of modelDownloadDirOverride.
-var loraDirOverride string
-var loraDirMu sync.Mutex
-
 // customModelsDir is the imported model directory (empty means unset). It is
 // the directory of models the user already has and wants to reuse; distinct
 // from modelDownloadDirOverride, where new downloads land. modelsDirMu guards
@@ -107,7 +101,6 @@ type appConfig struct {
 	ModelDir            string                 `json:"modelDir"`
 	LlamaCppDownloadDir string                 `json:"llamaCppDownloadDir,omitempty"`
 	ModelDownloadDir    string                 `json:"modelDownloadDir,omitempty"`
-	LoraDir             string                 `json:"loraDir,omitempty"`
 	Theme               string                 `json:"theme"`
 	ModelConfigs        map[string]ModelConfig `json:"modelConfigs"`
 	ServerConfig        ServerConfig           `json:"serverConfig"`
@@ -185,26 +178,10 @@ type ModelConfig struct {
 	CtxCheckpointsOff bool `json:"ctxCheckpointsOff,omitempty"`
 	MLock             bool `json:"mlock,omitempty"`  // deprecated, kept only to migrate old configs
 	NoMMap            bool `json:"noMmap,omitempty"` // deprecated, kept only to migrate old configs
-	// LoraAdapters lists the LoRA adapter files mounted onto this model at
-	// llama-server start. Names are bare file names resolved against the LoRA
-	// directory (loraDir); Scale is the upstream --lora-scaled weight clamped
-	// to [0,4] (default 1.0); Enabled=false entries are never written into the
-	// preset. omitempty keeps old configs (and the auto-tuner, which builds a
-	// fresh ModelConfig without the field) byte-compatible; writers that send
-	// a nil slice mean "not provided" and the previous refs are preserved
-	// (see SaveModelConfig), while an empty non-nil slice clears them.
-	LoraAdapters []LoraRef `json:"loraAdapters,omitempty"`
-}
-
-// LoraRef is one LoRA adapter attached to a model config: Name is the adapter
-// GGUF file name inside the LoRA directory (never a path — validated against
-// separators/.. at every entry point, see validLoraRefName), Scale is the
-// upstream --lora-scaled weight (0.0–4.0, default 1.0) and Enabled gates
-// whether the adapter is passed to llama-server at all.
-type LoraRef struct {
-	Name    string  `json:"name"`
-	Scale   float64 `json:"scale"`
-	Enabled bool    `json:"enabled"`
+	// The former loraAdapters field (LoRA adapter refs, removed feature) is
+	// intentionally absent: Go's json.Unmarshal ignores unknown keys, so old
+	// config JSONs carrying loraAdapters (per model) or loraDir (app level)
+	// still load harmlessly and the stale keys are dropped on the next save.
 }
 
 // migrateLegacyConfig copies older config files forward to the active config
@@ -306,16 +283,6 @@ func loadConfig() {
 		modelDownloadDirOverride = cfg.ModelDownloadDir
 		modelDownloadDirMu.Unlock()
 		log.Printf("[DIR] Loaded model download dir from config: %s", cfg.ModelDownloadDir)
-	}
-	// LoRA adapter directory: empty values fall back to the default
-	// <model download dir>/lora (no existence check — the scan simply reports
-	// an empty list until the user drops adapter GGUF files in; see
-	// effectiveLoraDir / scanLoraAdapters).
-	if cfg.LoraDir != "" {
-		loraDirMu.Lock()
-		loraDirOverride = cfg.LoraDir
-		loraDirMu.Unlock()
-		log.Printf("[DIR] Loaded LoRA adapter dir from config: %s", cfg.LoraDir)
 	}
 	// Imported model directory: empty values or paths that do not exist / are
 	// not directories are ignored and fall back to the default directory,
@@ -567,10 +534,6 @@ func saveConfig() {
 	modelDownloadDir := modelDownloadDirOverride
 	modelDownloadDirMu.Unlock()
 
-	loraDirMu.Lock()
-	loraDir := loraDirOverride
-	loraDirMu.Unlock()
-
 	configMu.Lock()
 	theme := currentTheme
 	configMu.Unlock()
@@ -634,7 +597,6 @@ func saveConfig() {
 		ModelDir:            modelDir,
 		LlamaCppDownloadDir: llamaDownloadDir,
 		ModelDownloadDir:    modelDownloadDir,
-		LoraDir:             loraDir,
 		Theme:               theme,
 		ModelConfigs:        mcfgs,
 		ServerConfig:        scfg,

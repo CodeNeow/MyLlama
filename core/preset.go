@@ -223,22 +223,6 @@ func modelPresetKV(m ModelInfo, cfg ModelConfig) ([]presetKV, error) {
 		if cfg.SpecDraftNMax > 0 {
 			kvs = append(kvs, presetKV{key: "spec-draft-n-max", value: strconv.Itoa(cfg.SpecDraftNMax)})
 		}
-		// LoRA adapters: enabled refs serialize into the single lora-scaled
-		// entry (upstream CSV form FNAME:SCALE,...; --lora-scaled is a
-		// registered option so the INI key maps 1:1, see common/preset.cpp
-		// key_to_opt). Values are bare file names relative to the LoRA
-		// directory — llama-server is spawned with that directory as its
-		// working directory (buildServerCommand), keeping Windows
-		// drive-letter colons out of the FNAME:SCALE colon-splitting.
-		if len(cfg.LoraAdapters) > 0 {
-			v, err := loraScaledValue(cfg)
-			if err != nil {
-				return nil, err
-			}
-			if v != "" {
-				kvs = append(kvs, presetKV{key: "lora-scaled", value: v})
-			}
-		}
 	}
 	if m.HasMMProj && !explicitMMProj {
 		// Look for mmproj file in same directory

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"time"
 )
 
@@ -303,119 +302,6 @@ func unloadErrorMessage(raw json.RawMessage) string {
 		return obj.Message
 	}
 	return ""
-}
-
-// ─── LoRA adapters (runtime query / hot-apply) ──────────────────────
-//
-// Wrappers around the llama-server /lora-adapters endpoints. Measured contract
-// at the pinned b1068x family:
-//   - GET /lora-adapters answers a JSON array of
-//     {"id":<idx>,"path":<string>,"scale":<float>,...}, one entry per adapter
-//     the server process loaded at startup (server-task.cpp get_lora to_json).
-//     In router mode the endpoint is proxied to a model child and requires a
-//     "?model=<id>" query parameter (server-models.cpp proxy_get).
-//   - POST /lora-adapters takes a JSON array of {"id":<idx>,"scale":<float>}
-//     and REPLACES the per-adapter weights: entries not mentioned are reset to
-//     scale 0, i.e. disabled (construct_lora_list in server-context.cpp). It
-//     answers {"success":true}.
-//
-// Upstream quirk we degrade around: in router mode the proxy layer wants a
-// "model" field inside the POST body while the child handler requires the body
-// to be a plain array — the two are mutually exclusive, so runtime hot-apply
-// cannot pass the router at this pin. Android direct mode (no proxy) accepts
-// the plain array, which is why ApplyLoraRuntime is best-effort with an
-// explicit "takes effect on next start" fallback for the desktop.
-
-// ErrLoraUnsupported marks a llama-server without a usable /lora-adapters
-// endpoint (404/501): older builds predate it. Callers surface the
-// "restart the service to apply" guidance instead of the raw status.
-var ErrLoraUnsupported = errors.New("lora-adapters endpoint not supported")
-
-// routerLoraEntry mirrors one GET /lora-adapters response element. Path is the
-// exact path string llama-server was started with for the adapter (for
-// MyLlama-managed servers: the bare adapter file name, resolved against the
-// LoRA working directory).
-type routerLoraEntry struct {
-	ID    int64   `json:"id"`
-	Path  string  `json:"path"`
-	Scale float64 `json:"scale"`
-}
-
-// routerLoraSet is one POST /lora-adapters element: adapter index plus the new
-// scale (0 disables).
-type routerLoraSet struct {
-	ID    int64   `json:"id"`
-	Scale float64 `json:"scale"`
-}
-
-// loraAdaptersURL builds the endpoint URL, appending the router-mode model
-// selector when non-empty (direct-mode servers don't need it, so it is only
-// added when a specific router child is being addressed).
-func loraAdaptersURL(port int, model string) string {
-	endpoint := routerBaseURL(port) + "/lora-adapters"
-	if model != "" {
-		endpoint += "?model=" + url.QueryEscape(model)
-	}
-	return endpoint
-}
-
-// fetchLoraAdapters queries the running llama-server for its loaded adapter
-// list. model addresses one child in router mode; direct-mode callers pass "".
-func fetchLoraAdapters(port int, model string) ([]routerLoraEntry, error) {
-	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Get(loraAdaptersURL(port, model))
-	if err != nil {
-		return nil, fmt.Errorf("fetch lora adapters: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusNotImplemented {
-		return nil, ErrLoraUnsupported
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetch lora adapters: HTTP %d", resp.StatusCode)
-	}
-	var entries []routerLoraEntry
-	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
-		return nil, fmt.Errorf("fetch lora adapters: %w", err)
-	}
-	return entries, nil
-}
-
-// applyLoraAdapters posts the full replacement weight set to the running
-// llama-server (plain array body — the child-side contract; see the upstream
-// quirk note above for why the router mode rejects this shape).
-func applyLoraAdapters(port int, sets []routerLoraSet) error {
-	payload, err := json.Marshal(sets)
-	if err != nil {
-		return fmt.Errorf("apply lora adapters: %w", err)
-	}
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Post(routerBaseURL(port)+"/lora-adapters", "application/json", bytes.NewReader(payload))
-	if err != nil {
-		return fmt.Errorf("apply lora adapters: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusNotImplemented {
-		return ErrLoraUnsupported
-	}
-	if resp.StatusCode != http.StatusOK {
-		var errResp struct {
-			Error json.RawMessage `json:"error"`
-		}
-		_ = json.NewDecoder(resp.Body).Decode(&errResp)
-		if msg := unloadErrorMessage(errResp.Error); msg != "" {
-			return fmt.Errorf("apply lora adapters: %s (HTTP %d)", msg, resp.StatusCode)
-		}
-		return fmt.Errorf("apply lora adapters: HTTP %d", resp.StatusCode)
-	}
-	var result routerUnloadResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return fmt.Errorf("apply lora adapters: %w", err)
-	}
-	if !result.Success {
-		return fmt.Errorf("apply lora adapters: server returned success=false")
-	}
-	return nil
 }
 
 // getServerPort returns the currently recorded server port (0 means not

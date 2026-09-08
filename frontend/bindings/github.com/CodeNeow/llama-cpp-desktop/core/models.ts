@@ -512,99 +512,6 @@ export class LoadedModel {
     }
 }
 
-/**
- * LoraInfo describes one scanned .gguf file in the LoRA directory. Valid marks
- * a file identified as a LoRA adapter GGUF (general.type "adapter" +
- * adapter.type "lora"); a regular model GGUF or an unreadable file scans with
- * Valid=false so the UI can flag it instead of silently hiding it. Alpha is
- * meaningful only when HasAlpha is set (the key is optional in the GGUF spec —
- * the loader reads it with a zero default).
- */
-export class LoraInfo {
-    "name": string;
-    "path": string;
-    "sizeBytes": number;
-    "sizeHuman": string;
-    "alpha": number;
-    "hasAlpha": boolean;
-    "arch": string;
-    "valid": boolean;
-
-    /** Creates a new LoraInfo instance. */
-    constructor($$source: Partial<LoraInfo> = {}) {
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("path" in $$source)) {
-            this["path"] = "";
-        }
-        if (!("sizeBytes" in $$source)) {
-            this["sizeBytes"] = 0;
-        }
-        if (!("sizeHuman" in $$source)) {
-            this["sizeHuman"] = "";
-        }
-        if (!("alpha" in $$source)) {
-            this["alpha"] = 0;
-        }
-        if (!("hasAlpha" in $$source)) {
-            this["hasAlpha"] = false;
-        }
-        if (!("arch" in $$source)) {
-            this["arch"] = "";
-        }
-        if (!("valid" in $$source)) {
-            this["valid"] = false;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new LoraInfo instance from a string or object.
-     */
-    static createFrom($$source: any = {}): LoraInfo {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new LoraInfo($$parsedSource as Partial<LoraInfo>);
-    }
-}
-
-/**
- * LoraRef is one LoRA adapter attached to a model config: Name is the adapter
- * GGUF file name inside the LoRA directory (never a path — validated against
- * separators/.. at every entry point, see validLoraRefName), Scale is the
- * upstream --lora-scaled weight (0.0–4.0, default 1.0) and Enabled gates
- * whether the adapter is passed to llama-server at all.
- */
-export class LoraRef {
-    "name": string;
-    "scale": number;
-    "enabled": boolean;
-
-    /** Creates a new LoraRef instance. */
-    constructor($$source: Partial<LoraRef> = {}) {
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("scale" in $$source)) {
-            this["scale"] = 0;
-        }
-        if (!("enabled" in $$source)) {
-            this["enabled"] = false;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new LoraRef instance from a string or object.
-     */
-    static createFrom($$source: any = {}): LoraRef {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new LoraRef($$parsedSource as Partial<LoraRef>);
-    }
-}
-
 export class MemoryInfo {
     "totalGb": number;
     "freeGb": number;
@@ -737,7 +644,7 @@ export class ModelConfig {
     "reasoning": boolean;
 
     /**
-     * "", draft-mtp
+     * "", draft-mtp, ngram-simple, ngram-mod
      */
     "specType": string;
 
@@ -745,6 +652,16 @@ export class ModelConfig {
      * >0 writes spec-draft-n-max
      */
     "specDraftNMax": number;
+
+    /**
+     * CtxCheckpointsOff disables llama-server's context checkpoints
+     * (writes ctx-checkpoints = 0; upstream default 32): each auto-checkpoint
+     * copies KV state into host RAM during prompt processing and the app never
+     * calls the restore API. Set by the auto-tuner (Windows full-offload
+     * plans, every Android plan); zero value keeps the upstream default, and
+     * omitempty keeps old config JSONs loading byte-compatibly.
+     */
+    "ctxCheckpointsOff"?: boolean;
 
     /**
      * deprecated, kept only to migrate old configs
@@ -755,18 +672,6 @@ export class ModelConfig {
      * deprecated, kept only to migrate old configs
      */
     "noMmap"?: boolean;
-
-    /**
-     * LoraAdapters lists the LoRA adapter files mounted onto this model at
-     * llama-server start. Names are bare file names resolved against the LoRA
-     * directory (loraDir); Scale is the upstream --lora-scaled weight clamped
-     * to [0,4] (default 1.0); Enabled=false entries are never written into the
-     * preset. omitempty keeps old configs (and the auto-tuner, which builds a
-     * fresh ModelConfig without the field) byte-compatible; writers that send
-     * a nil slice mean "not provided" and the previous refs are preserved
-     * (see SaveModelConfig), while an empty non-nil slice clears them.
-     */
-    "loraAdapters"?: LoraRef[];
 
     /** Creates a new ModelConfig instance. */
     constructor($$source: Partial<ModelConfig> = {}) {
@@ -838,11 +743,7 @@ export class ModelConfig {
      * Creates a new ModelConfig instance from a string or object.
      */
     static createFrom($$source: any = {}): ModelConfig {
-        const $$createField22_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("loraAdapters" in $$parsedSource) {
-            $$parsedSource["loraAdapters"] = $$createField22_0($$parsedSource["loraAdapters"]);
-        }
         return new ModelConfig($$parsedSource as Partial<ModelConfig>);
     }
 }
@@ -1018,8 +919,8 @@ export class MonitorStatus {
      * Creates a new MonitorStatus instance from a string or object.
      */
     static createFrom($$source: any = {}): MonitorStatus {
-        const $$createField3_0 = $$createType6;
-        const $$createField8_0 = $$createType8;
+        const $$createField3_0 = $$createType4;
+        const $$createField8_0 = $$createType6;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("gpus" in $$parsedSource) {
             $$parsedSource["gpus"] = $$createField3_0($$parsedSource["gpus"]);
@@ -1028,116 +929,6 @@ export class MonitorStatus {
             $$parsedSource["disk"] = $$createField8_0($$parsedSource["disk"]);
         }
         return new MonitorStatus($$parsedSource as Partial<MonitorStatus>);
-    }
-}
-
-/**
- * QuantizeLogEntry is one llama-quantize output line in the ring snapshot.
- */
-export class QuantizeLogEntry {
-    "seq": number;
-    "text": string;
-
-    /** Creates a new QuantizeLogEntry instance. */
-    constructor($$source: Partial<QuantizeLogEntry> = {}) {
-        if (!("seq" in $$source)) {
-            this["seq"] = 0;
-        }
-        if (!("text" in $$source)) {
-            this["text"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new QuantizeLogEntry instance from a string or object.
-     */
-    static createFrom($$source: any = {}): QuantizeLogEntry {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new QuantizeLogEntry($$parsedSource as Partial<QuantizeLogEntry>);
-    }
-}
-
-/**
- * QuantizeStatus is the full task state returned by GetQuantizeStatus: the
- * running flag, the terminal result of the most recent task and a snapshot of
- * the recent log lines. The frontend polls it while the quantize dialog is open.
- */
-export class QuantizeStatus {
-    "running": boolean;
-
-    /**
-     * a task finished since process start (success or failure)
-     */
-    "done": boolean;
-
-    /**
-     * meaningful when Done
-     */
-    "success": boolean;
-
-    /**
-     * failure / cancel reason (Done && !Success)
-     */
-    "error": string;
-    "srcPath": string;
-    "outPath": string;
-    "quant": string;
-
-    /**
-     * most recent lines (ring snapshot)
-     */
-    "logs": QuantizeLogEntry[];
-
-    /**
-     * seq the next log line will receive
-     */
-    "next": number;
-
-    /** Creates a new QuantizeStatus instance. */
-    constructor($$source: Partial<QuantizeStatus> = {}) {
-        if (!("running" in $$source)) {
-            this["running"] = false;
-        }
-        if (!("done" in $$source)) {
-            this["done"] = false;
-        }
-        if (!("success" in $$source)) {
-            this["success"] = false;
-        }
-        if (!("error" in $$source)) {
-            this["error"] = "";
-        }
-        if (!("srcPath" in $$source)) {
-            this["srcPath"] = "";
-        }
-        if (!("outPath" in $$source)) {
-            this["outPath"] = "";
-        }
-        if (!("quant" in $$source)) {
-            this["quant"] = "";
-        }
-        if (!("logs" in $$source)) {
-            this["logs"] = [];
-        }
-        if (!("next" in $$source)) {
-            this["next"] = 0;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new QuantizeStatus instance from a string or object.
-     */
-    static createFrom($$source: any = {}): QuantizeStatus {
-        const $$createField7_0 = $$createType10;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("logs" in $$parsedSource) {
-            $$parsedSource["logs"] = $$createField7_0($$parsedSource["logs"]);
-        }
-        return new QuantizeStatus($$parsedSource as Partial<QuantizeStatus>);
     }
 }
 
@@ -1335,7 +1126,7 @@ export class ServerLogsPage {
      * Creates a new ServerLogsPage instance from a string or object.
      */
     static createFrom($$source: any = {}): ServerLogsPage {
-        const $$createField0_0 = $$createType12;
+        const $$createField0_0 = $$createType8;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("entries" in $$parsedSource) {
             $$parsedSource["entries"] = $$createField0_0($$parsedSource["entries"]);
@@ -1385,12 +1176,12 @@ export class SystemInfo {
      * Creates a new SystemInfo instance from a string or object.
      */
     static createFrom($$source: any = {}): SystemInfo {
-        const $$createField2_0 = $$createType13;
-        const $$createField3_0 = $$createType14;
-        const $$createField4_0 = $$createType16;
-        const $$createField5_0 = $$createType17;
-        const $$createField6_0 = $$createType18;
-        const $$createField7_0 = $$createType8;
+        const $$createField2_0 = $$createType9;
+        const $$createField3_0 = $$createType10;
+        const $$createField4_0 = $$createType12;
+        const $$createField5_0 = $$createType13;
+        const $$createField6_0 = $$createType14;
+        const $$createField7_0 = $$createType6;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("cpu" in $$parsedSource) {
             $$parsedSource["cpu"] = $$createField2_0($$parsedSource["cpu"]);
@@ -1536,19 +1327,15 @@ export class UpdateDownloadState {
 const $$createType0 = $Create.Array($Create.Any);
 const $$createType1 = HFFile.createFrom;
 const $$createType2 = $Create.Array($$createType1);
-const $$createType3 = LoraRef.createFrom;
+const $$createType3 = MonitorGPU.createFrom;
 const $$createType4 = $Create.Array($$createType3);
-const $$createType5 = MonitorGPU.createFrom;
-const $$createType6 = $Create.Array($$createType5);
-const $$createType7 = DiskUsage.createFrom;
-const $$createType8 = $Create.Nullable($$createType7);
-const $$createType9 = QuantizeLogEntry.createFrom;
-const $$createType10 = $Create.Array($$createType9);
-const $$createType11 = ServerLogEntry.createFrom;
+const $$createType5 = DiskUsage.createFrom;
+const $$createType6 = $Create.Nullable($$createType5);
+const $$createType7 = ServerLogEntry.createFrom;
+const $$createType8 = $Create.Array($$createType7);
+const $$createType9 = CPUInfo.createFrom;
+const $$createType10 = MemoryInfo.createFrom;
+const $$createType11 = GPUInfo.createFrom;
 const $$createType12 = $Create.Array($$createType11);
-const $$createType13 = CPUInfo.createFrom;
-const $$createType14 = MemoryInfo.createFrom;
-const $$createType15 = GPUInfo.createFrom;
-const $$createType16 = $Create.Array($$createType15);
-const $$createType17 = CUDAInfo.createFrom;
-const $$createType18 = LlamaCppInfo.createFrom;
+const $$createType13 = CUDAInfo.createFrom;
+const $$createType14 = LlamaCppInfo.createFrom;

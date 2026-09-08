@@ -68,7 +68,7 @@ func saveServerState(t *testing.T) (origLogs []serverLogEntry, origDir string) {
 func TestBuildServerCommand(t *testing.T) {
 	saveServerState(t)
 	cfg := ServerConfig{AccessMode: accessLocal, Host: "127.0.0.1", Port: 8080, MaxModels: 1, CacheRAM: 0}
-	bin, args, _, err := buildServerCommand(cfg, "/tmp/preset.ini", nil)
+	bin, args, err := buildServerCommand(cfg, "/tmp/preset.ini", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestBuildServerCommand(t *testing.T) {
 func TestBuildServerCommandLANHost(t *testing.T) {
 	saveServerState(t)
 	cfg := ServerConfig{AccessMode: accessLAN, Host: "127.0.0.1", Port: 8080, MaxModels: 1, CacheRAM: 0}
-	_, args, _, err := buildServerCommand(cfg, "/tmp/preset.ini", nil)
+	_, args, err := buildServerCommand(cfg, "/tmp/preset.ini", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func TestBuildServerCommandLANHost(t *testing.T) {
 // and MaxModels minimum is 1 (prevents passing 0 to llama-server).
 func TestBuildServerCommandCacheRAM(t *testing.T) {
 	cfg := ServerConfig{AccessMode: accessLocal, Host: "127.0.0.1", Port: 8080, MaxModels: 0, CacheRAM: 4096}
-	_, args, _, err := buildServerCommand(cfg, "/tmp/preset.ini", nil)
+	_, args, err := buildServerCommand(cfg, "/tmp/preset.ini", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +154,7 @@ func TestBuildServerCommandCustomDir(t *testing.T) {
 	customLlamaCppMu.Unlock()
 
 	cfg := ServerConfig{AccessMode: accessLocal, Host: "127.0.0.1", Port: 8080, MaxModels: 1, CacheRAM: 0}
-	bin, _, _, _ := buildServerCommand(cfg, "/tmp/preset.ini", nil)
+	bin, _, _ := buildServerCommand(cfg, "/tmp/preset.ini", nil)
 
 	want := filepath.Join(custom, binName)
 	if bin != want {
@@ -174,7 +174,7 @@ func TestBuildServerCommandOmitsModelsDir(t *testing.T) {
 	modelDownloadDirMu.Unlock()
 
 	cfg := ServerConfig{AccessMode: accessLocal, Host: "127.0.0.1", Port: 8080, MaxModels: 1, CacheRAM: 0}
-	_, args, _, err := buildServerCommand(cfg, "/tmp/preset.ini", nil)
+	_, args, err := buildServerCommand(cfg, "/tmp/preset.ini", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +194,7 @@ func TestBuildServerCommandAPIKey(t *testing.T) {
 
 	// empty APIKey → no --api-key flag
 	cfg := ServerConfig{AccessMode: accessLocal, Host: "127.0.0.1", Port: 8080, MaxModels: 1, CacheRAM: 0}
-	_, args, _, err := buildServerCommand(cfg, "/tmp/preset.ini", nil)
+	_, args, err := buildServerCommand(cfg, "/tmp/preset.ini", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func TestBuildServerCommandAPIKey(t *testing.T) {
 	// non-empty APIKey → adjacent "--api-key" value pair
 	cfg.APIKey = "sk-secret"
 	// err already validated above; only the args shape matters here
-	_, args, _, _ = buildServerCommand(cfg, "/tmp/preset.ini", nil)
+	_, args, _ = buildServerCommand(cfg, "/tmp/preset.ini", nil)
 	found := false
 	for i, a := range args {
 		if a == "--api-key" {

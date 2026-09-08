@@ -83,15 +83,7 @@
 
       <!-- Model list -->
       <div v-else class="model-list">
-        <!-- Desktop-only context menu: right-click a model card → 量化…
-             (llama-quantize lives in the llama.cpp release package, which the
-             desktop tiers install; mobile/tablet never render this menu). -->
-        <div
-          v-for="model in models"
-          :key="model.path"
-          class="model-card"
-          @contextmenu.prevent="openQuantMenu($event, model)"
-        >
+        <div v-for="model in models" :key="model.path" class="model-card">
           <div class="model-icon">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
@@ -124,55 +116,19 @@
             <div class="model-path">{{ model.path }}</div>
           </div>
         </div>
-
-        <!-- Desktop context menu (right-click a model card): the quantize entry.
-             Rendered at the cursor via fixed positioning; closes on any click
-             elsewhere or on Escape. mobile/tablet tiers never open it.
-             NOTE: both the menu and the dialog live OUTSIDE the
-             loading/error/list v-if chain — a quantize-finish triggers a rescan
-             (loading=true) which would otherwise unmount the dialog mid-run. -->
       </div>
-
-      <!-- Desktop context menu overlay (see note above) -->
-      <Teleport to="body">
-        <div v-if="quantMenu.visible" class="qz-ctx-dim" @click="closeQuantMenu" @contextmenu.prevent="closeQuantMenu">
-          <div
-            class="qz-ctx"
-            :style="{ left: quantMenu.x + 'px', top: quantMenu.y + 'px' }"
-            role="menu"
-            @click.stop
-          >
-            <button class="qz-ctx-item" role="menuitem" type="button" @click="openQuantDialog">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-                <polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
-              </svg>
-              {{ t('quantize.menu') }}
-            </button>
-          </div>
-        </div>
-      </Teleport>
-
-      <!-- Quantize dialog (desktop only; llama-quantize driver) -->
-      <QuantizeDialog
-        v-if="quantDialog.open"
-        :src-path="quantDialog.srcPath"
-        @close="closeQuantDialog"
-        @finished="onQuantFinished"
-      />
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getModels, refreshModels, getConfig, browseModelsDir } from '../wails'
 import { t } from '../lib/i18n'
 import { formatBytes } from '../lib/format'
 import { usePlatform } from '../lib/platform'
-import QuantizeDialog from '../components/QuantizeDialog.vue'
 
 const router = useRouter()
 
@@ -235,53 +191,6 @@ function openSettings(model: ModelInfo) {
   router.push('/models/settings/' + encodeURIComponent(model.name))
 }
 
-// ─── Quantize (desktop only) ──────────────────────────────────────────────────
-// Right-click a model card → 量化… opens the llama-quantize dialog prefilled
-// with that card's .gguf path. Desktop tier + non-touch OS only: the llama.cpp
-// release package (with llama-quantize) is a desktop install, and the backend
-// rejects Android calls anyway.
-const quantMenu = ref({ visible: false, x: 0, y: 0, path: '' })
-const quantDialog = ref({ open: false, srcPath: '' })
-
-const canQuantize = computed(
-  () => platformState.value.isDesktop && platformState.value.os !== 'android' && platformState.value.os !== 'ios'
-)
-
-function openQuantMenu(e: MouseEvent, model: ModelInfo) {
-  if (!canQuantize.value) return
-  quantMenu.value = {
-    visible: true,
-    x: Math.min(e.clientX, window.innerWidth - 190),
-    y: Math.min(e.clientY, window.innerHeight - 70),
-    path: model.path,
-  }
-}
-
-function closeQuantMenu() {
-  quantMenu.value.visible = false
-}
-
-function openQuantDialog() {
-  const path = quantMenu.value.path
-  closeQuantMenu()
-  if (!path) return
-  quantDialog.value = { open: true, srcPath: path }
-}
-
-function closeQuantDialog() {
-  quantDialog.value.open = false
-}
-
-/** A successful quantize lands a new .gguf next to the source: rescan so the
-    "My Models" list shows it without a manual refresh. */
-function onQuantFinished(_outPath: string) {
-  fetchModels(true)
-}
-
-function onGlobalKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape') closeQuantMenu()
-}
-
 async function fetchModels(force = false) {
   loading.value = true
   error.value = ''
@@ -298,11 +207,6 @@ async function fetchModels(force = false) {
 onMounted(() => {
   loadModelsDir()
   fetchModels()
-  document.addEventListener('keydown', onGlobalKeydown)
-})
-
-onUnmounted(() => {
-  document.removeEventListener('keydown', onGlobalKeydown)
 })
 </script>
 
@@ -1385,44 +1289,6 @@ html[data-os='ios'] .model-settings-btn:active {
 
 @keyframes skel-sweep {
   to { background-position: -200% 0; }
-}
-
-/* ─── Desktop right-click quantize menu ─────────────────────────────── */
-.qz-ctx-dim {
-  position: fixed;
-  inset: 0;
-  z-index: 999;
-}
-
-.qz-ctx {
-  position: fixed;
-  min-width: 168px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-lg, 0 10px 30px rgba(0, 0, 0, 0.18));
-  padding: 4px;
-}
-
-.qz-ctx-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 12px;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: 12.5px;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  text-align: left;
-}
-
-.qz-ctx-item:hover {
-  background: var(--hover-bg);
 }
 
 </style>
