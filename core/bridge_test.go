@@ -40,6 +40,27 @@ func withModelScope404Server(t *testing.T) func() {
 	}
 }
 
+// withTaskPersistNoop swaps the persistTasks seam (the config-write step
+// behind persistTasksNow / persistTasksThrottled) to a no-op for the duration
+// of the test. Queue tests that enqueue real download tasks without a temp
+// cwd (withTempCwd) would otherwise write the cwd-relative config file into
+// the package directory: startHFDownload's synchronous enqueue persist, each
+// goroutine's entry/terminal persists, and the pause/resume/cancel persists
+// all funnel through saveConfig, leaving core/llama-desktop-config.json
+// behind after go test. The cleanup drains in-flight download goroutines
+// BEFORE restoring the seam, so a trailing persist can never read the real
+// saveConfig after the test is done (same bounded non-fatal drain style as
+// withTempCwd's cleanup).
+func withTaskPersistNoop(t *testing.T) {
+	t.Helper()
+	orig := persistTasks
+	persistTasks = func() {}
+	t.Cleanup(func() {
+		waitDlGoroutinesForTestBounded(t, 5*time.Second)
+		persistTasks = orig
+	})
+}
+
 // waitTasksTerminal polls until all tasks reach a terminal state (error/done/cancelled),
 // with a timeout guard. Returns immediately when no tasks exist. Used by queue tests
 // to avoid stray goroutines polluting subsequent test cases.
@@ -227,6 +248,7 @@ func TestStartHFDownloadNoDeadlock(t *testing.T) {
 // (three-level layout: author/model/file).
 func TestStartHFDownloadQueue(t *testing.T) {
 	saveConfigState(t)
+	withTaskPersistNoop(t) // enqueue persist + goroutine persists must not write the cwd-relative config
 	dlTasksMu.Lock()
 	dlTasks = nil
 	dlTaskCounter = 0
@@ -275,6 +297,7 @@ func TestStartHFDownloadQueue(t *testing.T) {
 // cancellation and status becomes cancelled.
 func TestStopHFDownload(t *testing.T) {
 	saveConfigState(t)
+	withTaskPersistNoop(t) // enqueue persist + goroutine persists must not write the cwd-relative config
 	dlTasksMu.Lock()
 	dlTasks = nil
 	dlTaskCounter = 0
@@ -325,6 +348,7 @@ func TestCancelDownloadTaskUnknownID(t *testing.T) {
 // can be paused; only paused can be resumed.
 func TestPauseResumeDownloadTask(t *testing.T) {
 	saveConfigState(t)
+	withTaskPersistNoop(t) // enqueue/pause/resume persists must not write the cwd-relative config
 	restoreSource := withModelScope404Server(t)
 	defer restoreSource()
 	dlTasksMu.Lock()
@@ -382,6 +406,7 @@ func TestPauseResumeDownloadTask(t *testing.T) {
 // mutating the returned slice must not affect internal task state.
 func TestGetDownloadTasksSnapshot(t *testing.T) {
 	saveConfigState(t)
+	withTaskPersistNoop(t) // enqueue persist + goroutine persists must not write the cwd-relative config
 	dlTasksMu.Lock()
 	dlTasks = nil
 	dlTaskCounter = 0
@@ -534,6 +559,7 @@ func TestStartHFDownloadRejectsInvalidRepoPart(t *testing.T) {
 // under the configured model download path (not the imported model directory).
 func TestStartHFDownloadUsesDownloadDirOverride(t *testing.T) {
 	saveConfigState(t)
+	withTaskPersistNoop(t) // enqueue persist + goroutine persists must not write the cwd-relative config
 	restoreSource := withModelScope404Server(t)
 	defer restoreSource()
 

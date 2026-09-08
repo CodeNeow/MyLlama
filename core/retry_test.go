@@ -18,6 +18,10 @@ import (
 // After the fix, the lock sets Status="cancelled" before cancel(), so the frontend polling becomes visible immediately.
 // The task is directly constructed as an error-terminal task simulating a dead goroutine; the downloadTask goroutine is not started.
 func TestCancelDownloadTaskMarksErrorTaskCancelled(t *testing.T) {
+	// CancelDownloadTask persists the queue when the task is found; without a
+	// temp cwd that persist would write the cwd-relative config file into the
+	// package directory.
+	withTaskPersistNoop(t)
 	dlTasksMu.Lock()
 	dlTasks = nil
 	dlTaskCounter = 0

@@ -76,14 +76,24 @@ func computeSpeed(elapsedSec float64, deltaBytes int64) float64 {
 var lastTaskPersist time.Time
 var lastTaskPersistMu sync.Mutex
 
+// persistTasks is the config-write step behind persistTasksNow and
+// persistTasksThrottled. Package-level function var (same injection style as
+// renameFile / idleReadTimeout) so tests that start download tasks can swap
+// in a no-op: without it, a task goroutine's async persist can run after the
+// test restored the original working directory and write the cwd-relative
+// config file into the package directory (core/llama-desktop-config.json).
+// Production value is saveConfig, so runtime behavior is unchanged.
+var persistTasks = saveConfig
+
 // persistTasksNow persists the download task queue immediately (enqueue,
 // status-change, and terminal-state paths). Callers must not hold dlTasksMu:
-// saveConfig acquires dlTasksMu again at the end for its snapshot.
+// persistTasks (→ saveConfig) acquires dlTasksMu again at the end for its
+// snapshot.
 func persistTasksNow() {
 	lastTaskPersistMu.Lock()
 	lastTaskPersist = time.Now()
 	lastTaskPersistMu.Unlock()
-	saveConfig()
+	persistTasks()
 }
 
 // persistTasksThrottled persists the download task queue with throttling
@@ -97,7 +107,7 @@ func persistTasksThrottled() {
 	}
 	lastTaskPersist = time.Now()
 	lastTaskPersistMu.Unlock()
-	saveConfig()
+	persistTasks()
 }
 
 // dlTaskGoroutines counts in-flight downloadTask goroutines. Every terminal
