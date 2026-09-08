@@ -30,11 +30,16 @@
 ####
 ## !define REQUEST_EXECUTION_LEVEL "admin"            # Default "admin"  see also https://nsis.sourceforge.io/Docs/Chapter4.html
 ####
-## Legacy uninstall keys: before the attribution change added an info block to
-## wails.json, CompanyName/ProductName both fell back to the project name, so
-## the uninstall key differed per era. .onInit reads them newest-first as
-## InstallLocation fallbacks; the install section deletes the superseded
-## v0.3.x-era key after writing the current one.
+## Legacy uninstall keys: the uninstall key name changed with the installer
+## eras (CompanyName/ProductName fell back to the project name before the
+## wails.json attribution change, then stayed on the pre-rebrand
+## "llama-desktop"/"Llama Desktop" pair for one release to keep the key
+## stable, and became "CodeNeowMyLlama" with the full rebrand). .onInit only
+## reads back the current-era key (legacy InstallLocations are not prefilled
+## — the directory page must default to %PROGRAMFILES64%\MyLlama); the
+## install section migrates a legacy install's data into $INSTDIR and drops
+## the superseded keys after writing the current one.
+!define UNINST_KEY_LEGACY_V039 "Software\Microsoft\Windows\CurrentVersion\Uninstall\llama-desktopLlama Desktop"
 !define UNINST_KEY_LEGACY_V03X "Software\Microsoft\Windows\CurrentVersion\Uninstall\llama-desktopllama-desktop"
 !define UNINST_KEY_LEGACY_V01X "Software\Microsoft\Windows\CurrentVersion\Uninstall\llama-guillama-gui"
 ####
@@ -80,7 +85,7 @@ ManifestDPIAware true
 
 Name "${INFO_PRODUCTNAME}"
 OutFile "..\..\bin\${INFO_PROJECTNAME}-${ARCH}-installer.exe" # Name of the installer's file.
-InstallDir "$PROGRAMFILES64\${INFO_COMPANYNAME}\${INFO_PRODUCTNAME}" # Default installing folder ($PROGRAMFILES is Program Files folder).
+InstallDir "$PROGRAMFILES64\${INFO_PRODUCTNAME}" # Default installing folder ($PROGRAMFILES is Program Files folder).
 ShowInstDetails show # This will always show the installation details.
 
 Function .onInit
@@ -94,19 +99,103 @@ Function .onInit
    ; 使 MUI_PAGE_DIRECTORY 默认显示上次安装目录，实现覆盖安装记住自定义路径。
    SetRegView 64
    ReadRegStr $0 HKLM "${UNINST_KEY}" "InstallLocation"
-   ${If} $0 == ""
-       ; 卸载键名随 wails.json 归属信息变更过一次：新键读不到时依次回退到
-       ; v0.3.x 时代键与更名前 llama-gui 时代的键，取首个非空 InstallLocation，
-       ; 保证跨版本更新仍能记住自定义安装路径。
-       ReadRegStr $0 HKLM "${UNINST_KEY_LEGACY_V03X}" "InstallLocation"
-   ${EndIf}
-   ${If} $0 == ""
-       ReadRegStr $0 HKLM "${UNINST_KEY_LEGACY_V01X}" "InstallLocation"
-   ${EndIf}
+   ; 仅回读新时代键（CodeNeowMyLlama），不再回读 llama-desktop / llama-gui
+   ; 时代的旧键：旧键的 InstallLocation 指向旧品牌默认目录（如
+   ; %PROGRAMFILES64%\llama-desktop\Llama Desktop），若据此预填，会把默认路径
+   ; 用户拉回旧目录，使向 %PROGRAMFILES64%\MyLlama 的品牌迁移永不生效。旧版数据
+   ; 由安装段的 wails.migrateLegacyInstall 迁移，与所选目录无关；希望原位升级的
+   ; 自定义路径用户仍可在目录页手动输入旧目录（宏内的同目录守卫会正确处理该情况）。
+   ;
+   ; Only the current-era key is read back. Legacy-era InstallLocations are
+   ; deliberately NOT prefilled anymore: the install section migrates legacy
+   ; data regardless of the chosen directory, so the directory page defaults
+   ; to %PROGRAMFILES64%\MyLlama; users wanting an in-place upgrade can still
+   ; type their legacy dir manually (the macro's same-dir guard covers it).
    ${If} $0 != ""
        StrCpy $INSTDIR $0
    ${EndIf}
 FunctionEnd
+
+# Legacy install migration ------------------------------------------------
+#
+# Moves a superseded Llama Desktop install's data into $INSTDIR so the
+# rebranded app picks up where the old one left off:
+#   1. llama-desktop-config.json -> $INSTDIR (the app renames it to
+#      myllama-config.json on first start);
+#   2. LLM-Models\ and llama-cpp\ move in (same-volume Rename first,
+#      CopyFiles fallback — the source is only removed after the copy
+#      provably landed);
+#   3. the docs cache is skipped (it re-fetches on demand);
+#   4. when the legacy directory holds no data anymore, the
+#      migration-legacy-path.txt marker is planted and the legacy uninstaller
+#      runs silently from a temp copy, dropping its registry key; if anything
+#      failed to move, the legacy install is left fully in place (Add/Remove
+#      entry kept) — migration never blocks or fails the install.
+#
+# Marker contract: the marker is ONLY written on a complete migration.
+#   marker present   = "data moved, the app rewrites the config's recorded
+#                      absolute paths from the legacy prefix to $INSTDIR";
+#   no marker        = "legacy kept in place, the recorded legacy paths stay
+#                      valid and must be left untouched" (rewriting them would
+#                      point the model list at $INSTDIR while the models still
+#                      sit in the legacy dir).
+!macro wails.migrateLegacyDir SRC DST
+    ${If} ${FileExists} "${SRC}\*"
+        Rename "${SRC}" "${DST}"
+        ${If} ${FileExists} "${SRC}\*" ; rename failed (cross-volume or existing target)
+            CreateDirectory "${DST}"
+            CopyFiles /SILENT "${SRC}\*" "${DST}"
+            ${If} ${FileExists} "${DST}\*"
+                RMDir /r "${SRC}" ; only after a successful copy
+            ${EndIf}
+        ${EndIf}
+    ${EndIf}
+!macroend
+
+!macro wails.migrateLegacyInstall LEGACY_KEY
+    SetRegView 64
+    ReadRegStr $R9 HKLM "${LEGACY_KEY}" "InstallLocation"
+    ${If} $R9 != ""
+    ${AndIf} $R9 != "$INSTDIR" ; StrCmp compares case-insensitively
+    ${AndIf} $R9 != "$INSTDIR\"
+        DetailPrint "Migrating data from legacy install: $R9"
+        ; 1. legacy config (only when the new install has none yet)
+        ${If} ${FileExists} "$R9\llama-desktop-config.json"
+        ${AndIfNot} ${FileExists} "$INSTDIR\myllama-config.json"
+            CopyFiles /SILENT "$R9\llama-desktop-config.json" "$INSTDIR"
+        ${EndIf}
+        ; 2. model library + llama.cpp runtime (docs cache is re-fetchable: skipped)
+        !insertmacro wails.migrateLegacyDir "$R9\LLM-Models" "$INSTDIR\LLM-Models"
+        !insertmacro wails.migrateLegacyDir "$R9\llama-cpp" "$INSTDIR\llama-cpp"
+        ; 3+4. only a COMPLETE migration (legacy dir emptied) writes the
+        ;      marker and uninstalls the legacy install: the marker tells the
+        ;      app "your recorded paths were rewritten to $INSTDIR, your data
+        ;      moved". In the partial branch below no marker is written, so
+        ;      the app keeps the legacy absolute paths — still valid because
+        ;      the legacy install is left fully in place.
+        ${IfNot} ${FileExists} "$R9\*"
+            FileOpen $R8 "$INSTDIR\migration-legacy-path.txt" w
+            ${If} $R8 != ""
+                FileWrite $R8 "$R9"
+                FileClose $R8
+            ${EndIf}
+            ${If} ${FileExists} "$R9\uninstall.exe"
+                CreateDirectory "$TEMP\MyLlamaMigrate"
+                CopyFiles /SILENT "$R9\uninstall.exe" "$TEMP\MyLlamaMigrate"
+                ExecWait '"$TEMP\MyLlamaMigrate\uninstall.exe" /S _?=$R9'
+                Delete "$TEMP\MyLlamaMigrate\uninstall.exe"
+                RMDir "$TEMP\MyLlamaMigrate"
+            ${EndIf}
+            DeleteRegKey HKLM "${LEGACY_KEY}"
+        ${Else}
+            DetailPrint "Legacy data left in place ($R9): the copy did not complete, legacy install kept, recorded paths left untouched"
+        ${EndIf}
+    ${Else}
+        ; Superseded era key without a distinct install location (absent or
+        ; overlay install into the same dir): drop the stale entry.
+        DeleteRegKey HKLM "${LEGACY_KEY}"
+    ${EndIf}
+!macroend
 
 Section
     !insertmacro wails.setShellContext
@@ -119,6 +208,11 @@ Section
 
     # legacy-named binary from pre-MyLlama installers
     Delete "$INSTDIR\llama-desktop.exe"
+
+    # Legacy Llama Desktop install migration, newest era first
+    !insertmacro wails.migrateLegacyInstall "${UNINST_KEY_LEGACY_V039}"
+    !insertmacro wails.migrateLegacyInstall "${UNINST_KEY_LEGACY_V03X}"
+    !insertmacro wails.migrateLegacyInstall "${UNINST_KEY_LEGACY_V01X}"
 
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
@@ -133,9 +227,8 @@ Section
     ; 供下次覆盖安装时在 .onInit 中读回 InstallLocation。
     SetRegView 64
     WriteRegStr HKLM "${UNINST_KEY}" "InstallLocation" "$INSTDIR"
-    ; 删除已被本次安装取代的 v0.3.x 时代旧键，避免“已安装应用”出现重复条目
-    ; （旧键的 UninstallString 指向的正是本次安装覆盖后的同一 uninstall.exe）。
-    DeleteRegKey HKLM "${UNINST_KEY_LEGACY_V03X}"
+    ; 旧时代的卸载键由上方的 wails.migrateLegacyInstall 统一清理
+    ; （数据迁移成功后删除；迁移不完整时保留条目以便用户手动卸载）。
 SectionEnd
 
 Section "uninstall"

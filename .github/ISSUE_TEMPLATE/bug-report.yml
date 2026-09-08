@@ -61,7 +61,7 @@ body:
     id: logs
     attributes:
       label: Screenshots / Logs
-      description: If you have UI screenshots, API page service logs, or error messages, please attach them. **Redact sensitive information first** (`llama-desktop-config.json` may contain machine-specific paths).
+      description: If you have UI screenshots, API page service logs, or error messages, please attach them. **Redact sensitive information first** (`myllama-config.json` may contain machine-specific paths).
     validations:
       required: false
 

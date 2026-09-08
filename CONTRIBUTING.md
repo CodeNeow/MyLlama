@@ -105,7 +105,7 @@ Issues involving credentials, injection, or privilege escalation **must not** be
 
 ### 4.5 Issue Content Redaction
 
-Issue bodies must never contain tokens, secrets, or machine-specific absolute paths (such as paths from `llama-desktop-config.json`). Redact before submitting.
+Issue bodies must never contain tokens, secrets, or machine-specific absolute paths (such as paths from `myllama-config.json`). Redact before submitting.
 
 ## 5. Pull Request Workflow
 
@@ -119,5 +119,5 @@ Issue bodies must never contain tokens, secrets, or machine-specific absolute pa
 - When fixing bugs, limit changes to the fault site and its related files; do not mix in unrelated refactoring.
 - When adding or modifying backend binding methods, always update `frontend/src/wails.ts` and callers in sync.
 - New behavior must include focused tests (Go `*_test.go` / vitest); do not pass quality gates by deleting failing tests or skipping verification.
-- Do not commit generated artifacts or local config: `node_modules/`, `frontend/dist/`, `build/`, model files under `LLM-Models/`, `llama-desktop-config.json`, `*.log`.
+- Do not commit generated artifacts or local config: `node_modules/`, `frontend/dist/`, `build/`, model files under `LLM-Models/`, `myllama-config.json`, `*.log`.
 - User-visible copy is bilingual via the i18n dictionary (`lib/i18n.ts`); never hardcode UI strings.

@@ -198,7 +198,7 @@ func TestAbsServerLogPath(t *testing.T) {
 		// expectation stays deterministic (a real UserConfigDir would leak).
 		root := t.TempDir()
 		withPathsSeams(t, "linux", root, nil, nil)
-		want = filepath.Join(root, "llama-desktop", "relative-server.log")
+		want = filepath.Join(root, appDataDirName, "relative-server.log")
 	}
 	if got := absServerLogPath(); got != want {
 		t.Errorf("absServerLogPath() = %q, want %q", got, want)

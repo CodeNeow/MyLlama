@@ -46,7 +46,7 @@ func withModelScope404Server(t *testing.T) func() {
 // cwd (withTempCwd) would otherwise write the cwd-relative config file into
 // the package directory: startHFDownload's synchronous enqueue persist, each
 // goroutine's entry/terminal persists, and the pause/resume/cancel persists
-// all funnel through saveConfig, leaving core/llama-desktop-config.json
+// all funnel through saveConfig, leaving core/myllama-config.json
 // behind after go test. The cleanup drains in-flight download goroutines
 // BEFORE restoring the seam, so a trailing persist can never read the real
 // saveConfig after the test is done (same bounded non-fatal drain style as

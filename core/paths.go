@@ -10,7 +10,8 @@ package core
 // before this file existed (in practice the process cwd is the install dir).
 //
 // Non-Windows desktop platforms (darwin / linux) resolve a per-user app-data
-// base via os.UserConfigDir() + "/llama-desktop", created on first use:
+// base via os.UserConfigDir() + "/myllama", created on first use (a legacy
+// "llama-desktop" base is renamed to it once, see migrateAppDataDirName):
 // macOS .app bundles launch with cwd = "/" and Linux launchers may pick
 // arbitrary working directories, so bare names would scatter state across
 // the filesystem. Android (GOOS=android, the Wails v3 app target) has a
@@ -38,13 +39,27 @@ import (
 // (configFile, handoverFile, benchCacheFile, docsCacheDir) initialize to the
 // bare names and resolve through the *Path getters at use time; the default
 // directories resolve through defaultModelsDir / defaultLlamaCppDir.
+//
+// The legacy*Name constants are the pre-MyLlama-rebrand names. They are
+// migration sources only: each consumer renames/copy-falls-back from the
+// legacy name to the new one on first use (see migrateLegacyConfig,
+// migrateLegacyBenchCache, migrateLegacyDocsCacheDir, migrateAppDataDirName,
+// readHandover) and never writes the legacy names again.
 const (
-	configFileName     = "llama-desktop-config.json"
-	handoverFileName   = "llama-desktop-server-handover.json"
-	benchCacheFileName = "llama-desktop-benchcache.json"
-	docsCacheDirName   = "llama-desktop-docscache"
+	configFileName     = "myllama-config.json"
+	handoverFileName   = "myllama-server-handover.json"
+	benchCacheFileName = "myllama-benchcache.json"
+	docsCacheDirName   = "myllama-docscache"
 	modelsDirName      = "LLM-Models"
 	llamaCppDirName    = "llama-cpp"
+
+	// Legacy (pre-rebrand) names, kept solely as migration sources.
+	legacyConfigFileName     = "llama-desktop-config.json"
+	legacyHandoverFileName   = "llama-desktop-server-handover.json"
+	legacyBenchCacheFileName = "llama-desktop-benchcache.json"
+	legacyDocsCacheDirName   = "llama-desktop-docscache"
+	legacyAppDataDirName     = "llama-desktop"
+	legacyGuiConfigFileName  = "llama-gui-config.json"
 )
 
 // Injection seams (same style as cmdTimeout / benchMeasureFn): tests swap
@@ -102,7 +117,8 @@ func appDataDir() string {
 			log.Println("[WARN] User config dir is empty, keeping cwd-relative app paths")
 			return
 		}
-		base := filepath.Join(root, "llama-desktop")
+		base := filepath.Join(root, appDataDirName)
+		migrateAppDataDirName(base)
 		if err := pathsMkdirAll(base, 0755); err != nil {
 			log.Printf("[WARN] Cannot create app data dir %s, keeping cwd-relative app paths: %v", base, err)
 			return
@@ -110,6 +126,34 @@ func appDataDir() string {
 		pathsBase = base
 	})
 	return pathsBase
+}
+
+// appDataDirName is the per-user app-data directory name under
+// os.UserConfigDir() (non-Windows desktop platforms only).
+const appDataDirName = "myllama"
+
+// migrateAppDataDirName performs the one-time llama-desktop → myllama base
+// directory rename on non-Windows desktop platforms: when the NEW base does
+// not exist but the legacy one (same parent) does, the legacy directory is
+// renamed wholesale (same parent = atomic), carrying every state file inside
+// it to the new layout; the per-file name migrations then apply on top. When
+// the rename fails, the legacy directory is left in place ([WARN]) and the
+// new directory is created empty — caches and config regenerate, no data is
+// destroyed. A no-op when the new base already exists or no legacy directory
+// exists.
+func migrateAppDataDirName(base string) {
+	if _, err := os.Stat(base); err == nil {
+		return
+	}
+	legacy := filepath.Join(filepath.Dir(base), legacyAppDataDirName)
+	if fi, err := os.Stat(legacy); err != nil || !fi.IsDir() {
+		return
+	}
+	if err := os.Rename(legacy, base); err != nil {
+		log.Printf("[WARN] Cannot rename legacy app data dir %s -> %s, starting fresh: %v", legacy, base, err)
+		return
+	}
+	log.Printf("[OK] Renamed legacy app data dir %s -> %s", legacy, base)
 }
 
 // resolveStateFile resolves a state-file (or directory) name to its active

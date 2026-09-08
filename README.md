@@ -307,12 +307,14 @@ Windows 无头（API 路由）模式下端点照常可用，另有仅回环可�
 
 ## 🔧 配置
 
-运行时配置持久化在 `llama-desktop-config.json`，存放位置随平台不同（由 `core/paths.go` 统一解析）：
+运行时配置持久化在 `myllama-config.json`，存放位置随平台不同（由 `core/paths.go` 统一解析）：
 
-- **Windows**：进程工作目录（通常为安装目录）；
-- **Linux**：应用数据目录 `~/.config/llama-desktop/`；
-- **macOS**（源码构建）：`~/Library/Application Support/llama-desktop/`；
+- **Windows**：进程工作目录（通常为安装目录 `%PROGRAMFILES64%\MyLlama`）；
+- **Linux**：应用数据目录 `~/.config/myllama/`；
+- **macOS**（源码构建）：`~/Library/Application Support/myllama/`；
 - **Android**：应用私有数据目录（`/data/data/<包名>/files/`）。
+
+旧版本数据自动迁移：更早期的 `llama-desktop-config.json` / `llama-gui-config.json` 会在首次启动时自动更名迁移（配置、模型库与 llama.cpp 运行时随迁）；Windows 安装程序也会自动迁移旧版 Llama Desktop 安装目录的数据，并静默卸载旧版条目。
 
 主要字段：
 

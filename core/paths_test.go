@@ -65,18 +65,18 @@ func TestAppDataDirWindowsKeepsCwdRelative(t *testing.T) {
 	if got := defaultLlamaCppDir(); got != llamaCppDirName {
 		t.Errorf("defaultLlamaCppDir on windows = %q, want bare %q", got, llamaCppDirName)
 	}
-	if _, err := os.Stat(filepath.Join(root, "llama-desktop")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, appDataDirName)); !os.IsNotExist(err) {
 		t.Errorf("windows branch must not create the app-data base, stat err = %v", err)
 	}
 }
 
 // TestResolveStateFileUnderAppDataNonWindows verifies the non-Windows desktop
-// branch: the base directory <UserConfigDir>/llama-desktop is created on
+// branch: the base directory <UserConfigDir>/myllama is created on
 // first use and every name resolves beneath it, stable across calls.
 func TestResolveStateFileUnderAppDataNonWindows(t *testing.T) {
 	root := t.TempDir()
 	withPathsSeams(t, "linux", root, nil, nil)
-	wantBase := filepath.Join(root, "llama-desktop")
+	wantBase := filepath.Join(root, appDataDirName)
 	if got := appDataDir(); got != wantBase {
 		t.Fatalf("appDataDir = %q, want %q", got, wantBase)
 	}
@@ -237,8 +237,8 @@ func TestResolveServerLogPath(t *testing.T) {
 	old := serverLogFile
 	t.Cleanup(func() { serverLogFile = old })
 
-	serverLogFile = "llama-desktop-server.log"
-	if got := resolveServerLogPath(); got != filepath.Join(files, "llama-desktop-server.log") {
+	serverLogFile = "myllama-server.log"
+	if got := resolveServerLogPath(); got != filepath.Join(files, "myllama-server.log") {
 		t.Errorf("resolveServerLogPath(bare) = %q, want under files dir", got)
 	}
 
@@ -249,7 +249,7 @@ func TestResolveServerLogPath(t *testing.T) {
 	}
 }
 
-// ─── Legacy cwd config migration (non-Windows only) ──────────────
+// ─── Legacy config migration (era renames) ───────────────────────
 
 // withLegacyMigrationSeams combines a temp cwd, non-Windows path seams and a
 // default (unresolved) configFile so migrateLegacyConfig targets the
@@ -266,13 +266,14 @@ func withLegacyMigrationSeams(t *testing.T, goos string) (string, *bytes.Buffer)
 }
 
 // TestMigrateCwdConfigToAppData verifies the non-Windows migration: a legacy
-// cwd-relative llama-desktop-config.json is copied into the app-data base
-// ([INFO], source kept), matching the design constraint that only the config
-// migrates — caches and the handover record regenerate on demand.
+// cwd-relative llama-desktop-config.json (pre-app-data layout) is renamed
+// onto the app-data base config path. The source is consumed by the rename;
+// when a rename is impossible the chain degrades to a copy that keeps the
+// source in place.
 func TestMigrateCwdConfigToAppData(t *testing.T) {
 	tmp, buf := withLegacyMigrationSeams(t, "linux")
 	legacy := []byte(`{"theme":"dark"}`)
-	if err := os.WriteFile(filepath.Join(tmp, configFileName), legacy, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, legacyConfigFileName), legacy, 0644); err != nil {
 		t.Fatal(err)
 	}
 	migrateLegacyConfig()
@@ -284,24 +285,24 @@ func TestMigrateCwdConfigToAppData(t *testing.T) {
 	if !bytes.Equal(data, legacy) {
 		t.Errorf("migrated content = %q, want %q", data, legacy)
 	}
-	if _, err := os.Stat(filepath.Join(tmp, configFileName)); err != nil {
-		t.Errorf("legacy cwd config must be kept, stat err = %v", err)
+	if _, err := os.Stat(filepath.Join(tmp, legacyConfigFileName)); !os.IsNotExist(err) {
+		t.Errorf("legacy cwd config should be consumed by the rename, stat err = %v", err)
 	}
-	if !strings.Contains(buf.String(), "[INFO]") {
-		t.Errorf("migration should log [INFO], got: %s", buf.String())
+	if !strings.Contains(buf.String(), "[OK]") {
+		t.Errorf("migration should log [OK], got: %s", buf.String())
 	}
 }
 
 // TestMigrateCwdConfigToAppDataSkippedWhenTargetExists verifies the
 // existence short-circuit: an already-present config at the target location
-// is never overwritten by the legacy copy.
+// is never overwritten by the legacy rename.
 func TestMigrateCwdConfigToAppDataSkippedWhenTargetExists(t *testing.T) {
 	tmp, buf := withLegacyMigrationSeams(t, "linux")
 	existing := []byte(`{"theme":"light"}`)
 	if err := os.WriteFile(configFilePath(), existing, 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(tmp, configFileName), []byte(`{"theme":"dark"}`), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, legacyConfigFileName), []byte(`{"theme":"dark"}`), 0644); err != nil {
 		t.Fatal(err)
 	}
 	migrateLegacyConfig()
@@ -312,37 +313,41 @@ func TestMigrateCwdConfigToAppDataSkippedWhenTargetExists(t *testing.T) {
 	if !bytes.Equal(data, existing) {
 		t.Errorf("existing target overwritten: got %q, want %q", data, existing)
 	}
-	if strings.Contains(buf.String(), "[INFO]") {
+	if strings.Contains(buf.String(), "Migrated legacy config") {
 		t.Errorf("no migration should run when the target exists, got: %s", buf.String())
 	}
 }
 
-// TestMigrateCwdConfigWindowsNoop verifies the Windows branch performs no
-// cwd→app-data migration: the bare cwd-relative config is both source and
-// target, so the file stays untouched and nothing is logged.
-func TestMigrateCwdConfigWindowsNoop(t *testing.T) {
+// TestMigrateLegacyConfigWindowsRenamesEraFile verifies the Windows branch of
+// the era rename: with cwd-relative paths (the install-dir layout), a legacy
+// llama-desktop-config.json in the cwd is renamed onto the active
+// myllama-config.json in the same directory (atomic same-dir rename).
+func TestMigrateLegacyConfigWindowsRenamesEraFile(t *testing.T) {
 	tmp, buf := withLegacyMigrationSeams(t, "windows")
 	legacy := []byte(`{"theme":"dark"}`)
-	if err := os.WriteFile(filepath.Join(tmp, configFileName), legacy, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, legacyConfigFileName), legacy, 0644); err != nil {
 		t.Fatal(err)
 	}
 	migrateLegacyConfig()
 	data, err := os.ReadFile(filepath.Join(tmp, configFileName))
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("active config missing after rename: %v", err)
 	}
 	if !bytes.Equal(data, legacy) {
-		t.Errorf("windows migration must be a no-op, content changed to %q", data)
+		t.Errorf("renamed content = %q, want %q", data, legacy)
 	}
-	if strings.Contains(buf.String(), "Migrated legacy cwd config") {
-		t.Errorf("windows must not log a cwd config migration, got: %s", buf.String())
+	if _, err := os.Stat(filepath.Join(tmp, legacyConfigFileName)); !os.IsNotExist(err) {
+		t.Errorf("legacy config should be gone after the rename, stat err = %v", err)
+	}
+	if !strings.Contains(buf.String(), "[OK]") {
+		t.Errorf("migration should log [OK], got: %s", buf.String())
 	}
 }
 
-// TestMigrateGuiConfigToAppDataNonWindows verifies the unchanged llama-gui
-// migration now targets the app-data base on non-Windows platforms: the
+// TestMigrateGuiConfigToAppDataNonWindows verifies the llama-gui-era
+// migration targets the app-data base on non-Windows platforms: the
 // cwd-relative llama-gui-config.json content lands at the resolved config
-// path and the source stays in place.
+// path via rename and the source is consumed.
 func TestMigrateGuiConfigToAppDataNonWindows(t *testing.T) {
 	tmp, _ := withLegacyMigrationSeams(t, "linux")
 	gui := []byte(`{"theme":"dark","trayEnabled":false}`)
@@ -357,7 +362,7 @@ func TestMigrateGuiConfigToAppDataNonWindows(t *testing.T) {
 	if !bytes.Equal(data, gui) {
 		t.Errorf("gui migration content = %q, want %q", data, gui)
 	}
-	if _, err := os.Stat(filepath.Join(tmp, legacyConfigFile)); err != nil {
-		t.Errorf("gui-era source must be kept, stat err = %v", err)
+	if _, err := os.Stat(filepath.Join(tmp, legacyConfigFile)); !os.IsNotExist(err) {
+		t.Errorf("gui-era source should be consumed by the rename, stat err = %v", err)
 	}
 }

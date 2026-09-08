@@ -7,7 +7,8 @@ package core
 // 12 GB/s single-channel DDR4 machine from a 60 GB/s dual-channel DDR5 one.
 // This file measures the machine's real all-core streaming read bandwidth
 // once, caches the result keyed by a hardware fingerprint
-// (llama-desktop-benchcache.json, atomic write) and feeds it into
+// (myllama-benchcache.json, atomic write; legacy llama-desktop-benchcache.json
+// is renamed on first load) and feeds it into
 // tuneModelConfig as hw.RAMBandwidthGBs, where it gates exactly one
 // preference flip: a cramped full-offload plan vs the cpu-moe plan (see
 // autotune.go). Every failure path degrades to "unknown" (bandwidth 0),
@@ -99,6 +100,32 @@ func benchCacheFilePath() string {
 		return benchCacheFile
 	}
 	return resolveStateFile(benchCacheFileName)
+}
+
+// migrateLegacyBenchCache performs the one-time llama-desktop → myllama
+// cache-file rename so an upgraded install keeps its measured bandwidth
+// instead of re-benchmarking: when the new-name file is absent and the
+// legacy-name file exists, the legacy file is renamed (a pure cache — a
+// rename failure only degrades to a cold cache and one re-measure, [WARN]).
+// A no-op when an explicit benchCacheFile override is active (tests) or
+// either file is missing.
+func migrateLegacyBenchCache() {
+	path := benchCacheFilePath()
+	if _, err := os.Stat(path); err == nil {
+		return
+	}
+	if benchCacheFile != benchCacheFileName {
+		return
+	}
+	legacy := resolveStateFile(legacyBenchCacheFileName)
+	if _, err := os.Stat(legacy); err != nil {
+		return
+	}
+	if err := os.Rename(legacy, path); err != nil {
+		log.Printf("[WARN] tune: cannot migrate legacy RAM bandwidth cache %s: %v (re-measuring)", legacy, err)
+		return
+	}
+	log.Printf("[OK] tune: migrated legacy RAM bandwidth cache %s -> %s", legacy, path)
 }
 
 // benchSink keeps every pass checksum alive: folding it into a package-level
@@ -294,6 +321,7 @@ type benchCachePayload struct {
 // cross-machine fingerprint, garbage value — is a miss. A corrupt file is
 // only ever a [WARN]: cache trouble must never fail the tune.
 func loadBenchCache(fingerprint string) (float64, bool) {
+	migrateLegacyBenchCache()
 	data, err := os.ReadFile(benchCacheFilePath())
 	if err != nil {
 		if !os.IsNotExist(err) {

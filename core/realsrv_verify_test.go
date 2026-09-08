@@ -32,8 +32,8 @@ func TestRealServerVerify(t *testing.T) {
 	}
 
 	tmp := withTempCwd(t)
-	serverLogFile = filepath.Join(tmp, "llama-desktop-server.log")
-	t.Cleanup(func() { serverLogFile = "llama-desktop-server.log" })
+	serverLogFile = filepath.Join(tmp, "myllama-server.log")
+	t.Cleanup(func() { serverLogFile = "myllama-server.log" })
 	pinDefaultDir(t, &defaultLlamaCppDir, serverDir)
 	pinDefaultDir(t, &defaultModelsDir, modelsDir)
 

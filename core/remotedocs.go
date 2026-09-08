@@ -143,6 +143,34 @@ func docsCacheDirPath() string {
 	return resolveStateFile(docsCacheDirName)
 }
 
+// migrateLegacyDocsCacheDir performs the one-time llama-desktop-docscache →
+// myllama-docscache directory rename so an upgraded install keeps its cached
+// sections: when the new-name directory is absent and the legacy-name
+// directory exists, the legacy directory is renamed. Any failure (or an
+// explicit docsCacheDir override, i.e. tests) is a no-op — the cache is
+// re-fetchable, so the use sites' MkdirAll then simply creates the new empty
+// directory and nothing is lost. A no-op when the new directory already
+// exists. Called at the start of getRemoteDoc (inside docsMu), so the rename
+// can never race a concurrent cache write.
+func migrateLegacyDocsCacheDir() {
+	dir := docsCacheDirPath()
+	if fi, err := os.Stat(dir); err == nil && fi.IsDir() {
+		return
+	}
+	if docsCacheDir != docsCacheDirName {
+		return
+	}
+	legacy := resolveStateFile(legacyDocsCacheDirName)
+	if fi, err := os.Stat(legacy); err != nil || !fi.IsDir() {
+		return
+	}
+	if err := os.Rename(legacy, dir); err != nil {
+		log.Printf("[WARN] remotedocs: cannot migrate legacy doc cache dir %s: %v (re-fetching)", legacy, err)
+		return
+	}
+	log.Printf("[OK] remotedocs: migrated legacy doc cache dir %s -> %s", legacy, dir)
+}
+
 // ─── Cache meta (meta.json) ──────────────────────────────────────
 
 // docsCacheEntry records when a section's cached content was fetched.
@@ -274,6 +302,9 @@ func getRemoteDoc(lang, sectionID string, force bool) (RemoteDocResult, error) {
 
 	docsMu.Lock()
 	defer docsMu.Unlock()
+
+	// One-time legacy cache-directory rename before any path is resolved.
+	migrateLegacyDocsCacheDir()
 
 	key := lang + "-" + sectionID
 	contentPath := filepath.Join(docsCacheDirPath(), key+".md")

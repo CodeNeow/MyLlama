@@ -23,7 +23,7 @@ func TestRunCmdTrimsOutput(t *testing.T) {
 // TestRunCmdMissingBinary verifies runCmd returns an empty string instead of panicking
 // when the command does not exist.
 func TestRunCmdMissingBinary(t *testing.T) {
-	out := runCmd("llama-desktop-no-such-binary-xyz", "--version")
+	out := runCmd("myllama-no-such-binary-xyz", "--version")
 	if out != "" {
 		t.Fatalf("non-existent command should return empty output, got: %q", out)
 	}

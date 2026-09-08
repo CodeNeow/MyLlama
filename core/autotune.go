@@ -1161,7 +1161,7 @@ func tunePlanTarget(gpus []GPUInfo, cudaAvailable bool, deviceID string) tuneTar
 // (see tunePlanTarget): the serving GPU selected in the server config by UUID
 // when present and matching, else the largest-VRAM GPU. RAMBandwidthGBs comes
 // from the measured-bandwidth calibration (getCalibratedRAMBandwidth in
-// benchbw.go: cached per hardware fingerprint in llama-desktop-benchcache.json,
+// benchbw.go: cached per hardware fingerprint in myllama-benchcache.json,
 // single-flight); 0 on failure keeps every tuner rule on its static behavior.
 func (a *App) tuneHardware() tuneHardware {
 	cpu := a.GetCPU()

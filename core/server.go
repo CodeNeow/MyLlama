@@ -73,8 +73,10 @@ var serverLogTail *serverLogTailer
 // t.TempDir() by assigning an absolute path, which passes through unchanged.
 // Adopting a handed-over server overwrites it with the absolute path from the
 // handover record (written under serverMu at the same lifecycle moments that
-// touch the other server globals).
-var serverLogFile = "llama-desktop-server.log"
+// touch the other server globals). Transient per run: unlike the other state
+// files there is no legacy-name migration (the pre-rebrand
+// llama-desktop-server.log is simply abandoned).
+var serverLogFile = "myllama-server.log"
 
 // Tailer tuning knobs, declared as vars (same style as cmdTimeout) so tests
 // can shrink the intervals or inject a fake clock.

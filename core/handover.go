@@ -32,6 +32,17 @@ func handoverFilePath() string {
 	return resolveStateFile(handoverFileName)
 }
 
+// handoverLegacyPath resolves the pre-rebrand handover-record name for the
+// one-version read transition, or "" when an explicit handoverFile override
+// is active (tests) — the record is transient state, so it is read from the
+// legacy name when the new one is absent but never renamed (see readHandover).
+func handoverLegacyPath() string {
+	if handoverFile != handoverFileName {
+		return ""
+	}
+	return resolveStateFile(legacyHandoverFileName)
+}
+
 // handoverRecord is the JSON payload of the handover file: the llama-server
 // child pid, the port it listens on, when the record was written, the server
 // process's real creation time, and the absolute path of the server log file.
@@ -83,8 +94,19 @@ func writeHandover(pid, port int) error {
 // readHandover loads the handover record. A missing file and a corrupt file
 // are both errors; callers distinguish missing via errors.Is(err, fs.ErrNotExist)
 // and treat anything else as a stale record (delete + start fresh).
+// One-version transition: when the new-name record is absent, the pre-rebrand
+// llama-desktop-server-handover.json is read in place (no rename — the record
+// is transient; the next writeHandover writes the new name and removeHandover
+// clears both).
 func readHandover() (*handoverRecord, error) {
 	data, err := os.ReadFile(handoverFilePath())
+	if err != nil && os.IsNotExist(err) {
+		if legacy := handoverLegacyPath(); legacy != "" {
+			if legacyData, legacyErr := os.ReadFile(legacy); legacyErr == nil {
+				data, err = legacyData, nil
+			}
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -96,9 +118,17 @@ func readHandover() (*handoverRecord, error) {
 }
 
 // removeHandover deletes the handover record; a missing file is not an error.
+// Both the active name and the pre-rebrand legacy name are removed, so a
+// record consumed from the legacy path cannot resurface after the successor
+// writes and later deletes the new-name record.
 func removeHandover() error {
 	if err := os.Remove(handoverFilePath()); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("remove handover file: %w", err)
+	}
+	if legacy := handoverLegacyPath(); legacy != "" {
+		if err := os.Remove(legacy); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove legacy handover file: %w", err)
+		}
 	}
 	return nil
 }

@@ -456,7 +456,7 @@ func installUpdateNow(quit func()) error {
 // up to downloadRetryCount times (each attempt restarts clean); the error is
 // surfaced for a manual retry only after the retries are exhausted.
 func downloadUpdateWithResume(ctx context.Context, url string, totalSize int64) (string, error) {
-	tmpFile, err := os.CreateTemp(resolveTempDir(), "llama-desktop-update-*.exe")
+	tmpFile, err := os.CreateTemp(resolveTempDir(), "myllama-update-*.exe")
 	if err != nil {
 		return "", fmt.Errorf(tr("创建临时文件失败: %w", "failed to create temporary file: %w"), err)
 	}

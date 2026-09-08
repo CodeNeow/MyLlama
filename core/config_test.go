@@ -520,14 +520,14 @@ func TestLoadConfigMissingFile(t *testing.T) {
 	loadConfig() // must not panic
 }
 
-// TestLoadConfigMigratesLegacyFile verifies the llama-gui → llama-desktop rename migration:
-// when the new file does not exist but the old one does, loadConfig copies old-file content
-// into the new file and then loads it (user settings like theme survive). Migration only
-// reads old and writes new — it does not delete or rename the source file.
-// The old file is kept in place with unchanged contents: wails dev's file watcher monitors
-// the project root; deleting/renaming a root-directory file during startup triggers a
-// Wails CLI GetFileAttributesEx race crash. Migration is skipped when the new file already
-// exists, preventing old-file content from overwriting the new config.
+// TestLoadConfigMigratesLegacyFile verifies the llama-gui → myllama rename
+// migration (the oldest link of the era chain): when the new file does not
+// exist but the old one does, loadConfig renames the old file to the new name
+// and then loads it (user settings like theme survive). The source is
+// consumed by the rename; a rename failure degrades to a copy that keeps the
+// source in place (see migrateConfigFile). Migration is skipped when the new
+// file already exists, preventing old-file content from overwriting the new
+// config.
 func TestLoadConfigMigratesLegacyFile(t *testing.T) {
 	withTempCwd(t)
 	saveConfigState(t)
@@ -551,17 +551,13 @@ func TestLoadConfigMigratesLegacyFile(t *testing.T) {
 	if string(newData) != string(legacyData) {
 		t.Errorf("new config file content should be byte-identical to old file, got %q", newData)
 	}
-	// behavior invariant: old file is kept in place with unchanged contents (keeping it avoids
-	// wails dev file-watcher race); migration no longer deletes or renames the source file.
-	keptData, err := os.ReadFile(legacyConfigFile)
-	if err != nil {
-		t.Fatalf("old file should remain in place after migration: %v", err)
-	}
-	if string(keptData) != string(legacyData) {
-		t.Errorf("old file content must remain unchanged, got %q", keptData)
+	// behavior invariant: the legacy source is consumed by the rename (the
+	// one-time era migration), so only the new-name file remains.
+	if _, err := os.Stat(legacyConfigFile); !os.IsNotExist(err) {
+		t.Errorf("legacy file should be gone after the rename migration, stat err = %v", err)
 	}
 
-	// when new file already exists, it is loaded preferentially; old file stays unchanged
+	// when new file already exists, it is loaded preferentially; old file stays untouched
 	if err := os.WriteFile(configFile, []byte(`{"theme":"light"}`), 0644); err != nil {
 		t.Fatal(err)
 	}

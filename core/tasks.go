@@ -40,7 +40,7 @@ var dlTasksMu sync.Mutex
 var dlTaskCounter int
 
 // PersistedDlTask is the persisted form of download queue tasks (written to
-// llama-desktop-config.json). Differs from DlTask: runtime state such as URL /
+// myllama-config.json). Differs from DlTask: runtime state such as URL /
 // ctx / cancel / resumeCh is not persisted; the URL is rebuilt on loadConfig
 // restore from Source + buildModelDownloadURL.
 type PersistedDlTask struct {
@@ -81,7 +81,7 @@ var lastTaskPersistMu sync.Mutex
 // renameFile / idleReadTimeout) so tests that start download tasks can swap
 // in a no-op: without it, a task goroutine's async persist can run after the
 // test restored the original working directory and write the cwd-relative
-// config file into the package directory (core/llama-desktop-config.json).
+// config file into the package directory (core/myllama-config.json).
 // Production value is saveConfig, so runtime behavior is unchanged.
 var persistTasks = saveConfig
 

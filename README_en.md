@@ -307,12 +307,14 @@ In Windows headless (API-route) mode the endpoint stays available, plus a loopba
 
 ## 🔧 Configuration
 
-Runtime settings are persisted to `llama-desktop-config.json`, whose location differs per platform (resolved centrally in `core/paths.go`):
+Runtime settings are persisted to `myllama-config.json`, whose location differs per platform (resolved centrally in `core/paths.go`):
 
-- **Windows**: the process working directory (typically the install directory);
-- **Linux**: the app-data directory `~/.config/llama-desktop/`;
-- **macOS** (source builds): `~/Library/Application Support/llama-desktop/`;
+- **Windows**: the process working directory (typically the install directory `%PROGRAMFILES64%\MyLlama`);
+- **Linux**: the app-data directory `~/.config/myllama/`;
+- **macOS** (source builds): `~/Library/Application Support/myllama/`;
 - **Android**: the app-private data directory (`/data/data/<package>/files/`).
+
+Legacy data migrates automatically: older `llama-desktop-config.json` / `llama-gui-config.json` files are renamed on first launch (config, model library and llama.cpp runtime all carry over); the Windows installer also migrates a legacy Llama Desktop install's data into the new install directory and silently uninstalls the legacy entry.
 
 Key fields:
 

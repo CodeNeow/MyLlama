@@ -90,8 +90,8 @@ func runServiceChainE2E(t *testing.T, direct bool) {
 	// resolveServerLogPath) all hit them. The model lands under the scanned
 	// directory's <author>/<file>.gguf layout that scanModelsDir expects.
 	tmp := withTempCwd(t)
-	serverLogFile = filepath.Join(tmp, "llama-desktop-server.log")
-	t.Cleanup(func() { serverLogFile = "llama-desktop-server.log" })
+	serverLogFile = filepath.Join(tmp, "myllama-server.log")
+	t.Cleanup(func() { serverLogFile = "myllama-server.log" })
 
 	modelsDir := filepath.Join(tmp, "LLM-Models")
 	if err := os.MkdirAll(filepath.Join(modelsDir, "tinyllamas"), 0o755); err != nil {

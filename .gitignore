@@ -36,6 +36,10 @@ llama-desktop-server-handover.json
 llama-desktop-benchcache.json
 llama-desktop-docscache/
 llama-gui-config.json
+myllama-config.json
+myllama-server-handover.json
+myllama-benchcache.json
+myllama-docscache/
 .codegraph
 .zcode/plans/
 .mimosa/

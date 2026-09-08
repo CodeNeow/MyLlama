@@ -4,14 +4,16 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 )
 
 // ─── Config persistence ─────────────────────────────────────────
-// Persisted app config (llama-desktop-config.json): schema types, load/save with
-// legacy migration, and the guarded in-memory app-state variables.
+// Persisted app config (myllama-config.json): schema types, load/save with
+// legacy migration (llama-desktop- and llama-gui-era files), and the guarded
+// in-memory app-state variables.
 
 // modelDownloadDirOverride is the user-chosen download path for new model
 // downloads (empty means unset, use the default modelsDir). Distinct from
@@ -85,12 +87,13 @@ func configFilePath() string {
 	return resolveStateFile(configFileName)
 }
 
-// legacyConfigFile is the config filename from before the llama-gui →
-// llama-desktop rename. It serves only as a one-shot migration source (see
-// migrateLegacyConfig): when the new file does not exist but the old one does,
-// it is renamed wholesale and reused, preserving theme / directories / model
-// params / download queue for existing users losslessly.
-var legacyConfigFile = "llama-gui-config.json"
+// legacyConfigFile is the config filename from the llama-gui era (the
+// oldest link of the migration chain, see migrateLegacyConfig). It serves
+// only as a one-shot migration source: when the new file does not exist but
+// an old one does, the old file is renamed (copy as fallback) to the new
+// name and reused, preserving theme / directories / model params / download
+// queue for existing users losslessly.
+var legacyConfigFile = legacyGuiConfigFileName
 
 // renameFile is a test injection point (same style as configFile), used to
 // simulate the branch where renaming the temp file after download fails (#10).
@@ -184,68 +187,221 @@ type ModelConfig struct {
 	// still load harmlessly and the stale keys are dropped on the next save.
 }
 
-// migrateLegacyConfig copies older config files forward to the active config
-// path (configFilePath) before loadConfig reads it, newest source first:
+// migrateLegacyConfig migrates older config files forward to the active
+// config path (configFilePath) before loadConfig reads it. The fallback /
+// migration chain, newest era first:
 //
-//  1. Non-Windows only: a legacy cwd-relative llama-desktop-config.json (the
-//     pre-app-data layout, see paths.go) is copied into the app-data base;
-//     [INFO]-logged, the source file is kept. On Windows this stage never
-//     runs (the active path is the same cwd-relative name — zero behavior
-//     change).
-//  2. Any platform: the llama-gui-era llama-gui-config.json is copied to the
-//     active config path ([OK]-logged, unchanged behavior).
+//	myllama-config.json (active) ← llama-desktop-config.json ← llama-gui-config.json
 //
-// Both stages copy instead of move (source stays in place): wails dev's file
-// watcher watches the project root, and deleting/renaming root files during
-// startup triggers a GetFileAttributesEx race in the Wails CLI that crashes
-// the run; copying never deletes the source, the new file's existence
-// short-circuits, and a leftover old file has no side effects — migration
-// re-triggers only if the user deletes the new file. Failures only log a
-// warning and fall back to loadConfig's defaults, never blocking startup.
+// Sources, probed in order:
 //
-// Migration asymmetry (by design): only the config file migrates. The other
-// state files are caches or transient state that regenerate on demand — the
-// bench cache re-benchmarks, the docs cache re-fetches, and the handover
-// record only matters within a single GUI↔headless switch — so none of them
-// are copied to the app-data base.
+//  1. The llama-desktop-era name at its resolved location (bare
+//     cwd-relative on Windows — the install dir; inside the app-data base on
+//     non-Windows / Android — the base directory itself was already renamed
+//     from "llama-desktop" to "myllama" by migrateAppDataDirName, so the
+//     file inside carries the old name).
+//  2. The bare cwd-relative llama-desktop-era name (pre-app-data layout,
+//     non-Windows only; identical to source 1 on Windows and skipped there).
+//  3. The llama-gui-era file (bare cwd-relative, the pre-rebrand behavior).
+//
+// The first hit is renamed onto the active path (same directory = atomic);
+// when the rename is impossible (cross-device etc.) it degrades to a copy
+// with the source left in place. Migration is skipped when the active file
+// already exists. Failures only log a warning and fall back to loadConfig's
+// defaults, never blocking startup.
+//
+// Historical note: before the MyLlama rebrand this function copied instead
+// of renamed, because wails dev's file watcher watches the project root and
+// renaming root files during startup could crash the Wails CLI. The rename
+// is one-shot per install (the new file's existence short-circuits every
+// later start) and the copy fallback keeps the source in place whenever the
+// rename fails, so the watcher-safe behavior remains available on failure.
+//
+// Migration asymmetry (by design): only the config file and the app-data
+// directory rename. The other state files are caches or transient state that
+// regenerate on demand — the bench cache re-benchmarks (but is still renamed,
+// it is cheap), the docs cache re-fetches, and the handover record only
+// matters within a single GUI↔headless switch (read via its legacy-name
+// fallback, never renamed).
 func migrateLegacyConfig() {
 	target := configFilePath()
 	if _, err := os.Stat(target); err == nil {
 		return
 	}
-	// Stage 1: pre-app-data cwd config (non-Windows only). The source is the
-	// bare cwd-relative name, deliberately not run through resolveStateFile.
-	if base := appDataDir(); base != "" {
-		if data, err := os.ReadFile(configFileName); err == nil {
-			if err := atomicWriteFile(target, data, 0644); err != nil {
-				log.Printf("[WARN] Failed to migrate legacy cwd config %s -> %s: %v", configFileName, target, err)
-				return
-			}
-			log.Printf("[INFO] Migrated legacy cwd config %s -> %s (source kept)", configFileName, target)
-			return
+	// Source 1: previous-era name at the resolved location.
+	src := resolveStateFile(legacyConfigFileName)
+	if migrateConfigFile(src, target) {
+		return
+	}
+	// Source 2: bare cwd-relative name of the same era (pre-app-data layout,
+	// distinct from source 1 only on non-Windows platforms).
+	if src != legacyConfigFileName && migrateConfigFile(legacyConfigFileName, target) {
+		return
+	}
+	// Source 3: llama-gui era.
+	migrateConfigFile(legacyConfigFile, target)
+}
+
+// migrateConfigFile migrates one legacy config source to the active target
+// path: rename when possible (same directory = atomic), copy as fallback
+// (source kept). Reports whether the migration happened; a missing source is
+// silently not a migration.
+func migrateConfigFile(src, dst string) bool {
+	if src == dst {
+		return false
+	}
+	if _, err := os.Stat(src); err != nil {
+		return false
+	}
+	if err := os.Rename(src, dst); err == nil {
+		log.Printf("[OK] Migrated legacy config %s -> %s (renamed)", src, dst)
+		return true
+	}
+	// Rename failed (cross-device, lock, ...): copy instead, keeping the
+	// source in place — the pre-rebrand behavior and the wails-dev-safe path.
+	data, err := os.ReadFile(src)
+	if err != nil {
+		log.Printf("[WARN] Failed to migrate legacy config %s: %v", src, err)
+		return false
+	}
+	if err := atomicWriteFile(dst, data, 0644); err != nil {
+		log.Printf("[WARN] Failed to migrate legacy config %s: %v", src, err)
+		return false
+	}
+	log.Printf("[OK] Migrated legacy config %s -> %s (copied, source kept)", src, dst)
+	return true
+}
+
+// legacyPathMarkerName is the marker file the Windows NSIS installer plants in
+// the install directory (the process cwd on Windows) after copying a legacy
+// Llama Desktop install's data over: its content is the legacy install
+// directory's absolute path (single line). The app consumes it once at
+// startup to rewrite persisted absolute paths from the legacy prefix to the
+// new install dir, then deletes the marker.
+const legacyPathMarkerName = "migration-legacy-path.txt"
+
+// applyLegacyPathMarker consumes the installer-planted legacy-path marker:
+// reads the legacy install dir from it, rewrites every persisted absolute
+// path under that prefix to the current working directory (the new install
+// dir), persists the rewritten config, and deletes the marker — always, even
+// when there is nothing to rewrite (empty content, marker naming the cwd, or
+// no matching paths), so a broken marker can never re-trigger every start.
+// The marker only ever exists on Windows (planted by the installer), so the
+// path matching inside is case-insensitive without a platform gate.
+func applyLegacyPathMarker(cfg appConfig) appConfig {
+	data, err := os.ReadFile(legacyPathMarkerName)
+	if err != nil {
+		return cfg // no marker: fresh install or already consumed
+	}
+	legacy := strings.TrimSpace(string(data))
+	cwd, err := os.Getwd()
+	if err != nil {
+		cwd = ""
+	}
+	removeLegacyPathMarker()
+	if legacy == "" {
+		log.Println("[INFO] Empty legacy-path migration marker, ignored")
+		return cfg
+	}
+	if cwd != "" && sameDirPath(legacy, cwd) {
+		// The legacy install IS this install dir (overlay upgrade): nothing to
+		// rewrite, the recorded paths are already correct.
+		log.Printf("[INFO] Legacy install dir equals the current one (%s), no path rewrite needed", cwd)
+		return cfg
+	}
+	if !rewriteLegacyPaths(&cfg, legacy, cwd) {
+		log.Printf("[INFO] No persisted paths under legacy install dir %s needed rewriting", legacy)
+		return cfg
+	}
+	if out, err := json.MarshalIndent(cfg, "", "  "); err == nil {
+		if err := atomicWriteFile(configFilePath(), out, 0644); err != nil {
+			log.Printf("[WARN] Failed to persist rewritten config after legacy-path migration: %v", err)
 		}
 	}
-	// Stage 2: llama-gui-era file (cwd-relative legacyConfigFile).
-	if _, err := os.Stat(legacyConfigFile); err != nil {
-		return
+	log.Printf("[OK] Rewrote persisted paths from legacy install dir %s to %s", legacy, cwd)
+	return cfg
+}
+
+// removeLegacyPathMarker deletes the installer-planted marker file; a missing
+// file is not an error.
+func removeLegacyPathMarker() {
+	if err := os.Remove(legacyPathMarkerName); err != nil && !os.IsNotExist(err) {
+		log.Printf("[WARN] Failed to remove legacy-path migration marker: %v", err)
 	}
-	data, err := os.ReadFile(legacyConfigFile)
-	if err != nil {
-		log.Printf("[WARN] Failed to migrate legacy config %s: %v", legacyConfigFile, err)
-		return
+}
+
+// sameDirPath compares two directory paths for equality after cleaning,
+// case-insensitively (the legacy-path migration is Windows-only; see
+// applyLegacyPathMarker).
+func sameDirPath(a, b string) bool {
+	return strings.EqualFold(filepath.Clean(a), filepath.Clean(b))
+}
+
+// rewriteLegacyPaths rewrites every persisted absolute path in cfg that sits
+// under the legacyDir prefix to the same relative location under newDir.
+// Pure (no I/O): the caller persists the result. Used by the Windows
+// installer migration (applyLegacyPathMarker); matching is case-insensitive
+// (Windows paths) and requires a separator boundary after the prefix, so a
+// sibling directory sharing a leading substring never matches. Top-level
+// directory fields and the per-model MMProj override are rewritten; fields
+// that never store legacy-prefixed absolute paths (theme, ports, server
+// config, ...) are structurally untouched. Returns true when at least one
+// field changed.
+func rewriteLegacyPaths(cfg *appConfig, legacyDir, newDir string) bool {
+	if legacyDir == "" || newDir == "" {
+		return false
 	}
-	if err := atomicWriteFile(target, data, 0644); err != nil {
-		log.Printf("[WARN] Failed to migrate legacy config %s: %v", legacyConfigFile, err)
-		return
+	changed := false
+	rew := func(p string) string {
+		q, ok := rewritePathUnderPrefix(p, legacyDir, newDir)
+		if ok {
+			changed = true
+		}
+		return q
 	}
-	log.Printf("[OK] Migrated legacy config %s -> %s", legacyConfigFile, target)
+	cfg.LlamaCppDir = rew(cfg.LlamaCppDir)
+	cfg.ModelDir = rew(cfg.ModelDir)
+	cfg.LlamaCppDownloadDir = rew(cfg.LlamaCppDownloadDir)
+	cfg.ModelDownloadDir = rew(cfg.ModelDownloadDir)
+	for k, mc := range cfg.ModelConfigs {
+		if q, ok := rewritePathUnderPrefix(mc.MMProj, legacyDir, newDir); ok {
+			mc.MMProj = q
+			cfg.ModelConfigs[k] = mc
+			changed = true
+		}
+	}
+	return changed
+}
+
+// rewritePathUnderPrefix rewrites one path from the legacyDir prefix to
+// newDir (see rewriteLegacyPaths). Only absolute paths are considered; the
+// original suffix (including its case) is preserved, and a path equal to the
+// legacy dir itself maps to newDir exactly.
+func rewritePathUnderPrefix(path, legacyDir, newDir string) (string, bool) {
+	if path == "" {
+		return path, false
+	}
+	p := filepath.Clean(path)
+	legacy := filepath.Clean(legacyDir)
+	if !filepath.IsAbs(p) || !filepath.IsAbs(legacy) {
+		return path, false
+	}
+	lp, ll := strings.ToLower(p), strings.ToLower(legacy)
+	if lp != ll && !strings.HasPrefix(lp, ll+string(filepath.Separator)) &&
+		!strings.HasPrefix(lp, ll+"/") && !strings.HasPrefix(lp, ll+`\`) {
+		return path, false
+	}
+	return filepath.Join(filepath.Clean(newDir), p[len(legacy):]), true
 }
 
 func loadConfig() {
 	migrateLegacyConfig()
 	data, err := os.ReadFile(configFilePath())
 	if err != nil {
-		return // file doesn't exist yet, that's ok
+		// No config file yet: nothing persisted to rewrite — still consume the
+		// installer's legacy-path marker so it cannot re-trigger every start.
+		removeLegacyPathMarker()
+		return
 	}
 	var cfg appConfig
 	// Pre-populate defaults before Unmarshal: Go's zero value false cannot
@@ -258,8 +414,14 @@ func loadConfig() {
 	cfg.SidebarCollapsed = true
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		log.Printf("[WARN] Failed to parse config file: %v", err)
+		removeLegacyPathMarker()
 		return
 	}
+	// Windows installer legacy-install migration: rewrite persisted absolute
+	// paths from the legacy install dir to the current one (see the marker
+	// contract at applyLegacyPathMarker). Runs before the values land in the
+	// in-memory state so every consumer sees the rewritten paths.
+	cfg = applyLegacyPathMarker(cfg)
 	if cfg.LlamaCppDir != "" {
 		customLlamaCppMu.Lock()
 		customLlamaCppDir = cfg.LlamaCppDir

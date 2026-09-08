@@ -2,9 +2,9 @@
 # the CI now compiles the installer directly with:
 #   makensis -DARG_WAILS_AMD64_BINARY=..\..\bin\MyLlama.exe -DINFO_PRODUCTVERSION=<ver> project.nsi
 # No wails CLI regenerates this file anymore. The INFO_* defaults below mirror wails.json
-# except COMPANYNAME / PRODUCTNAME, which keep their pre-rebrand values (the v2 CLI let
-# CompanyName fall back to the project name) so the uninstall registry key stays stable
-# across the rebrand; CI overrides INFO_PRODUCTVERSION from the git tag / core/VERSION via
+# and carry the full MyLlama brand (the pre-rebrand "Llama Desktop" uninstall registry key
+# is migrated explicitly by the install section in project.nsi, so it no longer needs to be
+# kept stable); CI overrides INFO_PRODUCTVERSION from the git tag / core/VERSION via
 # -DINFO_PRODUCTVERSION (the !ifndef guards let -D win).
 
 !include "x64.nsh"
@@ -15,10 +15,10 @@
     !define INFO_PROJECTNAME "MyLlama"
 !endif
 !ifndef INFO_COMPANYNAME
-    !define INFO_COMPANYNAME "llama-desktop"
+    !define INFO_COMPANYNAME "CodeNeow"
 !endif
 !ifndef INFO_PRODUCTNAME
-    !define INFO_PRODUCTNAME "Llama Desktop"
+    !define INFO_PRODUCTNAME "MyLlama"
 !endif
 !ifndef INFO_PRODUCTVERSION
     !define INFO_PRODUCTVERSION "0.3.9"
