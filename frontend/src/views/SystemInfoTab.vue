@@ -58,137 +58,15 @@
          with the system summary card in one two-column row; first-use and
          multi-resident states keep the single-column stack. -->
     <div v-else class="sys-grid" :class="{ 'sys-paired': residentPairing }">
-      <!-- Quick-start checklist: hides once every step completes or the user
-           dismisses it. It guides across tabs (its actions router.push other
-           routes), which works from any tab. Lives in the side column so the
-           portrait band's right column can pack it above the storage island. -->
-      <div class="home-side-col">
-      <section v-if="onboardingView.visible" class="island onboarding-card">
-        <div class="onboarding-head">
-          <h2 class="section-title">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>
-            </svg>
-            {{ t('onboarding.title') }}
-          </h2>
-          <button class="onboarding-dismiss" @click="dismissOnboarding">{{ t('onboarding.dismiss') }}</button>
-        </div>
-        <ol class="onboarding-steps">
-          <li
-            v-for="(step, idx) in onboardingView.steps"
-            :key="step.id"
-            class="onboarding-step"
-            :class="{ done: step.done }"
-          >
-            <span class="step-marker">
-              <svg v-if="step.done" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="20 6 9 17 4 12"/>
-              </svg>
-              <template v-else>{{ idx + 1 }}</template>
-            </span>
-            <span class="step-text">
-              <span class="step-label">{{ t(ONBOARDING_LABELS[step.id]) }}</span>
-            <!-- Checklist tiers (draft .cstep .sd): muted per-step sub-description -->
-            <span v-if="checklistDetails" class="step-sub">{{ t(ONBOARDING_SUBS[step.id]) }}</span>
-            </span>
-            <button v-if="!step.done" class="step-action" @click="goStep(step.route)">
-              {{ stepGoLabel(step.id) }}
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
-              </svg>
-            </button>
-            <span v-else class="step-done-label">{{ t('onboarding.done') }}</span>
-          </li>
-        </ol>
-      </section>
-
-
-      <!-- Storage island (frame ①): disk usage bar + GGUF and llama.cpp
-           bricks. The bar keeps the design's amber "disk level" color. -->
-      <section class="island storage-card">
-        <div class="island-head">
-          <h4>{{ t('home.storage') }}</h4>
-          <span v-if="diskView" class="head-more">{{ storageFree }}</span>
-        </div>
-        <template v-if="diskView">
-          <div class="storage-row">
-            <span>{{ t('home.storage.used', { size: formatBytes(diskView.used) || '—' }) }}</span>
-            <b>{{ diskPct }}%</b>
-          </div>
-          <div
-            class="storage-bar"
-            role="progressbar"
-            :aria-valuenow="diskPct"
-            aria-valuemin="0"
-            aria-valuemax="100"
-            :aria-label="t('home.storage')"
-          >
-            <i :style="{ width: diskPct + '%' }"></i>
-          </div>
-        </template>
-        <div v-else class="info-empty">
-          <span>{{ t('home.disk.notAvailable') }}</span>
-        </div>
-        <div class="brick-row">
-          <div class="brick">
-            <span class="brick-lbl">{{ t('home.storage.models') }}</span>
-            <b class="brick-val" :title="ggufBrick">{{ ggufBrick }}</b>
-          </div>
-          <div class="brick">
-            <span class="brick-lbl">{{ t('home.storage.llamacpp') }}</span>
-            <!-- Phone tier (design draft frame ①): the "not installed" brick reads
-                 amber in the first-use state -->
-            <b class="brick-val" :class="{ warn: !runtimeInstalled }" :title="llamacppBrick">{{ llamacppBrick }}</b>
-          </div>
-        </div>
-      </section>
-
-      <!-- Resident model cards (frame ① mcard): one per loaded model, with
-           the same unload chain as TaskDock: desktop asks the router to evict
-           the model; direct-mode Android stops the service (unloading =
-           stopping, memory is freed with the process and the next chat send
-           auto-restarts the service). -->
-      <section v-for="m in loadedModels" :key="m.id" class="island mcard">
-        <div class="tile">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2l8 4.5v9L12 20l-8-4.5v-9L12 2z"/><path d="M12 11L4.5 6.8M12 11l7.5-4.2M12 11v8.5"/>
-          </svg>
-        </div>
-        <div class="mcard-main">
-          <div class="mcard-name" :title="m.id">{{ m.id }}</div>
-          <div class="mcard-chips">
-            <i>{{ typeLabel(m.type) }}</i>
-            <i v-if="residentQuant(m)">{{ residentQuant(m) }}</i>
-            <i v-if="residentSize(m)">{{ residentSize(m) }}</i>
-            <!-- Checklist tiers (draft .mt i.src-g): trailing green source pill -->
-            <i v-if="checklistDetails" class="resident-chip">{{ t('home.residentBadge') }}</i>
-          </div>
-          <div v-if="unloadErrors[m.id]" class="mcard-error">
-            {{ t('dock.unloadFailed', { msg: unloadErrors[m.id] }) }}
-          </div>
-        </div>
-        <!-- Desktop platforms keep the in-place unload (same chain as TaskDock);
-             Android renders the status-only "auto switch" pill instead (draft A②) -->
-        <button
-          v-if="showResidentUnload"
-          class="unload-btn"
-          :disabled="unloadingId === m.id"
-          @click="handleUnload(m.id)"
-        >
-          {{ unloadingId === m.id ? t('dock.unloading') : t('dock.unload') }}
-        </button>
-        <span v-else class="resident-auto-pill">{{ t('home.residentAutoSwitch') }}</span>
-      </section>
-      </div>
-
-      <!-- Column wrappers (the portrait band's two-column pass): the checklist +
-           storage + resident cards form the right column, hero + mini pair the
-           left column, capability/system cards a full-width band below.
-           Everywhere else they dissolve via display:contents into the flat
-           single/two-column grid; the base order values in the style block keep
-           the flat item order identical to the pre-wrapper layout (checklist
-           leads, hero + minis follow, storage/resident/capability cards last). -->
-      <div class="home-main-col">
+      <!-- Column wrappers: on desktop (>=1100px) each becomes a real flex
+           column, so the two sides stack INDEPENDENTLY — a short card never
+           shares a grid row (and its row height) with a tall one. On
+           phone/tablet they dissolve via display:contents into the flat
+           single-column grid; the media-scoped order rules in the style block
+           restore the pre-wrapper flat item order there. Left column: hero →
+           mini pair → resident cards → GPU card. Right column: checklist →
+           storage → CUDA → system. -->
+      <div class="home-col-l">
       <!-- Gradient hero card (frame ①): status tag, model name, honest subline
            and the live decode speed with a CTA into the chat page. All values
            come from the live monitor / router / model probes — nothing here is
@@ -255,15 +133,51 @@
           <div class="mini-trend" :title="info.cpu.model">{{ cpuAux }}</div>
         </section>
       </div>
-      </div>
 
-      <div class="home-info-col">
+      <!-- Resident model cards (frame ① mcard): one per loaded model, with
+           the same unload chain as TaskDock: desktop asks the router to evict
+           the model; direct-mode Android stops the service (unloading =
+           stopping, memory is freed with the process and the next chat send
+           auto-restarts the service). -->
+      <section v-for="m in loadedModels" :key="m.id" class="island mcard">
+        <div class="tile">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2l8 4.5v9L12 20l-8-4.5v-9L12 2z"/><path d="M12 11L4.5 6.8M12 11l7.5-4.2M12 11v8.5"/>
+          </svg>
+        </div>
+        <div class="mcard-main">
+          <div class="mcard-name" :title="m.id">{{ m.id }}</div>
+          <div class="mcard-chips">
+            <i>{{ typeLabel(m.type) }}</i>
+            <i v-if="residentQuant(m)">{{ residentQuant(m) }}</i>
+            <i v-if="residentSize(m)">{{ residentSize(m) }}</i>
+            <!-- Checklist tiers (draft .mt i.src-g): trailing green source pill -->
+            <i v-if="checklistDetails" class="resident-chip">{{ t('home.residentBadge') }}</i>
+          </div>
+          <div v-if="unloadErrors[m.id]" class="mcard-error">
+            {{ t('dock.unloadFailed', { msg: unloadErrors[m.id] }) }}
+          </div>
+        </div>
+        <!-- Desktop platforms keep the in-place unload (same chain as TaskDock);
+             Android renders the status-only "auto switch" pill instead (draft A②) -->
+        <button
+          v-if="showResidentUnload"
+          class="unload-btn"
+          :disabled="unloadingId === m.id"
+          @click="handleUnload(m.id)"
+        >
+          {{ unloadingId === m.id ? t('dock.unloading') : t('dock.unload') }}
+        </button>
+        <span v-else class="resident-auto-pill">{{ t('home.residentAutoSwitch') }}</span>
+      </section>
+
       <!-- GPU Card: only on platforms with a real GPU probe (windows, linux,
            macOS on Apple Silicon). Android probes are unsupported (GPUs always
            empty) and macOS x64 ships the CPU-only release (no GPUs), so the
            card — including its empty state — would be pure noise there.
-           Desktop tier (>=1100px) re-homes it into the left column via the
-           .gpu-card grid-column override for column balance. -->
+           Sits at the left-column tail for balance: in the old row-paired grid
+           it lived on the right and that column outgrew the left by ~240px on
+           real machines. -->
       <section v-if="showGpuCard" class="island info-section gpu-card">
         <h2 class="section-title">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -329,6 +243,91 @@
         </div>
         <div v-else class="info-empty">
           <span>{{ t('home.gpu.none') }}</span>
+        </div>
+      </section>
+      </div>
+
+      <div class="home-col-r">
+      <!-- Quick-start checklist: hides once every step completes or the user
+           dismisses it. It guides across tabs (its actions router.push other
+           routes), which works from any tab. Lives in the right column, packed
+           above the storage island on desktop. -->
+      <section v-if="onboardingView.visible" class="island onboarding-card">
+        <div class="onboarding-head">
+          <h2 class="section-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>
+            </svg>
+            {{ t('onboarding.title') }}
+          </h2>
+          <button class="onboarding-dismiss" @click="dismissOnboarding">{{ t('onboarding.dismiss') }}</button>
+        </div>
+        <ol class="onboarding-steps">
+          <li
+            v-for="(step, idx) in onboardingView.steps"
+            :key="step.id"
+            class="onboarding-step"
+            :class="{ done: step.done }"
+          >
+            <span class="step-marker">
+              <svg v-if="step.done" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              <template v-else>{{ idx + 1 }}</template>
+            </span>
+            <span class="step-text">
+              <span class="step-label">{{ t(ONBOARDING_LABELS[step.id]) }}</span>
+            <!-- Checklist tiers (draft .cstep .sd): muted per-step sub-description -->
+            <span v-if="checklistDetails" class="step-sub">{{ t(ONBOARDING_SUBS[step.id]) }}</span>
+            </span>
+            <button v-if="!step.done" class="step-action" @click="goStep(step.route)">
+              {{ stepGoLabel(step.id) }}
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+              </svg>
+            </button>
+            <span v-else class="step-done-label">{{ t('onboarding.done') }}</span>
+          </li>
+        </ol>
+      </section>
+
+      <!-- Storage island (frame ①): disk usage bar + GGUF and llama.cpp
+           bricks. The bar keeps the design's amber "disk level" color. -->
+      <section class="island storage-card">
+        <div class="island-head">
+          <h4>{{ t('home.storage') }}</h4>
+          <span v-if="diskView" class="head-more">{{ storageFree }}</span>
+        </div>
+        <template v-if="diskView">
+          <div class="storage-row">
+            <span>{{ t('home.storage.used', { size: formatBytes(diskView.used) || '—' }) }}</span>
+            <b>{{ diskPct }}%</b>
+          </div>
+          <div
+            class="storage-bar"
+            role="progressbar"
+            :aria-valuenow="diskPct"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            :aria-label="t('home.storage')"
+          >
+            <i :style="{ width: diskPct + '%' }"></i>
+          </div>
+        </template>
+        <div v-else class="info-empty">
+          <span>{{ t('home.disk.notAvailable') }}</span>
+        </div>
+        <div class="brick-row">
+          <div class="brick">
+            <span class="brick-lbl">{{ t('home.storage.models') }}</span>
+            <b class="brick-val" :title="ggufBrick">{{ ggufBrick }}</b>
+          </div>
+          <div class="brick">
+            <span class="brick-lbl">{{ t('home.storage.llamacpp') }}</span>
+            <!-- Phone tier (design draft frame ①): the "not installed" brick reads
+                 amber in the first-use state -->
+            <b class="brick-val" :class="{ warn: !runtimeInstalled }" :title="llamacppBrick">{{ llamacppBrick }}</b>
+          </div>
         </div>
       </section>
 
@@ -911,83 +910,53 @@ onUnmounted(() => {
   align-content: start;
 }
 
-/* Column wrappers (the portrait band's two-column pass): they only become
-   real boxes there; every other tier dissolves them into the flat grid so the
-   item order and spacing stay exactly as before the wrappers existed */
-.home-main-col,
-.home-side-col,
-.home-info-col {
+/* Column wrappers: real flex columns on desktop only (>=1100px, see below);
+   every other tier dissolves them into the flat grid so the item order and
+   spacing stay exactly as before the wrappers existed */
+.home-col-l,
+.home-col-r {
   display: contents;
 }
 
 .sys-grid > .island,
-.home-main-col > .island,
-.home-side-col > .island,
-.home-info-col > .island {
+.home-col-l > .island,
+.home-col-r > .island {
   padding: 20px;
 }
 
 /* Desktop tier: >=1100px (design draft frames ⑤⑥) — asymmetric 7fr/5fr
-   two-column split. Hero + the memory/CPU mini pair own the left column; the
-   quick-start checklist + storage island pack the right column, the
-   resident-model card continues in the left column right after the minis,
-   the GPU card follows it (balance fix: with the GPU card on the right, that
-   column outgrew the left by ~240px on real machines), and the CUDA/system
-   cards stack in the right column. */
+   two-column split built from two REAL, independent flex columns. The grid
+   only places the two column boxes; each column stacks its own cards, so a
+   short card never shares a grid row (and its row height) with a tall one —
+   the old auto-placement + grid-column pairing stretched every row to its
+   tallest card and left large gaps under the short side. Left column: hero →
+   memory/CPU mini pair → resident-model card → GPU card. Right column:
+   quick-start checklist → storage island → CUDA card → system card. */
 @media (min-width: 1100px) {
   .sys-grid {
     grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
     gap: 16px;
     align-items: start;
-    /* Sparse auto-placement never backfills: when the v-if'd quick-start
-       checklist (dismissed) or resident-model card is absent, the placement
-       cursor is already past row 1 and the first right-column item (storage)
-       lands at r2c2, leaving an empty hole at r1c2. `dense` lets each item
-       backfill the earliest free row of its own column; column ownership is
-       still decided by the explicit grid-column rules below, and with ALL
-       cards present every item finds its column's first free row in the same
-       documented order (left: hero -> minis -> resident -> GPU; right:
-       checklist -> storage -> CUDA -> system), so dense changes nothing there. */
-    grid-auto-flow: row dense;
   }
 
-  /* Hero, memory/CPU mini cards -> left column */
-  .home-main-col > * {
-    grid-column: 1;
+  /* The wrappers become real columns with the same 16px rhythm as the grid
+     gap; min-width: 0 lets long unbreakable strings shrink inside them. The
+     .grid2 mini pair stays ONE flex child and keeps its internal 1fr 1fr
+     sub-grid (nothing dissolves it). */
+  .home-col-l,
+  .home-col-r {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
   }
 
-  /* The mini pair keeps its side-by-side 1fr 1fr sub-grid as ONE left-column
-     cell: it must NOT dissolve into independent auto-placed grid cells
-     (display:contents), which let auto-placement drop the memory mini into
-     the right column next to the CPU mini. Column ownership is already
-     covered by the .home-main-col > * rule above; restated here to anchor
-     the no-dissolve decision. */
-  .home-main-col > .grid2 {
-    grid-column: 1;
-  }
-
-  /* Quick-start checklist + storage island -> right column */
-  .home-side-col > *:not(.mcard) {
-    grid-column: 2;
-  }
-
-  /* Resident-model card -> left column, right after the minis */
-  .home-side-col > .mcard {
-    grid-column: 1;
-  }
-
-  /* CUDA / system cards -> right column */
-  .home-info-col > * {
-    grid-column: 2;
-  }
-
-  /* GPU card -> left column, after the resident-model card: balances the two
-     columns (the checklist + storage side outgrew the left once the GPU card
-     sat here). Specificity (0,2,0) beats the (0,1,0) rule above, and the
-     card's source position after the minis keeps the auto-placed row order
-     hero -> minis -> resident -> GPU in the left column. */
-  .home-info-col > .gpu-card {
-    grid-column: 1;
+  /* The phone/tablet flat-order rules live inside the <=1099px media block,
+     so they cannot leak here; this reset documents the desktop intent anyway:
+     each column packs its own children in DOM order. */
+  .home-col-l > *,
+  .home-col-r > * {
+    order: initial;
   }
 }
 
@@ -1435,30 +1404,44 @@ html[data-os='ios'] .unload-btn:active:not(:disabled) {
 /* ─── Quick-start checklist ─── */
 .onboarding-card {
   grid-column: 1 / -1;
-  /* Leads the flat grid whenever the wrappers are display:contents (phone /
-     tablet-portrait / desktop), and packs first into the right column of the
-     portrait band's two-column pass */
-  order: -3;
 }
 
-/* Flat-grid ordering of the wrapper-dissolved cards: the checklist leads
-   (order: -3 above), then hero + minis, then the storage / resident /
-   capability cards in their DOM order. Only matters while the wrappers are
-   display:contents; inside the portrait band's flex columns each column
-   packs its own children (with the overrides set there). .grid2 carries the
-   order while it is a real box (phone / tablet tiers); the .mini order kicks
-   in on desktop where grid2 dissolves via display:contents and the minis
-   become outer-grid items themselves. */
-.home-main-col > .hero-card {
-  order: -2;
-}
+/* Phone/tablet flat order (<=1099px): the wrappers are display:contents
+   there, so their children order against each other inside the outer grid.
+   These order values exist solely to keep that flat item order identical to
+   the pre-restructure DOM order — checklist → hero → minis → storage →
+   resident → GPU → CUDA → system — and are inert on desktop, where each real
+   flex column packs its own children in DOM order (reset in the >=1100px
+   block). Ties break by DOM order. */
+@media (max-width: 1099px) {
+  .home-col-r > .onboarding-card {
+    order: 1;
+  }
 
-.home-main-col > .grid2 {
-  order: -1;
-}
+  .home-col-l > .hero-card {
+    order: 2;
+  }
 
-.mini {
-  order: -1;
+  .home-col-l > .grid2 {
+    order: 3;
+  }
+
+  .home-col-r > .storage-card {
+    order: 4;
+  }
+
+  .home-col-l > .mcard {
+    order: 5;
+  }
+
+  .home-col-l > .gpu-card {
+    order: 6;
+  }
+
+  /* CUDA + system cards share the tail (DOM order puts CUDA first) */
+  .home-col-r > .info-section {
+    order: 7;
+  }
 }
 
 .onboarding-head {
@@ -1993,17 +1976,14 @@ html[data-os='ios'] .unload-btn:active:not(:disabled) {
 @media (min-width: 768px) and (max-width: 1099px) {
   /* Draft A② card order: hero → minis → resident → storage → capability cards.
      The wrappers are display:contents here, so the promoted children order
-     against each other inside the outer grid. */
-  .home-side-col > .mcard {
-    order: 1;
+     against each other inside the outer grid; these two swaps re-order the
+     base flat-order values from the <=1099px block above. */
+  .home-col-l > .mcard {
+    order: 4;
   }
 
-  .home-side-col > .storage-card {
-    order: 2;
-  }
-
-  .home-info-col > .island {
-    order: 3;
+  .home-col-r > .storage-card {
+    order: 5;
   }
 
   /* ─── Ready-state pairing (.sys-paired = exactly one resident model, see
@@ -2017,23 +1997,23 @@ html[data-os='ios'] .unload-btn:active:not(:disabled) {
     grid-template-columns: 1fr 1fr;
   }
 
-  .sys-grid.sys-paired .home-side-col > .island,
-  .sys-grid.sys-paired .home-main-col > .hero-card,
-  .sys-grid.sys-paired .home-main-col > .grid2,
-  .sys-grid.sys-paired .home-info-col > .island {
+  .sys-grid.sys-paired .home-col-l > .island,
+  .sys-grid.sys-paired .home-col-l > .grid2,
+  .sys-grid.sys-paired .home-col-r > .island {
     grid-column: 1 / -1;
   }
 
   /* The pairing row: both cards take a single cell each. order moves the
-     resident card below the storage island (order 2); the un-paired band
-     order (resident above storage, draft A②) is unchanged. Source order
-     after the span rule matters: these must win the grid-column override. */
-  .sys-grid.sys-paired .home-side-col > .mcard {
-    order: 3;
+     resident card below the storage island (5 → 6, tying the GPU card);
+     the un-paired band order (resident above storage, draft A②) is
+     unchanged. Source order after the span rule matters: these must win
+     the grid-column override. */
+  .sys-grid.sys-paired .home-col-l > .mcard {
+    order: 6;
   }
 
-  .sys-grid.sys-paired .home-side-col > .mcard,
-  .sys-grid.sys-paired .home-info-col > .sys-card {
+  .sys-grid.sys-paired .home-col-l > .mcard,
+  .sys-grid.sys-paired .home-col-r > .sys-card {
     grid-column: auto;
   }
 
