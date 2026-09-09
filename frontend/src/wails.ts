@@ -305,6 +305,7 @@ export async function installUpdate(): Promise<void> {
 interface WailsAndroidBridge {
   installUpdateApk?: (path: string) => string
   openInstallPermissionSettings?: () => string
+  getAppInfo?: () => string
 }
 
 function androidBridge(): WailsAndroidBridge | undefined {
@@ -338,6 +339,34 @@ export async function installAndroidUpdateApk(path: string): Promise<void> {
 // permission (recovery path for the needInstallPermission failure above).
 export async function openAndroidInstallPermissionSettings(): Promise<void> {
   parseBridgeResult(androidBridge()?.openInstallPermissionSettings?.())
+}
+
+// AndroidAppInfo mirrors the WailsBridge.getAppInfoJson payload: the app
+// label, the versionName, the versionCode as "build" and the applicationId.
+export interface AndroidAppInfo {
+  name: string
+  version: string
+  build: string
+  bundleId: string
+}
+
+// androidAppInfo reads the running app's info through the Android JS bridge.
+// Returns null when the bridge is unavailable (desktop / standalone vite) or
+// the payload cannot be parsed — callers treat that as "version unknown".
+export async function androidAppInfo(): Promise<AndroidAppInfo | null> {
+  const raw = androidBridge()?.getAppInfo?.()
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as Partial<AndroidAppInfo>
+    return {
+      name: typeof parsed.name === 'string' ? parsed.name : '',
+      version: typeof parsed.version === 'string' ? parsed.version : '',
+      build: typeof parsed.build === 'string' ? parsed.build : '',
+      bundleId: typeof parsed.bundleId === 'string' ? parsed.bundleId : '',
+    }
+  } catch {
+    return null
+  }
 }
 
 // ─── Downloads (HF Mirror) ───────────────────────────────────────

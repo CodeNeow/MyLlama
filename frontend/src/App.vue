@@ -71,7 +71,7 @@ import Sidebar from './components/Sidebar.vue'
 import UpdateModal from './components/UpdateModal.vue'
 import TaskDock from './components/TaskDock.vue'
 import MobileNav from './components/MobileNav.vue'
-import { updateState, checkForUpdate, shouldAutoCheck, closeUpdateModal } from './lib/update'
+import { updateState, checkForUpdate, shouldAutoCheck, closeUpdateModal, checkSubmittedAndroidInstall } from './lib/update'
 import { dockReserve, dockWidth, dockSide } from './lib/dockSpace'
 import { initSafeArea } from './lib/safeArea'
 import { initKeyboardTracking, stopKeyboardTracking, keyboardVisible } from './lib/keyboard'
@@ -285,6 +285,9 @@ onMounted(async () => {
   initSafeArea()
   // Soft-keyboard visibility tracking (mobile nav hiding, see the watcher above).
   initKeyboardTracking()
+  // Reconcile a previously submitted Android APK install after a restart
+  // (clears the marker once the running version caught up; no-op elsewhere).
+  checkSubmittedAndroidInstall()
   try {
     const info = await getOS()
     platform.value = (info as { os?: string }).os ?? ''

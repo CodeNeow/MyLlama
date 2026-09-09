@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest'
 import {
   updateState,
   checkForUpdate,
@@ -9,6 +9,8 @@ import {
   closeUpdateModal,
   stopPolling,
   extractReleaseNotes,
+  checkSubmittedAndroidInstall,
+  compareDottedVersions,
   CHECK_INTERVAL_MS,
 } from '../lib/update'
 import {
@@ -19,7 +21,9 @@ import {
   getUpdateDownloadStatus,
   installAndroidUpdateApk,
   openAndroidInstallPermissionSettings,
+  androidAppInfo,
 } from '../wails'
+import { Events } from '@wailsio/runtime'
 
 // mock Wails bridge: window.go is injected by Wails runtime only, unavailable in test env
 vi.mock('../wails', () => ({
@@ -30,6 +34,13 @@ vi.mock('../wails', () => ({
   getUpdateDownloadStatus: vi.fn(),
   installAndroidUpdateApk: vi.fn(),
   openAndroidInstallPermissionSettings: vi.fn(),
+  androidAppInfo: vi.fn(),
+}))
+
+// mock the Wails runtime event bus: lib/update subscribes to the native
+// android:installStatus push at module load
+vi.mock('@wailsio/runtime', () => ({
+  Events: { On: vi.fn(() => () => {}) },
 }))
 
 const mockCheckForUpdate = vi.mocked(checkForUpdateBackend)
@@ -39,6 +50,16 @@ const mockInstallUpdate = vi.mocked(installUpdateBackend)
 const mockGetStatus = vi.mocked(getUpdateDownloadStatus)
 const mockInstallAndroidApk = vi.mocked(installAndroidUpdateApk)
 const mockOpenInstallSettings = vi.mocked(openAndroidInstallPermissionSettings)
+const mockAndroidAppInfo = vi.mocked(androidAppInfo)
+
+// lib/update subscribes to android:installStatus once at module load; grab
+// the handler up front — beforeEach resetAllMocks clears mock.calls but the
+// captured reference keeps working.
+const onInstallStatus = ((Events.On as unknown as Mock).mock.calls.find(
+  (c) => c[0] === 'android:installStatus',
+)?.[1] ?? (() => {})) as (raw: unknown) => void
+
+const SUBMITTED_KEY = 'myllama-update-submitted'
 
 function resetState() {
   updateState.checking = false
@@ -340,6 +361,95 @@ describe('lib/update', () => {
     expect(mockOpenInstallSettings).not.toHaveBeenCalled()
     expect(updateState.installError).toBe('安装失败：session commit failed')
   })
+
+  it('android submit persists the submitted marker with the target version', async () => {
+    mockCheckForUpdate.mockResolvedValue({ hasUpdate: true, version: 'v0.2.0', notes: '', published: '' })
+    await checkForUpdate()
+    updateState.download = {
+      status: 'done', progress: 100, total: 100, downloaded: 100,
+      version: 'v0.2.0', filePath: '/data/data/com.codeneow.llamadesktop/files/MyLlama-android-v0.2.0.apk',
+      error: '', kind: 'android', installer: true,
+    }
+    mockInstallAndroidApk.mockResolvedValue(undefined)
+
+    await installUpdate()
+
+    expect(updateState.androidInstallSubmitted).toBe(true)
+    const raw = localStorage.getItem(SUBMITTED_KEY)
+    expect(raw).not.toBeNull()
+    const marker = JSON.parse(raw!) as { version: string; at: number }
+    expect(marker.version).toBe('v0.2.0')
+    expect(typeof marker.at).toBe('number')
+  })
+
+  it('android:installStatus failure event surfaces the installer message', () => {
+    onInstallStatus({
+      name: 'android:installStatus',
+      data: JSON.stringify({ status: 'failure', message: 'INSTALL_FAILED_INVALID_URI' }),
+    })
+    expect(updateState.installError).toBe('安装失败：INSTALL_FAILED_INVALID_URI')
+  })
+
+  it('android:installStatus success event clears the submitted marker', () => {
+    localStorage.setItem(SUBMITTED_KEY, JSON.stringify({ version: 'v0.2.0', at: Date.now() }))
+    onInstallStatus({
+      name: 'android:installStatus',
+      data: JSON.stringify({ status: 'success', message: '' }),
+    })
+    expect(localStorage.getItem(SUBMITTED_KEY)).toBeNull()
+  })
+
+  it('checkSubmittedAndroidInstall clears the marker once the running version caught up (v-prefix tolerant)', async () => {
+    localStorage.setItem(SUBMITTED_KEY, JSON.stringify({ version: 'v0.2.0', at: 1 }))
+    mockAndroidAppInfo.mockResolvedValue({
+      name: 'MyLlama', version: '0.2.0', build: '20', bundleId: 'com.codeneow.llamadesktop',
+    })
+
+    await checkSubmittedAndroidInstall()
+
+    expect(localStorage.getItem(SUBMITTED_KEY)).toBeNull()
+  })
+
+  it('checkSubmittedAndroidInstall keeps the marker while the running version is older', async () => {
+    localStorage.setItem(SUBMITTED_KEY, JSON.stringify({ version: 'v0.2.0', at: 1 }))
+    mockAndroidAppInfo.mockResolvedValue({
+      name: 'MyLlama', version: '0.1.9', build: '19', bundleId: 'com.codeneow.llamadesktop',
+    })
+
+    await checkSubmittedAndroidInstall()
+
+    expect(localStorage.getItem(SUBMITTED_KEY)).not.toBeNull()
+  })
+
+  it('checkSubmittedAndroidInstall compares segments numerically (0.2.10 > 0.2.9)', async () => {
+    localStorage.setItem(SUBMITTED_KEY, JSON.stringify({ version: '0.2.9', at: 1 }))
+    mockAndroidAppInfo.mockResolvedValue({
+      name: 'MyLlama', version: '0.2.10', build: '30', bundleId: 'com.codeneow.llamadesktop',
+    })
+
+    await checkSubmittedAndroidInstall()
+
+    expect(localStorage.getItem(SUBMITTED_KEY)).toBeNull()
+  })
+
+  it('checkSubmittedAndroidInstall leaves the marker untouched without the bridge (desktop / dev)', async () => {
+    localStorage.setItem(SUBMITTED_KEY, JSON.stringify({ version: 'v0.2.0', at: 1 }))
+    mockAndroidAppInfo.mockResolvedValue(null)
+
+    await checkSubmittedAndroidInstall()
+
+    expect(localStorage.getItem(SUBMITTED_KEY)).not.toBeNull()
+  })
+
+  it('checkSubmittedAndroidInstall is a no-op without a marker', async () => {
+    mockAndroidAppInfo.mockResolvedValue({
+      name: 'MyLlama', version: '9.9.9', build: '999', bundleId: 'com.codeneow.llamadesktop',
+    })
+
+    await expect(checkSubmittedAndroidInstall()).resolves.toBeUndefined()
+    expect(mockAndroidAppInfo).not.toHaveBeenCalled()
+    expect(localStorage.getItem(SUBMITTED_KEY)).toBeNull()
+  })
 })
 
 // ─── extractReleaseNotes (bilingual release notes) ─────────────────────────
@@ -407,5 +517,25 @@ describe('extractReleaseNotes', () => {
   it('empty body returns empty string', () => {
     expect(extractReleaseNotes('', 'zh')).toBe('')
     expect(extractReleaseNotes('', 'en')).toBe('')
+  })
+})
+
+// ─── compareDottedVersions (Android submitted-install reconciler) ───────────
+
+describe('compareDottedVersions', () => {
+  it('returns 0 for equal versions (v-prefix tolerant)', () => {
+    expect(compareDottedVersions('0.2.0', 'v0.2.0')).toBe(0)
+    expect(compareDottedVersions('1.0', '1.0.0')).toBe(0)
+  })
+
+  it('compares segments numerically, not lexicographically', () => {
+    expect(compareDottedVersions('0.2.10', '0.2.9')).toBeGreaterThan(0)
+    expect(compareDottedVersions('0.2.9', '0.2.10')).toBeLessThan(0)
+    expect(compareDottedVersions('0.10.0', '0.9.0')).toBeGreaterThan(0)
+  })
+
+  it('orders by the first differing segment', () => {
+    expect(compareDottedVersions('0.3.0', '0.2.99')).toBeGreaterThan(0)
+    expect(compareDottedVersions('1.0.0', '0.9.9')).toBeGreaterThan(0)
   })
 })

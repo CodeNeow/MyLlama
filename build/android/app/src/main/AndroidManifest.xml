@@ -46,9 +46,15 @@
              com.codeneow.llamadesktop (applicationId), but the Java sources
              stay in com.wails.app because the Wails v3 Go runtime hardcodes
              the JNI exports as Java_com_wails_app_WailsBridge_*. -->
+        <!-- launchMode=singleTask: the PackageInstaller status intent (and a
+             launcher-icon relaunch) must reuse the live instance via
+             onNewIntent instead of stacking a duplicate activity with a
+             fresh WebView, which resets the Vue SPA to the home page and
+             loses the in-flight update flow. -->
         <activity
             android:name="com.wails.app.MainActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|keyboardHidden|uiMode"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>

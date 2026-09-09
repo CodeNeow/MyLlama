@@ -11,6 +11,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageInfo;
+import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
 import android.content.IntentFilter;
 import android.content.res.Configuration;
@@ -1414,6 +1415,89 @@ public class WailsBridge {
     // ─── APK self-update install ──────────────────────────────────
 
     /**
+     * Latest terminal PackageInstaller status staged for the frontend, as the
+     * {"status":"success"|"failure","message":"..."} JSON payload of the
+     * "android:installStatus" event (null = none staged). Delivery happens on
+     * the main thread, but onPageFinished's delayed re-emit (see
+     * emitPendingInstallStatus) can read this while a status intent is being
+     * processed, so the field is volatile rather than plain.
+     */
+    private volatile String pendingInstallStatus;
+
+    /**
+     * Handle a PackageInstaller status intent delivered to MainActivity (from
+     * both onCreate and onNewIntent). After installUpdateApk commits the
+     * session, the system sends the status back through the PendingIntent that
+     * points at this app: the FIRST delivery is STATUS_PENDING_USER_ACTION and
+     * carries the system install-confirmation intent in EXTRA_INTENT, which
+     * must be started explicitly for the confirmation dialog to ever appear.
+     * Later deliveries report the terminal result (STATUS_SUCCESS /
+     * STATUS_FAILURE); those are staged for emitPendingInstallStatus and
+     * emitted to the frontend as an "android:installStatus" event. Plain
+     * launcher intents carry no EXTRA_STATUS and return at zero cost.
+     */
+    public void handleInstallStatusIntent(Intent intent) {
+        if (intent == null || !intent.hasExtra(PackageInstaller.EXTRA_STATUS)) {
+            return;
+        }
+        int status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS,
+                PackageInstaller.STATUS_FAILURE);
+        if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
+            // The system confirmation dialog's intent lives in EXTRA_INTENT:
+            // start it and let the system UI take over (no frontend event —
+            // the dialog itself is the user-facing flow).
+            Intent confirm = intent.getParcelableExtra(Intent.EXTRA_INTENT);
+            if (confirm == null) {
+                Log.w(TAG, "install status PENDING_USER_ACTION without a confirmation intent");
+                return;
+            }
+            confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            activity.startActivity(confirm);
+            return;
+        }
+        // Terminal status: stage it so a freshly-mounted WebView page still
+        // receives it (emitPendingInstallStatus) and notify immediately.
+        String message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE);
+        String json;
+        try {
+            json = new JSONObject()
+                    .put("status", status == PackageInstaller.STATUS_SUCCESS ? "success" : "failure")
+                    .put("message", message != null ? message : "")
+                    .toString();
+        } catch (Exception e) {
+            Log.e(TAG, "install status JSON encoding failed", e);
+            return;
+        }
+        pendingInstallStatus = json;
+        emitEvent("android:installStatus", json);
+    }
+
+    /**
+     * Re-emit the staged install status (if any) to the frontend, then once
+     * more after ~3 seconds — the same delayed-redelivery pattern as
+     * MainActivity's emitSafeAreaSnapshot(). A successful install kills and
+     * replaces the process, so the terminal status intent can arrive before
+     * the new WebView page has mounted and its JS event listeners exist; the
+     * first emit is lost and the status must be re-sent once onPageFinished
+     * runs (and once more for a still-mounting SPA). Deliberately does NOT
+     * clear the staged status: the frontend handles the events idempotently
+     * (it version-compares the submitted-install marker).
+     */
+    public void emitPendingInstallStatus() {
+        final String staged = pendingInstallStatus;
+        if (staged == null) {
+            return;
+        }
+        emitEvent("android:installStatus", staged);
+        mainHandler.postDelayed(() -> {
+            final String again = pendingInstallStatus;
+            if (again != null) {
+                emitEvent("android:installStatus", again);
+            }
+        }, 3000);
+    }
+
+    /**
      * Hand a downloaded update APK to the system package installer. The Go
      * sandbox cannot fire Android intents (no exec, no JNI access from Go),
      * so the frontend calls this through WailsJSBridge once the Go backend
@@ -1458,11 +1542,14 @@ public class WailsBridge {
                 session.fsync(out);
                 out.close();
                 in.close();
-                // The system installer relaunches the app task when it finishes;
-                // FLAG_IMMUTABLE is the correct mutability on API 23+.
+                // The system must fill in EXTRA_STATUS / EXTRA_INTENT when it delivers the
+                // install status, so the PendingIntent has to stay MUTABLE: an immutable
+                // one silently drops the fill-in and the status delivery becomes a bare
+                // MainActivity launch with no extras (verified on an API 35 emulator).
+                // API < 31 has no mutability flag — all PendingIntents were mutable.
                 int flags = android.app.PendingIntent.FLAG_UPDATE_CURRENT;
-                if (Build.VERSION.SDK_INT >= 23) {
-                    flags |= android.app.PendingIntent.FLAG_IMMUTABLE;
+                if (Build.VERSION.SDK_INT >= 31) {
+                    flags |= android.app.PendingIntent.FLAG_MUTABLE;
                 }
                 android.app.PendingIntent statusIntent = android.app.PendingIntent.getActivity(
                         activity, 0, new Intent(activity, MainActivity.class), flags);

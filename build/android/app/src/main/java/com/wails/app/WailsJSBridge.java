@@ -126,6 +126,19 @@ public class WailsJSBridge {
     }
 
     /**
+     * App info as JSON {"name","version","build","bundleId"} for the frontend
+     * (WailsBridge.getAppInfoJson is otherwise only reachable from Go via
+     * JNI). Named getAppInfo to avoid shadowing the WailsBridge-side name.
+     * Called from JavaScript: wails.getAppInfo()
+     *
+     * @return App info JSON string, "{}" when the lookup fails
+     */
+    @JavascriptInterface
+    public String getAppInfo() {
+        return bridge.getAppInfoJson();
+    }
+
+    /**
      * Get the platform name
      * Called from JavaScript: wails.platform()
      *

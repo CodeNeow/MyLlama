@@ -7,7 +7,9 @@ import {
   getUpdateDownloadStatus,
   installAndroidUpdateApk,
   openAndroidInstallPermissionSettings,
+  androidAppInfo,
 } from '../wails'
+import { Events } from '@wailsio/runtime'
 import { t } from './i18n'
 
 // Auto-check throttle: skip auto-check within 48 hours of the last check (local time).
@@ -79,6 +81,71 @@ export const updateState = reactive({
 })
 
 let downloadTimer: ReturnType<typeof setInterval> | null = null
+
+// ─── Android install-status feedback (system PackageInstaller) ──────────────
+
+// Event MainActivity/WailsBridge emit after an APK install commit: the payload
+// is {"status":"success"|"failure","message":"..."} (JSON string). The first
+// PackageInstaller delivery (STATUS_PENDING_USER_ACTION) never reaches JS —
+// the Java bridge starts the system confirmation dialog from it directly.
+const ANDROID_INSTALL_STATUS_EVENT = 'android:installStatus'
+
+// Remembers that an Android APK install was handed to the system installer and
+// for which target version: a successful install kills and replaces the
+// process, so a "success" event can never arrive in the new process. Instead
+// the restarted app clears the marker once its own version has caught up
+// (checkSubmittedAndroidInstall); a marker that survives means the install
+// never finished and the check-update flow can be re-run.
+const SUBMITTED_KEY = 'myllama-update-submitted'
+
+// onInstallStatus applies an "android:installStatus" event. Events.On
+// delivers the runtime's WailsEvent wrapper ({name, data}) — NOT the payload
+// itself — and the native side emits the payload as a JSON string
+// (WailsBridge.emitEvent → JSONObject.toString()). Unwrap and parse both
+// layers; bare payloads (unit tests) keep working. Mirrors lib/safeArea.ts
+// onPush.
+function onInstallStatus(raw: unknown): void {
+  let payload: unknown = raw
+  if (payload !== null && typeof payload === 'object' && 'data' in (payload as Record<string, unknown>)) {
+    payload = (payload as { data?: unknown }).data
+  }
+  if (typeof payload === 'string') {
+    try {
+      payload = JSON.parse(payload)
+    } catch {
+      payload = {}
+    }
+  }
+  const src = (payload && typeof payload === 'object' ? payload : {}) as Record<string, unknown>
+  if (src.status === 'success') {
+    // Install confirmed by the system: the submitted marker did its job.
+    try {
+      localStorage.removeItem(SUBMITTED_KEY)
+    } catch {
+      // localStorage unavailable: nothing to clean.
+    }
+  } else if (src.status === 'failure') {
+    const message = typeof src.message === 'string' ? src.message : ''
+    updateState.installError = t('updateModal.androidInstallFailed', { msg: message })
+  }
+}
+
+let installStatusListenerInitialized = false
+
+// initAndroidInstallStatusListener wires the native install-status push.
+// Idempotent; a runtime without event support (plain vite) degrades to a
+// no-op. Called once below — equivalent to a module-scope subscription, so
+// App.vue needs no extra wiring.
+export function initAndroidInstallStatusListener(): void {
+  if (installStatusListenerInitialized) return
+  installStatusListenerInitialized = true
+  try {
+    Events.On(ANDROID_INSTALL_STATUS_EVENT, onInstallStatus)
+  } catch {
+    // Runtime without event support: nothing to subscribe to.
+  }
+}
+initAndroidInstallStatusListener()
 
 /** Whether more than 48 hours have passed since the last check (or it never happened). */
 export function shouldAutoCheck(now = Date.now()): boolean {
@@ -227,7 +294,8 @@ export async function installUpdate(): Promise<void> {
  * via the Java bridge. When the "install unknown apps" grant is missing, the
  * Settings screen is opened for the user and the modal shows the recovery
  * hint; a successful commit flips the done-view tip to the submitted state
- * (the system dialog is cancellable, so re-triggering stays possible).
+ * (the system dialog is cancellable, so re-triggering stays possible) and
+ * records the submitted-install marker for the post-update reconciler.
  */
 async function installUpdateAndroid(): Promise<void> {
   const path = updateState.download?.filePath
@@ -237,6 +305,7 @@ async function installUpdateAndroid(): Promise<void> {
   }
   try {
     await installAndroidUpdateApk(path)
+    writeSubmitMarker(updateState.result?.version ?? '')
     updateState.androidInstallSubmitted = true
   } catch (e) {
     const code = (e as Error & { code?: string }).code
@@ -248,5 +317,72 @@ async function installUpdateAndroid(): Promise<void> {
         msg: e instanceof Error ? e.message : String(e),
       })
     }
+  }
+}
+
+// writeSubmitMarker records the pending install (target version + time) so
+// the post-update process can tell a completed install from an abandoned one.
+function writeSubmitMarker(version: string): void {
+  try {
+    localStorage.setItem(SUBMITTED_KEY, JSON.stringify({ version, at: Date.now() }))
+  } catch {
+    // localStorage unavailable: best-effort marker only.
+  }
+}
+
+// readSubmitMarker returns the target version recorded with the last
+// submitted install, or null when absent/unreadable (treated as no marker).
+function readSubmitMarker(): { version: string } | null {
+  try {
+    const raw = localStorage.getItem(SUBMITTED_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<{ version: unknown }>
+    return typeof parsed.version === 'string' && parsed.version ? { version: parsed.version } : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Compare two dotted numeric version strings ("0.2.10" vs "0.2.9"), ignoring
+ * a leading "v" (release tags) and reading non-numeric segments as 0. Returns
+ * a positive number when a > b, 0 when equal, negative when a < b.
+ */
+export function compareDottedVersions(a: string, b: string): number {
+  const pa = a.replace(/^v/i, '').split('.')
+  const pb = b.replace(/^v/i, '').split('.')
+  const len = Math.max(pa.length, pb.length)
+  for (let i = 0; i < len; i++) {
+    const na = Number(pa[i]) || 0
+    const nb = Number(pb[i]) || 0
+    if (na !== nb) return na - nb
+  }
+  return 0
+}
+
+/**
+ * Reconcile a previously submitted Android install after a restart: when the
+ * running version has reached the submitted marker's version, the update was
+ * completed and the marker is cleared; an older running version means the
+ * install never finished (dialog dismissed, process killed early), so the
+ * marker stays and the user can re-run the check-update flow. No marker, no
+ * bridge (desktop / dev) or an unreadable version are no-ops that leave the
+ * marker untouched.
+ */
+export async function checkSubmittedAndroidInstall(): Promise<void> {
+  const marker = readSubmitMarker()
+  if (!marker) return
+  try {
+    const info = await androidAppInfo()
+    if (!info?.version) return
+    if (compareDottedVersions(info.version, marker.version) >= 0) {
+      try {
+        localStorage.removeItem(SUBMITTED_KEY)
+      } catch {
+        // localStorage unavailable: nothing to clean.
+      }
+    }
+  } catch {
+    // Bridge call failed: keep the marker (version unknown).
   }
 }

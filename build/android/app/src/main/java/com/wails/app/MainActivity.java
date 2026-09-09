@@ -121,6 +121,27 @@ public class MainActivity extends AppCompatActivity {
 
         // Load the application
         loadApplication();
+
+        // A cold start can carry the PackageInstaller status intent (e.g. the
+        // post-update relaunch): process it now that the bridge exists —
+        // onNewIntent covers deliveries into the already-live instance.
+        bridge.handleInstallStatusIntent(getIntent());
+    }
+
+    /**
+     * singleTask redelivery hook: the PackageInstaller status intent (and a
+     * launcher-icon relaunch) route into the existing instance here instead
+     * of stacking a duplicate activity with a fresh WebView that would reset
+     * the SPA to the home page. setIntent keeps getIntent() consistent with
+     * the delivery the handler below inspects.
+     */
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (bridge != null) {
+            bridge.handleInstallStatusIntent(intent);
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -237,6 +258,11 @@ public class MainActivity extends AppCompatActivity {
                 // Same for the system-bar insets: a fresh push so the page
                 // starts padded behind the edge-to-edge bars.
                 emitSafeAreaSnapshot();
+                // And for a staged APK-install status: the post-update
+                // relaunch can receive the PackageInstaller result before the
+                // page's JS listeners exist, so re-emit it now that the page
+                // is up.
+                bridge.emitPendingInstallStatus();
                 // App-like: disable pinch-zoom gestures at the JS layer.
                 // Viewport meta intentionally omits user-scalable=no /
                 // maximum-scale because on API 35 WebView that combination
