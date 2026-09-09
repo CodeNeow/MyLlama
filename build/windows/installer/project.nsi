@@ -126,11 +126,15 @@ FunctionEnd
 #      CopyFiles fallback — the source is only removed after the copy
 #      provably landed);
 #   3. the docs cache is skipped (it re-fetches on demand);
-#   4. when the legacy directory holds no data anymore, the
-#      migration-legacy-path.txt marker is planted and the legacy uninstaller
-#      runs silently from a temp copy, dropping its registry key; if anything
-#      failed to move, the legacy install is left fully in place (Add/Remove
-#      entry kept) — migration never blocks or fails the install.
+#   4. when both movable data dirs (LLM-Models\, llama-cpp\) are gone or
+#      content-free after the move, the migration-legacy-path.txt marker is
+#      planted and the legacy uninstaller runs silently from a temp copy,
+#      dropping its registry key. Whatever still remains there (old main
+#      exe, uninstall.exe, unrelated user files) is exactly what that
+#      silent uninstall (RMDir /r) cleans up; only when a data-dir move
+#      itself failed (the dir still holds content) is the legacy install
+#      left fully in place (Add/Remove entry kept) — migration never blocks
+#      or fails the install.
 #
 # Marker contract: the marker is ONLY written on a complete migration.
 #   marker present   = "data moved, the app rewrites the config's recorded
@@ -167,13 +171,17 @@ FunctionEnd
         ; 2. model library + llama.cpp runtime (docs cache is re-fetchable: skipped)
         !insertmacro wails.migrateLegacyDir "$R9\LLM-Models" "$INSTDIR\LLM-Models"
         !insertmacro wails.migrateLegacyDir "$R9\llama-cpp" "$INSTDIR\llama-cpp"
-        ; 3+4. only a COMPLETE migration (legacy dir emptied) writes the
-        ;      marker and uninstalls the legacy install: the marker tells the
-        ;      app "your recorded paths were rewritten to $INSTDIR, your data
-        ;      moved". In the partial branch below no marker is written, so
-        ;      the app keeps the legacy absolute paths — still valid because
-        ;      the legacy install is left fully in place.
-        ${IfNot} ${FileExists} "$R9\*"
+        ; 3+4. complete = both movable data dirs are gone or content-free
+        ;      after migration; leftover exe / uninstaller / user files are
+        ;      exactly what the legacy silent uninstall (RMDir /r) is
+        ;      supposed to clean up. On complete the marker is written (the
+        ;      app rewrites the config's recorded paths from the legacy
+        ;      prefix to $INSTDIR) and the legacy install is uninstalled. In
+        ;      the partial branch below no marker is written, so the app
+        ;      keeps the legacy absolute paths — still valid because the
+        ;      legacy install is left fully in place.
+        ${IfNot} ${FileExists} "$R9\LLM-Models\*"
+        ${AndIfNot} ${FileExists} "$R9\llama-cpp\*"
             FileOpen $R8 "$INSTDIR\migration-legacy-path.txt" w
             ${If} $R8 != ""
                 FileWrite $R8 "$R9"
