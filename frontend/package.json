@@ -1,14 +1,14 @@
 {
-  "name": "llama-cpp-desktop",
+  "name": "myllama",
   "version": "0.3.9",
   "description": "Desktop GUI for llama.cpp - manage GGUF models, serve one OpenAI-compatible endpoint",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/CodeNeow/llama-cpp-desktop.git"
+    "url": "git+https://github.com/CodeNeow/MyLlama.git"
   },
-  "homepage": "https://github.com/CodeNeow/llama-cpp-desktop",
+  "homepage": "https://github.com/CodeNeow/MyLlama",
   "bugs": {
-    "url": "https://github.com/CodeNeow/llama-cpp-desktop/issues"
+    "url": "https://github.com/CodeNeow/MyLlama/issues"
   },
   "author": "CodeNeow",
   "license": "GPL-3.0",

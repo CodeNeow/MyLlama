@@ -11,7 +11,7 @@
   "info": {
     "productName": "MyLlama",
     "productVersion": "0.3.9",
-    "copyright": "Copyright (C) 2026 CodeNeow (https://github.com/CodeNeow/llama-cpp-desktop)",
-    "comments": "Desktop GUI for llama.cpp - https://github.com/CodeNeow/llama-cpp-desktop"
+    "copyright": "Copyright (C) 2026 CodeNeow (https://github.com/CodeNeow/MyLlama)",
+    "comments": "Desktop GUI for llama.cpp - https://github.com/CodeNeow/MyLlama"
   }
 }

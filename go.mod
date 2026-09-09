@@ -1,4 +1,4 @@
-module github.com/CodeNeow/llama-cpp-desktop
+module github.com/CodeNeow/MyLlama
 
 go 1.25.0
 

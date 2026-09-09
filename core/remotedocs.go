@@ -76,11 +76,11 @@ type RemoteDocResult struct {
 const (
 	// docsRawBaseURL serves docs straight from the GitHub main branch — the
 	// authoritative source, always current.
-	docsRawBaseURL = "https://raw.githubusercontent.com/CodeNeow/llama-cpp-desktop/main/"
+	docsRawBaseURL = "https://raw.githubusercontent.com/CodeNeow/MyLlama/main/"
 	// docsJSDBaseURL is the reachability fallback for environments where raw
 	// githubusercontent.com is blocked or flaky. jsDelivr branch content is
 	// CDN-cached and can lag main; raw stays authoritative.
-	docsJSDBaseURL = "https://cdn.jsdelivr.net/gh/CodeNeow/llama-cpp-desktop@main/"
+	docsJSDBaseURL = "https://cdn.jsdelivr.net/gh/CodeNeow/MyLlama@main/"
 
 	// docsRepoPathFmt builds the in-repo markdown path from lang + sectionID;
 	// both components are strictly validated before formatting (no traversal).

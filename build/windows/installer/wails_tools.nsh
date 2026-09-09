@@ -24,7 +24,7 @@
     !define INFO_PRODUCTVERSION "0.3.9"
 !endif
 !ifndef INFO_COPYRIGHT
-    !define INFO_COPYRIGHT "Copyright (C) 2026 CodeNeow (https://github.com/CodeNeow/llama-cpp-desktop)"
+    !define INFO_COPYRIGHT "Copyright (C) 2026 CodeNeow (https://github.com/CodeNeow/MyLlama)"
 !endif
 !ifndef PRODUCT_EXECUTABLE
     !define PRODUCT_EXECUTABLE "${INFO_PROJECTNAME}.exe"

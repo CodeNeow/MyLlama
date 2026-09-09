@@ -14,10 +14,10 @@ Windows x64 · Android arm64 · Linux x64 · GPL-3.0
 
 [简体中文](README.md) · English
 
-[![GitHub release](https://img.shields.io/github/v/release/CodeNeow/llama-cpp-desktop?logo=github&color=blue)](https://github.com/CodeNeow/llama-cpp-desktop/releases)
-[![Downloads](https://img.shields.io/github/downloads/CodeNeow/llama-cpp-desktop/total?logo=github&label=downloads&color=blue)](https://github.com/CodeNeow/llama-cpp-desktop/releases)
+[![GitHub release](https://img.shields.io/github/v/release/CodeNeow/MyLlama?logo=github&color=blue)](https://github.com/CodeNeow/MyLlama/releases)
+[![Downloads](https://img.shields.io/github/downloads/CodeNeow/MyLlama/total?logo=github&label=downloads&color=blue)](https://github.com/CodeNeow/MyLlama/releases)
 [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
-[![CI](https://img.shields.io/github/actions/workflow/status/CodeNeow/llama-cpp-desktop/.github/workflows/ci.yml?branch=dev&logo=githubactions&logoColor=white)](https://github.com/CodeNeow/llama-cpp-desktop/actions)
+[![CI](https://img.shields.io/github/actions/workflow/status/CodeNeow/MyLlama/.github/workflows/ci.yml?branch=dev&logo=githubactions&logoColor=white)](https://github.com/CodeNeow/MyLlama/actions)
 [![Go](https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go&logoColor=white)](https://go.dev/dl/)
 [![Wails](https://img.shields.io/badge/Wails-v3-DF0000?logo=wails&logoColor=white)](https://wails.io/)
 [![Vue](https://img.shields.io/badge/Vue-3-4FC08D?logo=vuedotjs&logoColor=white)](https://vuejs.org/)
@@ -238,13 +238,13 @@ Dual prompt-processing / generation tok/s metrics with a 60-second speed chart, 
 
 ### Windows
 
-Grab `MyLlama-setup-*-windows-amd64.exe` from the [latest release](https://github.com/CodeNeow/llama-cpp-desktop/releases/latest) and double-click to install (the installer embeds the WebView2 Runtime bootstrapper and installs it automatically if missing). The app updates itself, so later versions need no manual reinstall.
+Grab `MyLlama-setup-*-windows-amd64.exe` from the [latest release](https://github.com/CodeNeow/MyLlama/releases/latest) and double-click to install (the installer embeds the WebView2 Runtime bootstrapper and installs it automatically if missing). The app updates itself, so later versions need no manual reinstall.
 
 Requirements: Windows 10 or later (x64).
 
 ### Android
 
-Grab `MyLlama-*-android-arm64.apk` from the [latest release](https://github.com/CodeNeow/llama-cpp-desktop/releases/latest) (arm64 devices, Android 5.0+), and allow "install unknown apps" when prompted. "Preferences → Check for Updates" inside the app downloads new versions and hands them to the system installer; in-app self-update requires the installed and the new APK to share one signature (release APKs are signed with a stable key), so debug-signed local builds should uninstall the old version first.
+Grab `MyLlama-*-android-arm64.apk` from the [latest release](https://github.com/CodeNeow/MyLlama/releases/latest) (arm64 devices, Android 5.0+), and allow "install unknown apps" when prompted. "Preferences → Check for Updates" inside the app downloads new versions and hands them to the system installer; in-app self-update requires the installed and the new APK to share one signature (release APKs are signed with a stable key), so debug-signed local builds should uninstall the old version first.
 
 ### Linux
 
@@ -375,8 +375,8 @@ The frontend is a Vue 3 single-page app that talks to the Go backend through the
 Clone and build:
 
 ```bash
-git clone https://github.com/CodeNeow/llama-cpp-desktop.git
-cd llama-cpp-desktop
+git clone https://github.com/CodeNeow/MyLlama.git
+cd MyLlama
 wails3 task build            # Windows / Linux / macOS desktop build
 wails3 task android:package  # Android arm64 APK (build the frontend first; output in build/bin/)
 ```
@@ -428,7 +428,7 @@ The download comes from GitHub Releases; it supports pause / resume with resumab
 
 ## 📄 License and Acknowledgements
 
-Copyright © 2026 [CodeNeow](https://github.com/CodeNeow/llama-cpp-desktop)
+Copyright © 2026 [CodeNeow](https://github.com/CodeNeow/MyLlama)
 
 This project is licensed under the [GNU General Public License v3](LICENSE).
 

@@ -103,7 +103,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\check.ps1  # Combi
 ## Wails Binding Mechanism (Important)
 
 - Backend methods are declared in `core/app.go` as `func (a *App) Xxx(...)`; `core.App` is registered as a Wails v3 service in the root `main.go` (`application.New(application.Options{ Services: []application.Service{application.NewService(app)}, ... })`), which binds every exported method except the v3 lifecycle hooks. Lifecycle lives in `App.ServiceStartup` / `ServiceShutdown` (main.go no longer references hook names).
-- The frontend calls exclusively through `frontend/src/wails.ts`, whose typed wrappers statically import the GENERATED bindings at `frontend/bindings/github.com/CodeNeow/llama-cpp-desktop/core/app` (the `@wailsio/runtime` package supplies `Call.ByID` / `CancellablePromise`; calls dispatch by numeric method ID). **The `core` namespace comes from the Go package name `core`**: if the package name or binding type ever changes, `wails.ts`'s `app()` and the generated bindings under `frontend/bindings/` must all be updated in sync.
+- The frontend calls exclusively through `frontend/src/wails.ts`, whose typed wrappers statically import the GENERATED bindings at `frontend/bindings/github.com/CodeNeow/MyLlama/core/app` (the `@wailsio/runtime` package supplies `Call.ByID` / `CancellablePromise`; calls dispatch by numeric method ID). **The `core` namespace comes from the Go package name `core`**: if the package name or binding type ever changes, `wails.ts`'s `app()` and the generated bindings under `frontend/bindings/` must all be updated in sync.
 - When adding or modifying backend methods: edit `core/app.go`, regenerate the bindings (`wails3 generate bindings`, also run inside `wails3 task build:frontend`), update the wrappers in `wails.ts`, and extend `frontend/src/dev/mockRuntime.ts`'s method-ID table (plus a handler in `mockData.ts`) if the mock must serve the new method — in the same commit as the callers to avoid intermediate states.
 - Backend calls no longer go through a runtime-injected global. Running `npm run dev` (plain vite) without the Wails runtime does not throw at call time: the statically imported bindings fail at FETCH time — this is expected behavior, not a bug. To debug the UI in a plain browser, use `npm run dev:mock`, which aliases `@wailsio/runtime` to the in-repo fake runtime (`frontend/src/dev/mockRuntime.ts` + `mockData.ts`).
 - When the backend returns structs, JSON field names follow struct tags (e.g., `DlTask`'s `sizeHuman`). After modifying a returned struct, verify that the corresponding frontend interface stays in sync.
@@ -247,7 +247,7 @@ Remaining gaps:
 
 ## Issue Tracking
 
-Issues live at `https://github.com/CodeNeow/llama-cpp-desktop/issues`. Any non-trivial defect or planned work should be filed as an issue to make progress visible; keep the list high signal-to-noise. This chapter applies as execution rules when the Issues finder role submits remote issues, and to anyone creating issues.
+Issues live at `https://github.com/CodeNeow/MyLlama/issues`. Any non-trivial defect or planned work should be filed as an issue to make progress visible; keep the list high signal-to-noise. This chapter applies as execution rules when the Issues finder role submits remote issues, and to anyone creating issues.
 
 ### Creating Issues
 

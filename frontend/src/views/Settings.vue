@@ -419,7 +419,7 @@
           <a
             v-else-if="isPhone"
             class="row-tail updates-link"
-            href="https://github.com/CodeNeow/llama-cpp-desktop/releases"
+            href="https://github.com/CodeNeow/MyLlama/releases"
             @click="handleLinkClick"
           >{{ t('settings.updateReleasesLink') }} <span aria-hidden="true">↗</span></a>
         </div>
@@ -429,7 +429,7 @@
         <p v-if="isAndroid" class="row-foot update-hint">
           <a
             class="hint-link"
-            href="https://github.com/CodeNeow/llama-cpp-desktop/releases"
+            href="https://github.com/CodeNeow/MyLlama/releases"
             @click="handleLinkClick"
           >{{ t('settings.updateReleasesLink') }}</a>
         </p>
@@ -440,7 +440,7 @@
           {{ t('settings.updateNotSupported') }}
           <a
             class="hint-link"
-            href="https://github.com/CodeNeow/llama-cpp-desktop/releases"
+            href="https://github.com/CodeNeow/MyLlama/releases"
             @click="handleLinkClick"
           >{{ t('settings.updateReleasesLink') }}</a>
         </p>
@@ -461,7 +461,7 @@
         </div>
         <div class="about-row">
           <span class="about-label">{{ t('settings.repo') }}</span>
-          <span class="about-value about-mono">https://github.com/CodeNeow/llama-cpp-desktop</span>
+          <span class="about-value about-mono">https://github.com/CodeNeow/MyLlama</span>
         </div>
       </div>
       <!-- Phone (frame ⑯): the three rows consolidate into ONE row — label,
@@ -472,11 +472,11 @@
           <span class="row-ic ic-about" v-html="ICON_INFO"></span>
           <div class="row-text">
             <span class="row-title">{{ t('settings.about') }}</span>
-            <span class="row-sub">v{{ appVersion || '—' }} · GPL-3.0 · CodeNeow/llama-cpp-desktop</span>
+            <span class="row-sub">v{{ appVersion || '—' }} · GPL-3.0 · CodeNeow/MyLlama</span>
           </div>
           <a
             class="row-tail about-link"
-            href="https://github.com/CodeNeow/llama-cpp-desktop"
+            href="https://github.com/CodeNeow/MyLlama"
             :aria-label="t('settings.repo')"
             @click="handleLinkClick"
           >›</a>

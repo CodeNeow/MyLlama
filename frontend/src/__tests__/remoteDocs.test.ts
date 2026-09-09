@@ -64,7 +64,7 @@ describe('formatDocFetchedAt', () => {
 
 describe('DOCS_GITHUB_URLS', () => {
   it('has a repo docs URL per locale', () => {
-    const base = 'https://github.com/CodeNeow/llama-cpp-desktop/blob/main/frontend/src/docs/'
+    const base = 'https://github.com/CodeNeow/MyLlama/blob/main/frontend/src/docs/'
     expect(DOCS_GITHUB_URLS.zh).toBe(base + 'zh')
     expect(DOCS_GITHUB_URLS.en).toBe(base + 'en')
   })

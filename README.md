@@ -14,10 +14,10 @@ Windows x64 · Android arm64 · Linux x64 · GPL-3.0
 
 简体中文 · [English](README_en.md)
 
-[![GitHub release](https://img.shields.io/github/v/release/CodeNeow/llama-cpp-desktop?logo=github&color=blue)](https://github.com/CodeNeow/llama-cpp-desktop/releases)
-[![Downloads](https://img.shields.io/github/downloads/CodeNeow/llama-cpp-desktop/total?logo=github&label=downloads&color=blue)](https://github.com/CodeNeow/llama-cpp-desktop/releases)
+[![GitHub release](https://img.shields.io/github/v/release/CodeNeow/MyLlama?logo=github&color=blue)](https://github.com/CodeNeow/MyLlama/releases)
+[![Downloads](https://img.shields.io/github/downloads/CodeNeow/MyLlama/total?logo=github&label=downloads&color=blue)](https://github.com/CodeNeow/MyLlama/releases)
 [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
-[![CI](https://img.shields.io/github/actions/workflow/status/CodeNeow/llama-cpp-desktop/.github/workflows/ci.yml?branch=dev&logo=githubactions&logoColor=white)](https://github.com/CodeNeow/llama-cpp-desktop/actions)
+[![CI](https://img.shields.io/github/actions/workflow/status/CodeNeow/MyLlama/.github/workflows/ci.yml?branch=dev&logo=githubactions&logoColor=white)](https://github.com/CodeNeow/MyLlama/actions)
 [![Go](https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go&logoColor=white)](https://go.dev/dl/)
 [![Wails](https://img.shields.io/badge/Wails-v3-DF0000?logo=wails&logoColor=white)](https://wails.io/)
 [![Vue](https://img.shields.io/badge/Vue-3-4FC08D?logo=vuedotjs&logoColor=white)](https://vuejs.org/)
@@ -238,13 +238,13 @@ HF 镜像 + ModelScope 双源搜索，批量下载走可断点续传的任务队
 
 ### Windows
 
-前往 [Releases 最新版](https://github.com/CodeNeow/llama-cpp-desktop/releases/latest) 下载 `MyLlama-setup-*-windows-amd64.exe`，双击安装即可（安装包内嵌 WebView2 Runtime 引导器，系统缺失时自动安装）。应用内置自动更新，后续新版本无需手动重装。
+前往 [Releases 最新版](https://github.com/CodeNeow/MyLlama/releases/latest) 下载 `MyLlama-setup-*-windows-amd64.exe`，双击安装即可（安装包内嵌 WebView2 Runtime 引导器，系统缺失时自动安装）。应用内置自动更新，后续新版本无需手动重装。
 
 环境要求：Windows 10 及以上（x64）。
 
 ### Android
 
-前往 [Releases 最新版](https://github.com/CodeNeow/llama-cpp-desktop/releases/latest) 下载 `MyLlama-*-android-arm64.apk`（arm64 设备，Android 5.0+），安装时按提示允许「安装未知来源应用」。应用内「偏好设置 → 检查更新」可下载新版本并由系统安装器完成升级；应用内自更新要求新旧版本使用同一签名（Release 发布的 APK 均以稳定密钥签名），本地 debug 签名的构建请先卸载旧版再安装。
+前往 [Releases 最新版](https://github.com/CodeNeow/MyLlama/releases/latest) 下载 `MyLlama-*-android-arm64.apk`（arm64 设备，Android 5.0+），安装时按提示允许「安装未知来源应用」。应用内「偏好设置 → 检查更新」可下载新版本并由系统安装器完成升级；应用内自更新要求新旧版本使用同一签名（Release 发布的 APK 均以稳定密钥签名），本地 debug 签名的构建请先卸载旧版再安装。
 
 ### Linux
 
@@ -375,8 +375,8 @@ flowchart LR
 克隆仓库并构建：
 
 ```bash
-git clone https://github.com/CodeNeow/llama-cpp-desktop.git
-cd llama-cpp-desktop
+git clone https://github.com/CodeNeow/MyLlama.git
+cd MyLlama
 wails3 task build            # Windows / Linux / macOS 桌面版
 wails3 task android:package  # Android arm64 APK（需先构建前端，输出到 build/bin/）
 ```
@@ -428,7 +428,7 @@ Wails v3 的 Linux 构建走 cgo：默认路径需要 GTK4 与 WebKitGTK 6.0 开
 
 ## 📄 协议与致谢
 
-Copyright © 2026 [CodeNeow](https://github.com/CodeNeow/llama-cpp-desktop)
+Copyright © 2026 [CodeNeow](https://github.com/CodeNeow/MyLlama)
 
 本项目基于 [GNU General Public License v3](LICENSE) 开源。
 

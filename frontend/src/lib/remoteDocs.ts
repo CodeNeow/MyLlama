@@ -49,8 +49,8 @@ export function formatDocFetchedAt(iso: string): string {
 
 /** Repo URLs of the bundled docs directories, for the "open on GitHub" button. */
 export const DOCS_GITHUB_URLS: Record<'zh' | 'en', string> = {
-  zh: 'https://github.com/CodeNeow/llama-cpp-desktop/blob/main/frontend/src/docs/zh',
-  en: 'https://github.com/CodeNeow/llama-cpp-desktop/blob/main/frontend/src/docs/en',
+  zh: 'https://github.com/CodeNeow/MyLlama/blob/main/frontend/src/docs/zh',
+  en: 'https://github.com/CodeNeow/MyLlama/blob/main/frontend/src/docs/en',
 }
 
 // ─── Docs-page composition per viewport tier (tablet frames ⑰⑱) ─────────────

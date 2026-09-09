@@ -1,11 +1,11 @@
 blank_issues_enabled: false
 contact_links:
   - name: Ask a Question / Discussion
-    url: https://github.com/CodeNeow/llama-cpp-desktop/discussions
+    url: https://github.com/CodeNeow/MyLlama/discussions
     about: For usage questions, design discussions, and feature ideas, use Discussions (if the repo does not have Discussions enabled, open an issue using the "Bug Report" template to ask).
   - name: Contributor Guide
-    url: https://github.com/CodeNeow/llama-cpp-desktop/blob/main/CONTRIBUTING.md
+    url: https://github.com/CodeNeow/MyLlama/blob/main/CONTRIBUTING.md
     about: First-time contributors should read CONTRIBUTING.md (commit conventions, quality gates, Issue/PR workflow).
   - name: Security Vulnerability (Sensitive)
-    url: https://github.com/CodeNeow/llama-cpp-desktop/security/advisories/new
+    url: https://github.com/CodeNeow/MyLlama/security/advisories/new
     about: For sensitive security vulnerabilities involving credentials, injection, or privilege escalation, use Security Advisory for private reporting. Do not open a public issue.

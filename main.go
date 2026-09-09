@@ -5,7 +5,7 @@ import (
 	"flag"
 	"os"
 
-	"github.com/CodeNeow/llama-cpp-desktop/core"
+	"github.com/CodeNeow/MyLlama/core"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 

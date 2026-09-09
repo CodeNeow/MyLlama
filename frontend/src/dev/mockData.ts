@@ -5,7 +5,7 @@
  * Holds the whole mutable fake backend state (config / system probe / models /
  * server / downloads / docs) and the handler table keyed by the bare binding
  * method name. Shapes mirror the generated binding classes in
- * frontend/bindings/github.com/CodeNeow/llama-cpp-desktop/core/models.ts, which
+ * frontend/bindings/github.com/CodeNeow/MyLlama/core/models.ts, which
  * in turn mirror the Go structs in core/. Data is tuned for the Android phone
  * layout walkthrough: OS = android/arm64, GPU list empty (android probe is
  * unsupported → no GPU/CUDA cards on Home), tray / API-route / serving-GPU

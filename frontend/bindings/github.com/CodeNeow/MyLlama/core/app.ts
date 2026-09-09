@@ -38,13 +38,13 @@ import * as $models from "./models.js";
  * the final attempt's failure is surfaced as the error.
  */
 export function BenchmarkModel(modelID: string): $CancellablePromise<$models.ModelBenchResult> {
-    return $Call.ByID(1960463204, modelID).then(($result: any) => {
+    return $Call.ByID(3564127659, modelID).then(($result: any) => {
         return $$createType0($result);
     });
 }
 
 export function BrowseLlamaCppDir(): $CancellablePromise<string> {
-    return $Call.ByID(3350014259);
+    return $Call.ByID(4034392886);
 }
 
 /**
@@ -54,7 +54,7 @@ export function BrowseLlamaCppDir(): $CancellablePromise<string> {
  * chosen directory.
  */
 export function BrowseLlamaCppDownloadDir(): $CancellablePromise<string> {
-    return $Call.ByID(2305276219);
+    return $Call.ByID(2839732354);
 }
 
 /**
@@ -64,7 +64,7 @@ export function BrowseLlamaCppDownloadDir(): $CancellablePromise<string> {
  * directory.
  */
 export function BrowseModelDownloadDir(): $CancellablePromise<string> {
-    return $Call.ByID(1383777610);
+    return $Call.ByID(4058621793);
 }
 
 /**
@@ -74,11 +74,11 @@ export function BrowseModelDownloadDir(): $CancellablePromise<string> {
  * directory.
  */
 export function BrowseModelsDir(): $CancellablePromise<string> {
-    return $Call.ByID(3452550715);
+    return $Call.ByID(1383123962);
 }
 
 export function CancelDownloadTask(id: string): $CancellablePromise<void> {
-    return $Call.ByID(1195596959, id);
+    return $Call.ByID(2600950860, id);
 }
 
 /**
@@ -86,7 +86,7 @@ export function CancelDownloadTask(id: string): $CancellablePromise<void> {
  * new version exists along with version info.
  */
 export function CheckForUpdate(): $CancellablePromise<$models.UpdateCheckResult | null> {
-    return $Call.ByID(2837150318).then(($result: any) => {
+    return $Call.ByID(8953589).then(($result: any) => {
         return $$createType2($result);
     });
 }
@@ -96,29 +96,29 @@ export function CheckForUpdate(): $CancellablePromise<$models.UpdateCheckResult 
  * tags).
  */
 export function GetAppVersion(): $CancellablePromise<string> {
-    return $Call.ByID(323973705);
+    return $Call.ByID(4273232820);
 }
 
 export function GetCPU(): $CancellablePromise<$models.CPUInfo | null> {
-    return $Call.ByID(2051216158).then(($result: any) => {
+    return $Call.ByID(1302194621).then(($result: any) => {
         return $$createType4($result);
     });
 }
 
 export function GetCUDA(): $CancellablePromise<$models.CUDAInfo | null> {
-    return $Call.ByID(3549453655).then(($result: any) => {
+    return $Call.ByID(2835900922).then(($result: any) => {
         return $$createType6($result);
     });
 }
 
 export function GetConfig(): $CancellablePromise<{ [_ in string]?: any }> {
-    return $Call.ByID(955128306).then(($result: any) => {
+    return $Call.ByID(3248505227).then(($result: any) => {
         return $$createType7($result);
     });
 }
 
 export function GetDisk(): $CancellablePromise<$models.DiskUsage | null> {
-    return $Call.ByID(3567524009).then(($result: any) => {
+    return $Call.ByID(1746999888).then(($result: any) => {
         return $$createType9($result);
     });
 }
@@ -127,29 +127,29 @@ export function GetDisk(): $CancellablePromise<$models.DiskUsage | null> {
  * GetDownloadSource returns the current model download source ("hf" | "modelscope").
  */
 export function GetDownloadSource(): $CancellablePromise<string> {
-    return $Call.ByID(779669993);
+    return $Call.ByID(2380172504);
 }
 
 export function GetDownloadTasks(): $CancellablePromise<$models.DlTask[]> {
-    return $Call.ByID(471464974).then(($result: any) => {
+    return $Call.ByID(650852813).then(($result: any) => {
         return $$createType11($result);
     });
 }
 
 export function GetGPU(): $CancellablePromise<$models.GPUInfo[]> {
-    return $Call.ByID(3317380266).then(($result: any) => {
+    return $Call.ByID(36030513).then(($result: any) => {
         return $$createType13($result);
     });
 }
 
 export function GetLlamaCpp(): $CancellablePromise<$models.LlamaCppInfo | null> {
-    return $Call.ByID(1558827786).then(($result: any) => {
+    return $Call.ByID(1087173235).then(($result: any) => {
         return $$createType15($result);
     });
 }
 
 export function GetLlamaCppDownloadStatus(): $CancellablePromise<$models.DownloadState | null> {
-    return $Call.ByID(2430553188).then(($result: any) => {
+    return $Call.ByID(1325253841).then(($result: any) => {
         return $$createType17($result);
     });
 }
@@ -162,19 +162,19 @@ export function GetLlamaCppDownloadStatus(): $CancellablePromise<$models.Downloa
  * the frontend, retried by polling).
  */
 export function GetLoadedModels(): $CancellablePromise<$models.LoadedModel[]> {
-    return $Call.ByID(2052539751).then(($result: any) => {
+    return $Call.ByID(467291630).then(($result: any) => {
         return $$createType19($result);
     });
 }
 
 export function GetMemory(): $CancellablePromise<$models.MemoryInfo | null> {
-    return $Call.ByID(3935674743).then(($result: any) => {
+    return $Call.ByID(1825090130).then(($result: any) => {
         return $$createType21($result);
     });
 }
 
 export function GetModelConfig(modelID: string): $CancellablePromise<$models.ModelConfig> {
-    return $Call.ByID(3379369827, modelID).then(($result: any) => {
+    return $Call.ByID(1343528888, modelID).then(($result: any) => {
         return $$createType22($result);
     });
 }
@@ -185,7 +185,7 @@ export function GetModelConfig(modelID: string): $CancellablePromise<$models.Mod
  * endpoint by current download source.
  */
 export function GetModelDescription(modelID: string): $CancellablePromise<string> {
-    return $Call.ByID(2953385413, modelID);
+    return $Call.ByID(3856182128, modelID);
 }
 
 /**
@@ -193,7 +193,7 @@ export function GetModelDescription(modelID: string): $CancellablePromise<string
  * → listModelScopeFiles, otherwise (default hf) → getHFModelFiles.
  */
 export function GetModelFiles(modelID: string): $CancellablePromise<$models.HFFileOut[]> {
-    return $Call.ByID(3059698428, modelID).then(($result: any) => {
+    return $Call.ByID(3827624353, modelID).then(($result: any) => {
         return $$createType24($result);
     });
 }
@@ -204,11 +204,11 @@ export function GetModelFiles(modelID: string): $CancellablePromise<$models.HFFi
  * source uses the details endpoint (blobs=true for real sizes).
  */
 export function GetModelMaxFileSize(modelID: string): $CancellablePromise<number> {
-    return $Call.ByID(3502311522, modelID);
+    return $Call.ByID(1239728199, modelID);
 }
 
 export function GetModels(): $CancellablePromise<$models.ModelInfo[]> {
-    return $Call.ByID(3623107510).then(($result: any) => {
+    return $Call.ByID(68250215).then(($result: any) => {
         return $$createType26($result);
     });
 }
@@ -219,13 +219,13 @@ export function GetModels(): $CancellablePromise<$models.ModelInfo[]> {
  * UptimeSeconds are fetched live).
  */
 export function GetMonitorStatus(): $CancellablePromise<$models.MonitorStatus | null> {
-    return $Call.ByID(1406400820).then(($result: any) => {
+    return $Call.ByID(1410600887).then(($result: any) => {
         return $$createType28($result);
     });
 }
 
 export function GetOS(): $CancellablePromise<{ [_ in string]?: string }> {
-    return $Call.ByID(1828890902).then(($result: any) => {
+    return $Call.ByID(1742051203).then(($result: any) => {
         return $$createType29($result);
     });
 }
@@ -238,7 +238,7 @@ export function GetOS(): $CancellablePromise<{ [_ in string]?: string }> {
  * unavailability is an expected state reported through Source "cache"/"none".
  */
 export function GetRemoteDoc(lang: string, sectionID: string, force: boolean): $CancellablePromise<$models.RemoteDocResult> {
-    return $Call.ByID(2670577276, lang, sectionID, force).then(($result: any) => {
+    return $Call.ByID(3167960667, lang, sectionID, force).then(($result: any) => {
         return $$createType30($result);
     });
 }
@@ -251,13 +251,13 @@ export function GetRemoteDoc(lang: string, sectionID: string, force: boolean): $
  * a zero result stays a no-op on desktop.
  */
 export function GetSafeArea(): $CancellablePromise<$models.SafeArea> {
-    return $Call.ByID(4054609944).then(($result: any) => {
+    return $Call.ByID(2134401773).then(($result: any) => {
         return $$createType31($result);
     });
 }
 
 export function GetServerConfig(): $CancellablePromise<$models.ServerConfig> {
-    return $Call.ByID(922492437).then(($result: any) => {
+    return $Call.ByID(923718408).then(($result: any) => {
         return $$createType32($result);
     });
 }
@@ -270,19 +270,19 @@ export function GetServerConfig(): $CancellablePromise<$models.ServerConfig> {
  * case (next - since > serverLogsCap) and refetches from 0.
  */
 export function GetServerLogsSince(since: number): $CancellablePromise<$models.ServerLogsPage> {
-    return $Call.ByID(2272125646, since).then(($result: any) => {
+    return $Call.ByID(795529405, since).then(($result: any) => {
         return $$createType33($result);
     });
 }
 
 export function GetServerStatus(): $CancellablePromise<{ [_ in string]?: any }> {
-    return $Call.ByID(2805866625).then(($result: any) => {
+    return $Call.ByID(1189515840).then(($result: any) => {
         return $$createType7($result);
     });
 }
 
 export function GetSystemInfo(): $CancellablePromise<$models.SystemInfo | null> {
-    return $Call.ByID(1207510045).then(($result: any) => {
+    return $Call.ByID(3756917252).then(($result: any) => {
         return $$createType35($result);
     });
 }
@@ -292,7 +292,7 @@ export function GetSystemInfo(): $CancellablePromise<$models.SystemInfo | null> 
  * update download.
  */
 export function GetUpdateDownloadStatus(): $CancellablePromise<$models.UpdateDownloadState | null> {
-    return $Call.ByID(1961990283).then(($result: any) => {
+    return $Call.ByID(3051828874).then(($result: any) => {
         return $$createType37($result);
     });
 }
@@ -304,29 +304,29 @@ export function GetUpdateDownloadStatus(): $CancellablePromise<$models.UpdateDow
  * artifact; see installUpdateNow for the guards.
  */
 export function InstallUpdate(): $CancellablePromise<void> {
-    return $Call.ByID(2348643066);
+    return $Call.ByID(1932284239);
 }
 
 export function PauseDownloadTask(id: string): $CancellablePromise<void> {
-    return $Call.ByID(2431111255, id);
+    return $Call.ByID(612386522, id);
 }
 
 export function PauseLlamaCppDownload(): $CancellablePromise<void> {
-    return $Call.ByID(2029097948);
+    return $Call.ByID(987681577);
 }
 
 export function RefreshModels(): $CancellablePromise<$models.ModelInfo[]> {
-    return $Call.ByID(879778009).then(($result: any) => {
+    return $Call.ByID(1283513860).then(($result: any) => {
         return $$createType26($result);
     });
 }
 
 export function ResumeDownloadTask(id: string): $CancellablePromise<void> {
-    return $Call.ByID(1327992246, id);
+    return $Call.ByID(1998385817, id);
 }
 
 export function ResumeLlamaCppDownload(): $CancellablePromise<void> {
-    return $Call.ByID(3234250677);
+    return $Call.ByID(2867782122);
 }
 
 /**
@@ -339,15 +339,15 @@ export function ResumeLlamaCppDownload(): $CancellablePromise<void> {
  * found, returns nil silently, matching CancelDownloadTask semantics.
  */
 export function RetryDownloadTask(id: string): $CancellablePromise<void> {
-    return $Call.ByID(1684922999, id);
+    return $Call.ByID(2795962746, id);
 }
 
 export function SaveModelConfig(modelID: string, config: $models.ModelConfig): $CancellablePromise<void> {
-    return $Call.ByID(2454186708, modelID, config);
+    return $Call.ByID(4225909797, modelID, config);
 }
 
 export function SaveServerConfig(cfg: $models.ServerConfig): $CancellablePromise<void> {
-    return $Call.ByID(2386255100, cfg);
+    return $Call.ByID(1564074031, cfg);
 }
 
 /**
@@ -355,7 +355,7 @@ export function SaveServerConfig(cfg: $models.ServerConfig): $CancellablePromise
  * → searchModelScopeAt, otherwise (default hf) → searchHFMirror.
  */
 export function SearchDownloads(query: string, filter: string): $CancellablePromise<$models.HFSearchResult[]> {
-    return $Call.ByID(3752716797, query, filter).then(($result: any) => {
+    return $Call.ByID(3530747576, query, filter).then(($result: any) => {
         return $$createType39($result);
     });
 }
@@ -377,7 +377,7 @@ export function SearchDownloads(query: string, filter: string): $CancellableProm
  * feature must be exercised on a `wails build` production binary.
  */
 export function SetApiRouteMode(enabled: boolean): $CancellablePromise<void> {
-    return $Call.ByID(1452625074, enabled);
+    return $Call.ByID(2691071663, enabled);
 }
 
 /**
@@ -386,7 +386,7 @@ export function SetApiRouteMode(enabled: boolean): $CancellablePromise<void> {
  * without mutating state; valid values are written to the global and persisted.
  */
 export function SetDownloadSource(source: string): $CancellablePromise<void> {
-    return $Call.ByID(2913750285, source);
+    return $Call.ByID(2014041732, source);
 }
 
 /**
@@ -398,7 +398,7 @@ export function SetDownloadSource(source: string): $CancellablePromise<void> {
  * second read from GetConfig.
  */
 export function SetLanguage(language: string): $CancellablePromise<string> {
-    return $Call.ByID(605496818, language);
+    return $Call.ByID(3446872155, language);
 }
 
 /**
@@ -408,7 +408,7 @@ export function SetLanguage(language: string): $CancellablePromise<string> {
  * install is picked up immediately.
  */
 export function SetLlamaCppDownloadDir(dir: string): $CancellablePromise<void> {
-    return $Call.ByID(1234016213, dir);
+    return $Call.ByID(987292370, dir);
 }
 
 /**
@@ -418,7 +418,7 @@ export function SetLlamaCppDownloadDir(dir: string): $CancellablePromise<void> {
  * invalidated so the merged model list reflects the new download root.
  */
 export function SetModelDownloadDir(dir: string): $CancellablePromise<void> {
-    return $Call.ByID(714764088, dir);
+    return $Call.ByID(4262946321, dir);
 }
 
 /**
@@ -428,7 +428,7 @@ export function SetModelDownloadDir(dir: string): $CancellablePromise<void> {
  * error without mutating state.
  */
 export function SetModelsDir(dir: string): $CancellablePromise<void> {
-    return $Call.ByID(1326214329, dir);
+    return $Call.ByID(2767063690, dir);
 }
 
 /**
@@ -438,7 +438,7 @@ export function SetModelsDir(dir: string): $CancellablePromise<void> {
  * SetSidebarCollapsed.
  */
 export function SetOnboardingDismissed(dismissed: boolean): $CancellablePromise<void> {
-    return $Call.ByID(799206670, dismissed);
+    return $Call.ByID(3725857053, dismissed);
 }
 
 /**
@@ -448,11 +448,11 @@ export function SetOnboardingDismissed(dismissed: boolean): $CancellablePromise<
  * SetTheme).
  */
 export function SetSidebarCollapsed(collapsed: boolean): $CancellablePromise<void> {
-    return $Call.ByID(4236638085, collapsed);
+    return $Call.ByID(528273016, collapsed);
 }
 
 export function SetTheme(theme: string): $CancellablePromise<void> {
-    return $Call.ByID(1709326749, theme);
+    return $Call.ByID(2940332114, theme);
 }
 
 /**
@@ -471,19 +471,19 @@ export function SetTheme(theme: string): $CancellablePromise<void> {
  * effect after an app restart.
  */
 export function SetTrayEnabled(enabled: boolean): $CancellablePromise<void> {
-    return $Call.ByID(3214759057, enabled);
+    return $Call.ByID(1566242230, enabled);
 }
 
 export function StartDownload(modelID: string, files: string[]): $CancellablePromise<void> {
-    return $Call.ByID(2707618076, modelID, files);
+    return $Call.ByID(2008696521, modelID, files);
 }
 
 export function StartLlamaCppDownload(): $CancellablePromise<void> {
-    return $Call.ByID(2611530074);
+    return $Call.ByID(1108336451);
 }
 
 export function StartServer(): $CancellablePromise<void> {
-    return $Call.ByID(4115957591);
+    return $Call.ByID(96158786);
 }
 
 /**
@@ -494,7 +494,7 @@ export function StartServer(): $CancellablePromise<void> {
  * the service. Idempotent on both platforms.
  */
 export function StartServerWithModel(model: string): $CancellablePromise<void> {
-    return $Call.ByID(1420164860, model);
+    return $Call.ByID(3289498203, model);
 }
 
 /**
@@ -503,15 +503,15 @@ export function StartServerWithModel(model: string): $CancellablePromise<void> {
  * CheckForUpdate result) and is used for target file naming.
  */
 export function StartUpdateDownload(version: string): $CancellablePromise<void> {
-    return $Call.ByID(2696931657, version);
+    return $Call.ByID(2747421932, version);
 }
 
 export function StopLlamaCppDownload(): $CancellablePromise<void> {
-    return $Call.ByID(1564418742);
+    return $Call.ByID(4167888033);
 }
 
 export function StopServer(): $CancellablePromise<void> {
-    return $Call.ByID(3351777243);
+    return $Call.ByID(1483274300);
 }
 
 /**
@@ -519,7 +519,7 @@ export function StopServer(): $CancellablePromise<void> {
  * stop / app exit).
  */
 export function StopUpdateDownload(): $CancellablePromise<void> {
-    return $Call.ByID(1678582909);
+    return $Call.ByID(38776446);
 }
 
 /**
@@ -528,7 +528,7 @@ export function StopUpdateDownload(): $CancellablePromise<void> {
  * validation, and returns the applied config.
  */
 export function TuneModelConfig(modelID: string): $CancellablePromise<$models.ModelConfig> {
-    return $Call.ByID(769524497, modelID).then(($result: any) => {
+    return $Call.ByID(899609304, modelID).then(($result: any) => {
         return $$createType22($result);
     });
 }
@@ -539,7 +539,7 @@ export function TuneModelConfig(modelID: string): $CancellablePromise<$models.Mo
  * empty.
  */
 export function UnloadModel(id: string): $CancellablePromise<void> {
-    return $Call.ByID(2623847304, id);
+    return $Call.ByID(125436185, id);
 }
 
 // Private type creation functions
