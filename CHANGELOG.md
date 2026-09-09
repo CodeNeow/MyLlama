@@ -2,6 +2,64 @@
 
 更新日志的**权威来源**（见 `AGENTS.md`「版本发布」）：发版时先在此新增版本条目（含日期），`git tag` 注解消息与 GitHub Release 正文均从该条目复制，保持一致。自 v0.3.3 起条目为概括式双语（中文在上）；v0.3.0 之前的逐提交条目已随对应 tag 与 Release 的清理移除（见文末「历史版本」）。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化版本。
 
+## [v0.5.0] - 2026-09-09
+
+## 中文
+
+v0.5.0:品牌焕新为 **MyLlama**，安卓端正式发布，桌面端全新视觉，推理性能与安全全面加固。核心变化:
+
+**🌟 本版亮点**
+
+- **安卓端正式发布** — 全新手机端界面(底部导航、安全区与软键盘适配、灵动任务胶囊),直连模式单模型常驻、即开即用;一键调优自动按 big.LITTLE 性能核规划线程;支持应用内自更新(侧载分发,arm64)。下载、聊天与模型管理体验与桌面端一致。
+- **桌面端全新视觉** — 玻璃拟态 + 紫渐变浮岛设计语言,桌面 / 平板 / 手机三档响应式,浅色 / 深色双主题;首页改为「问候 + 模型状态卡 + 快速上手清单」布局,AI 是否可用一目了然。
+- **推理性能细节拉满** — 模型参数页新增 n-gram 投机解码(零额外显存,对代码 / 模板类文本显著加速);支持 q8_0 KV 缓存量化撑起更长上下文;Windows 全量 offload 自动钉定最优线程数并关闭上下文检查点,多花在 CPU 上的每个周期都省下来。
+
+**🔒 安全与稳定**
+
+- **API Key 全链路** — 密钥经环境变量传递,进程列表与启动日志不再可见;聊天、模型管理与模型卸载全部携带鉴权;服务运行中修改密钥会明确提示「重启后生效」并可一键重启。
+- **重启竞态修复** — API 页「重启」真正完成 停止 → 等待退出 → 启动,不再只停不起。
+- **失效模型自愈** — 聊天页选中的模型被删除 / 改名时自动切换可用模型并轻提示,不再裸报 model not found。
+
+**🪟 Windows 体验**
+
+- **系统托盘** — 关闭窗口最小化到托盘,随时唤回主窗口或退出;无头模式下同样提供托盘图标。
+- **安装器品牌迁移** — 全新 MyLlama 安装包自动检测旧版 Llama Desktop:配置、模型库与 llama.cpp 运行时整体迁入新目录并改写记录路径,旧版静默卸载。
+
+**📦 其他**
+
+- Linux 端 GPU 探测扩展:AMD / Intel 等非 NVIDIA 显卡可见并参与一键调优。
+- 聊天新增生成预设(精准 / 均衡 / 创意 / 随机 + 自定义另存)。
+- 应用内教程支持远程更新(不升级也能获取新章节),手机端新增阅读页。
+- 更名 llama-cpp-desktop → **MyLlama**:仓库、安装器与状态文件全部启用新名,旧配置自动迁移;CI 新增安卓构建、模拟器冒烟与真实服务链 e2e。
+
+## English
+
+v0.5.0: the rebrand to **MyLlama**, the Android release, a brand-new desktop look, and across-the-board inference and security hardening. Highlights:
+
+**🌟 Headlines**
+
+- **Android is here** — a brand-new phone UI (bottom navigation, safe-area & soft-keyboard handling, floating task capsule), direct-mode serving with a single resident model that's ready out of the box, auto-tune capped to big.LITTLE performance cores, and in-app self-updates (sideload, arm64). Downloads, chat and model management match the desktop experience.
+- **A brand-new desktop look** — glassmorphism and violet-gradient floating islands across three responsive tiers (desktop / tablet / phone) with light & dark themes; the Home page now leads with a greeting, a model status card and a quick-start checklist.
+- **Inference performance, tuned to the last detail** — n-gram speculative decoding (zero extra VRAM, a real speed-up for code / template-style text), q8_0 KV-cache quantization for longer contexts, and Windows full-offload plans that pin the optimal thread count and disable context checkpoints.
+
+**🔒 Security & stability**
+
+- **API key end to end** — the key is delivered via an environment variable, invisible in process lists and startup logs; chat, model listing and unload all carry bearer auth; saving a key while the service runs offers an explicit one-click restart.
+- **Restart race fixed** — the API page restart truly completes stop → wait → start.
+- **Stale model self-heal** — a deleted or renamed selected model auto-switches with a notice instead of a raw "model not found".
+
+**🪟 Windows experience**
+
+- **System tray** — closing the window minimizes to the tray; headless mode gets a tray icon too.
+- **Installer migration** — the MyLlama installer detects a legacy Llama Desktop install, migrates config, model library and the llama.cpp runtime into the new directory (rewriting recorded paths) and silently uninstalls the old product.
+
+**📦 Also**
+
+- Linux GPU probing extended: AMD / Intel and other non-NVIDIA cards are now visible to one-click tuning.
+- Chat gains generation presets (precise / balanced / creative / random + custom).
+- The in-app tutorial updates remotely (new sections without upgrading) and gains a phone reader page.
+- Renamed llama-cpp-desktop → **MyLlama** across repo, installer and state files (legacy configs migrate automatically); CI adds Android build + emulator smoke and real-service e2e tests.
+
 ## [v0.3.9] - 2026-08-30
 
 ## 中文
