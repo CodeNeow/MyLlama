@@ -209,8 +209,20 @@ func downloadTask(task *DlTask) {
 		default:
 		}
 
-		req, err := buildDownloadRequest(task.ctx, task.URL, offset)
+		// Per-attempt context: each connection attempt derives its own
+		// cancellable context from the task context. Cancelling the attempt
+		// makes the transport close the underlying connection — the reliable
+		// way to unblock a body read parked on a half-open connection, which
+		// a plain resp.Body.Close alone cannot guarantee across transports
+		// (the pending Read may hold the body lock Close needs). attemptCancel
+		// is called on every exit path of an attempt (success / error /
+		// cancel / idle stall / pause) so no attempt context leaks; cancelling
+		// task.ctx still terminates everything through context propagation.
+		attemptCtx, attemptCancel := context.WithCancel(task.ctx)
+
+		req, err := buildDownloadRequest(attemptCtx, task.URL, offset)
 		if err != nil {
+			attemptCancel()
 			dlTasksMu.Lock()
 			task.Status = "error"
 			task.Error = err.Error()
@@ -222,6 +234,7 @@ func downloadTask(task *DlTask) {
 
 		resp, err := client.Do(req)
 		if err != nil {
+			attemptCancel()
 			dlTasksMu.Lock()
 			if task.Status == "paused" {
 				resumeCh := task.resumeCh
@@ -270,6 +283,7 @@ func downloadTask(task *DlTask) {
 
 		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
 			status := resp.StatusCode
+			attemptCancel()
 			resp.Body.Close()
 			// Same automatic retry for transient HTTP statuses (429/5xx);
 			// permanent 4xx (404/403/...) surfaces immediately.
@@ -307,6 +321,7 @@ func downloadTask(task *DlTask) {
 		// and returns 200, writing still starts from zero — the content is
 		// correct, the reconnect happens only this once, no infinite loop.
 		if offset > 0 && resp.StatusCode == http.StatusOK {
+			attemptCancel()
 			resp.Body.Close()
 			dlTasksMu.Lock()
 			task.Downloaded = 0
@@ -342,6 +357,7 @@ func downloadTask(task *DlTask) {
 		// Open temp file for append
 		out, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 		if err != nil {
+			attemptCancel()
 			resp.Body.Close()
 			dlTasksMu.Lock()
 			task.Status = "error"
@@ -355,6 +371,29 @@ func downloadTask(task *DlTask) {
 		buf := make([]byte, 32*1024)
 		downloaded := offset
 
+		// closeAttempt is the single closing path shared by both retry exits
+		// of the read loop (idle stall and mid-stream error). Ordering
+		// matters:
+		//  1. attemptCancel first — the transport closes the connection,
+		//     which unblocks an in-flight body read (the read may hold the
+		//     body lock while parked on a half-open connection);
+		//  2. close this attempt's response body and .part write handle;
+		//  3. re-stat the .part — only after the handle closed (Windows-safe)
+		//     — so offset matches the bytes actually on disk. A stale offset
+		//     would make the server resend already-appended bytes and
+		//     silently corrupt the file. Stat failure falls back to the
+		//     in-memory count.
+		closeAttempt := func() {
+			attemptCancel()
+			resp.Body.Close()
+			out.Close()
+			if fi, err := os.Stat(tmpPath); err == nil {
+				offset = fi.Size()
+			} else {
+				offset = downloaded
+			}
+		}
+
 	readLoop:
 		for {
 			// Check pause
@@ -363,6 +402,7 @@ func downloadTask(task *DlTask) {
 			resumeCh := task.resumeCh
 			dlTasksMu.Unlock()
 			if paused {
+				attemptCancel()
 				resp.Body.Close()
 				out.Close()
 				dlTasksMu.Lock()
@@ -399,6 +439,7 @@ func downloadTask(task *DlTask) {
 			select {
 			case <-task.ctx.Done():
 				readTimer.Stop()
+				attemptCancel()
 				resp.Body.Close()
 				out.Close()
 				dlTasksMu.Lock()
@@ -412,21 +453,16 @@ func downloadTask(task *DlTask) {
 			case <-readTimer.C:
 				// No data arrived within the idle window: the stream has
 				// stalled (half-open connection / server or proxy stopped
-				// sending). Close this attempt and reconnect with a Range
-				// header at the current .part size — resuming from exactly
-				// where the stalled read left off. The outer loop reopens the
-				// .part file in append mode, so no bytes are lost or
-				// duplicated.
-				resp.Body.Close()
-				out.Close()
+				// sending). closeAttempt cancels the attempt — which makes
+				// the transport close the underlying connection and unblock
+				// the parked body read — then closes this attempt's handles
+				// and re-stats the .part, so the reconnect resumes with a
+				// Range header from exactly where the stalled read left off:
+				// no bytes lost or duplicated.
+				closeAttempt()
 				dlTasksMu.Lock()
 				task.Speed = 0
 				dlTasksMu.Unlock()
-				if fi, err := os.Stat(tmpPath); err == nil {
-					offset = fi.Size()
-				} else {
-					offset = downloaded
-				}
 				// Reset the speed sampling baseline: elapsed would otherwise
 				// be inflated by the stall duration.
 				lastSampleTime = time.Time{}
@@ -436,6 +472,7 @@ func downloadTask(task *DlTask) {
 
 			if rr.n > 0 {
 				if _, err := out.Write(buf[:rr.n]); err != nil {
+					attemptCancel()
 					resp.Body.Close()
 					out.Close()
 					dlTasksMu.Lock()
@@ -473,6 +510,7 @@ func downloadTask(task *DlTask) {
 				persistTasksThrottled()
 			}
 			if rr.err == io.EOF {
+				attemptCancel()
 				resp.Body.Close()
 				out.Close()
 				// On move failure, mark the task as errored and return without
@@ -499,8 +537,12 @@ func downloadTask(task *DlTask) {
 				return
 			}
 			if rr.err != nil {
-				resp.Body.Close()
-				out.Close()
+				// The read already returned, so the closes cannot block on a
+				// pending read. closeAttempt also cancels the attempt and
+				// re-stats the .part so a following retry resumes from the
+				// bytes actually on disk — the failed attempt already
+				// appended everything it received to the append-open .part.
+				closeAttempt()
 				dlTasksMu.Lock()
 				// Cancel-vs-read-error race defense: when ctx is already
 				// cancelled, mark cancelled rather than error (same strategy
@@ -514,11 +556,16 @@ func downloadTask(task *DlTask) {
 				}
 				dlTasksMu.Unlock()
 				// Mid-body stream failures are transient: reconnect and
-				// resume from the .part size on disk (outer loop re-stats).
+				// resume from the .part size on disk (closeAttempt above
+				// refreshed the offset after the write handle closed).
 				if retries < downloadRetryCount {
 					retries++
 					log.Printf("[WARN] task %s stream failed (%v), retrying %d/%d", task.ID, rr.err, retries, downloadRetryCount)
 					if sleepDownloadRetry(task.ctx) {
+						// Reset the speed sampling baseline: elapsed would
+						// otherwise include the retry backoff.
+						lastSampleTime = time.Time{}
+						lastSampleBytes = 0
 						break readLoop
 					}
 					dlTasksMu.Lock()
@@ -542,8 +589,9 @@ func downloadTask(task *DlTask) {
 
 // buildDownloadRequest creates a GET request for a download URL with the
 // appUserAgent() User-Agent, adding a Range header when resuming from an offset.
-// The request is bound to the task's cancel context so cancelling the task
-// aborts an in-flight transfer immediately.
+// The request is bound to the caller's context — the per-attempt context
+// derived from the task's — so cancelling either the task or the current
+// attempt aborts an in-flight transfer immediately.
 func buildDownloadRequest(ctx context.Context, downloadURL string, offset int64) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", downloadURL, nil)
 	if err != nil {
