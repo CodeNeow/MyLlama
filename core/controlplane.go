@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -28,7 +29,12 @@ import (
 //     async by design);
 //   - destructive endpoints reject non-loopback callers with 403 even though
 //     the listener is already loopback-bound (defense in depth), and honor an
-//     optional shared token.
+//     optional shared token;
+//   - browser-initiated cross-site requests are rejected at the transport
+//     layer: every endpoint validates the Host header against the bound
+//     loopback address (DNS-rebinding defense — a rebound attacker hostname
+//     never matches), and /stop additionally validates Origin (CSRF defense —
+//     a cross-site browser POST necessarily carries the attacker's origin).
 
 // controlPlaneAddr is the fixed loopback listen address. Fixed rather than
 // configurable keeps the surface tiny; a future config knob can re-point it
@@ -53,9 +59,16 @@ var controlPlaneListen = func(network, addr string) (net.Listener, error) {
 // controlPlaneServer holds the active control-plane HTTP server (nil when the
 // control plane is not running); guarded by controlPlaneMu. Headless startup
 // is single-instance gated, so at most one exists per process.
+//
+// controlPlanePort records the port of the listener actually bound at start
+// (empty when not running). In production this is always the 1900 constant —
+// a bind failure degrades to not serving at all, never to a replacement port —
+// but tests inject ephemeral listeners, and the Host whitelist must match the
+// port that is really serving.
 var (
 	controlPlaneMu     sync.Mutex
 	controlPlaneServer *http.Server
+	controlPlanePort   string
 )
 
 // startControlPlane binds the loopback listener and serves the control-plane
@@ -66,6 +79,13 @@ func startControlPlane() (*http.Server, error) {
 	ln, err := controlPlaneListen("tcp", controlPlaneAddr)
 	if err != nil {
 		return nil, fmt.Errorf("bind %s: %w", controlPlaneAddr, err)
+	}
+	// Record the bound port before serving so the Host whitelist matches the
+	// listener actually accepting connections (see controlPlanePort).
+	if _, port, perr := net.SplitHostPort(ln.Addr().String()); perr == nil {
+		controlPlaneMu.Lock()
+		controlPlanePort = port
+		controlPlaneMu.Unlock()
 	}
 	srv := &http.Server{
 		Handler:           controlPlaneMux(),
@@ -106,6 +126,9 @@ func stopControlPlane() {
 	controlPlaneMu.Lock()
 	srv := controlPlaneServer
 	controlPlaneServer = nil
+	// Clear the bound port too: after a stop, direct-mux users (tests) fall
+	// back to the constant-address whitelist instead of a stale test port.
+	controlPlanePort = ""
 	controlPlaneMu.Unlock()
 	if srv == nil {
 		return
@@ -135,6 +158,9 @@ func controlPlaneMux() *http.ServeMux {
 // becomes a 500 JSON response instead of crashing the headless process (the
 // FreeToken crash-proof rule). If the handler already wrote a response before
 // panicking, the recovery write is a harmless no-op (headers already sent).
+// It also rejects requests whose Host header does not name this control plane
+// (see isAllowedControlHost) — transport-layer addressing validation applied
+// to every endpoint, /health included.
 func controlGuard(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
@@ -143,8 +169,78 @@ func controlGuard(next http.HandlerFunc) http.HandlerFunc {
 				writeControlJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 			}
 		}()
+		if !isAllowedControlHost(r.Host) {
+			writeControlJSON(w, http.StatusMisdirectedRequest, map[string]string{"error": "host not allowed"})
+			return
+		}
 		next(w, r)
 	}
+}
+
+// controlPlaneHosts returns the Host header values accepted on requests to
+// the control plane: the three loopback spellings of the bound port. The port
+// comes from the listener recorded at start (in production always the 1900
+// constant, since a bind failure degrades to not serving — never to a new
+// port); while no server runs, the constant's port is used so the direct-mux
+// tests see the production whitelist.
+func controlPlaneHosts() []string {
+	controlPlaneMu.Lock()
+	port := controlPlanePort
+	controlPlaneMu.Unlock()
+	if port == "" {
+		if _, p, err := net.SplitHostPort(controlPlaneAddr); err == nil {
+			port = p
+		}
+	}
+	return []string{
+		"127.0.0.1:" + port,
+		"localhost:" + port,
+		"[::1]:" + port,
+	}
+}
+
+// isAllowedControlHost reports whether the request's Host header names this
+// control plane. This is the DNS-rebinding defense: a rebound attacker
+// hostname resolves to 127.0.0.1 but its requests still carry the attacker's
+// Host, which never matches the whitelist. It is transport-layer addressing
+// validation, not authentication — /health stays token/loopback-ungated (see
+// handleControlHealth); it must merely be addressed to this service. Mismatch
+// answers 421 Misdirected Request: the request was aimed at a host this
+// listener does not serve (401/403 remain reserved for authorization).
+func isAllowedControlHost(host string) bool {
+	for _, h := range controlPlaneHosts() {
+		if strings.EqualFold(host, h) {
+			return true
+		}
+	}
+	return false
+}
+
+// isAllowedControlOrigin validates the Origin header of a state-changing
+// request (/stop) — the CSRF defense. Behavior:
+//   - no Origin → allowed: non-browser callers (curl, scripts, local tooling —
+//     the control plane's actual consumers) never send Origin; the loopback
+//     and token gates still apply. Adding Origin here does not break them.
+//   - "null" → rejected: browsers send it for sandboxed iframes and certain
+//     redirect/privacy contexts, all of them attacker-shapeable, and no
+//     legitimate producer exists (the control plane serves no web pages, so
+//     nothing is ever same-origin with it). Fail closed.
+//   - anything else must be exactly the http loopback origin of the bound
+//     port. A browser cross-site POST (even no-cors) carries the attacker's
+//     origin and is rejected here.
+func isAllowedControlOrigin(origin string) bool {
+	if origin == "" {
+		return true
+	}
+	if strings.EqualFold(origin, "null") {
+		return false
+	}
+	for _, h := range controlPlaneHosts() {
+		if strings.EqualFold(origin, "http://"+h) {
+			return true
+		}
+	}
+	return false
 }
 
 // writeControlJSON writes one JSON response with the given status.
@@ -189,6 +285,9 @@ func isLoopbackRequest(r *http.Request) bool {
 
 // handleControlHealth answers unconditionally — never gated by the token or
 // the loopback guard (probers need a liveness signal that cannot 401/403).
+// The controlGuard's Host whitelist still applies above this handler: it is
+// transport-layer addressing validation, not an authorization gate, so a
+// properly-addressed probe still gets its ungated 200.
 func handleControlHealth(w http.ResponseWriter, _ *http.Request) {
 	writeControlJSON(w, http.StatusOK, map[string]interface{}{"status": "ok", "headless": true})
 }
@@ -281,10 +380,13 @@ func handleControlLogs(w http.ResponseWriter, r *http.Request) {
 //
 // Guards, in order: POST-only (405); non-loopback remote address rejected
 // with 403 even though the listener is already loopback-bound (defense in
-// depth, the FreeToken rule for destructive endpoints); X-Control-Token
-// required to match LLAMA_DESKTOP_CONTROL_TOKEN when that env var is set
-// (401 missing / 403 wrong). Unset env var = token check disabled: the
-// loopback bind is then the only gate.
+// depth, the FreeToken rule for destructive endpoints); Origin rejected with
+// 403 when present and not this control plane's own loopback origin (a
+// browser-initiated cross-site POST reaches the loopback listener with the
+// attacker's origin — see isAllowedControlOrigin); X-Control-Token required to
+// match LLAMA_DESKTOP_CONTROL_TOKEN when that env var is set (401 missing /
+// 403 wrong). Unset env var = token check disabled: the loopback bind plus the
+// Host/Origin gates are then the only gates.
 func handleControlStop(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeControlJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
@@ -292,6 +394,10 @@ func handleControlStop(w http.ResponseWriter, r *http.Request) {
 	}
 	if !isLoopbackRequest(r) {
 		writeControlJSON(w, http.StatusForbidden, map[string]string{"error": "loopback only"})
+		return
+	}
+	if !isAllowedControlOrigin(r.Header.Get("Origin")) {
+		writeControlJSON(w, http.StatusForbidden, map[string]string{"error": "origin not allowed"})
 		return
 	}
 	if code := checkControlToken(r); code != 0 {
