@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -929,6 +930,60 @@ func TestParseAppleGPUName(t *testing.T) {
 	for _, out := range []string{"", "not json", `{"SPDisplaysDataType":[{}]}`, `{"SPDisplaysDataType":[]}`} {
 		if got := parseAppleGPUName(out); got != "Apple Silicon (Metal)" {
 			t.Errorf("parseAppleGPUName(%q) = %q, want fallback", out, got)
+		}
+	}
+}
+
+// TestGetLlamaCppConcurrentFirstCall pins the observable semantics of the
+// concurrent first-call path: with the cache invalidated, N goroutines call
+// GetLlamaCpp at once and every caller must receive a non-nil snapshot with
+// identical fields (exactly one shared slow-path scan, no torn per-goroutine
+// values), each held through its own copy — never the shared cache pointer
+// a later invalidate + rescan would rewrite. This binary cannot run under
+// -race (no C toolchain on the dev machine), so lock correctness itself
+// rests on the implementation mirroring GetModels (double-check under
+// llamaMu, copy-out under the lock) and on review; this test is the semantic
+// smoke check for that contract.
+func TestGetLlamaCppConcurrentFirstCall(t *testing.T) {
+	// Snapshot the cache globals so the forced slow path cannot leak into
+	// other tests; cachedLlamaCpp is only touched under llamaMu.
+	origValid := llamaCacheValid.Load()
+	llamaMu.Lock()
+	origInfo := cachedLlamaCpp
+	llamaMu.Unlock()
+	t.Cleanup(func() {
+		llamaMu.Lock()
+		cachedLlamaCpp = origInfo
+		llamaMu.Unlock()
+		llamaCacheValid.Store(origValid)
+	})
+
+	// Force the slow path for every concurrent caller.
+	llamaCacheValid.Store(false)
+
+	const n = 16
+	results := make([]*LlamaCppInfo, n)
+	var wg sync.WaitGroup
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func(i int) {
+			defer wg.Done()
+			results[i] = (&App{}).GetLlamaCpp()
+		}(i)
+	}
+	wg.Wait()
+
+	for i, r := range results {
+		if r == nil {
+			t.Fatalf("GetLlamaCpp result %d = nil, want a snapshot pointer", i)
+		}
+		if *r != *results[0] {
+			t.Errorf("GetLlamaCpp result %d = %+v, want the shared snapshot %+v (concurrent first calls must agree)", i, *r, *results[0])
+		}
+		// Every caller gets its own copy of the struct; sharing the live
+		// cache pointer is the second half of the fixed defect.
+		if i > 0 && r == results[0] {
+			t.Errorf("GetLlamaCpp result %d shares the cache pointer with result 0 — the copy-out regressed", i)
 		}
 	}
 }

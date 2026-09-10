@@ -395,11 +395,22 @@ func TestPauseResumeDownloadTask(t *testing.T) {
 	if err := (&App{}).ResumeDownloadTask(task.ID); err != nil {
 		t.Fatal(err)
 	}
+	// The forged task's goroutine exited long ago (waitTaskTerminal above) and
+	// running is false, so Resume takes the restart path shared with
+	// RetryDownloadTask: the status moves queued → downloading asynchronously
+	// while the restarted goroutine spins up, then the local 404 source fails
+	// it fast. Only still being paused would be wrong. The user-paused signal
+	// path (status flipping to downloading synchronously under a live
+	// goroutine) is pinned with a real parked goroutine in
+	// TestResumeUserPausedTaskSingleGoroutine (tasks_resume_test.go).
 	dlTasksMu.Lock()
-	if task.Status != "downloading" {
-		t.Errorf("status after resume = %q, want downloading", task.Status)
+	if task.Status == "paused" {
+		dlTasksMu.Unlock()
+		t.Errorf("status after resume = %q, want the restarted download to leave paused", task.Status)
+	} else {
+		dlTasksMu.Unlock()
 	}
-	dlTasksMu.Unlock()
+	waitTaskTerminal(t, id, 5*time.Second)
 }
 
 // TestGetDownloadTasksSnapshot verifies GetDownloadTasks returns a deep copy:

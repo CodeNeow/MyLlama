@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -518,7 +519,12 @@ func (a *App) SetLlamaCppDownloadDir(dir string) error {
 	llamaCppDownloadDirMu.Lock()
 	llamaCppDownloadDirOverride = dir
 	llamaCppDownloadDirMu.Unlock()
+	// Invalidate under llamaMu (same discipline as invalidateModelCache /
+	// modelsMu) so the flag flip is serialized with the snapshot rewrite in
+	// GetLlamaCpp's slow path.
+	llamaMu.Lock()
 	llamaCacheValid.Store(false)
+	llamaMu.Unlock()
 	saveConfig()
 	return nil
 }
@@ -565,12 +571,31 @@ func (a *App) GetCUDA() *CUDAInfo {
 	return &s.CUDA
 }
 
+// llamaMu guards the cachedLlamaCpp snapshot, mirroring modelsMu for the
+// model cache: the atomic llamaCacheValid flag gates the fast path, the slow
+// path rechecks under the lock so concurrent first calls run getLlamaCppInfo
+// only once, and readers copy the struct out under the lock so callers never
+// hold a pointer into the shared cache.
+var llamaMu sync.Mutex
+
+// GetLlamaCpp returns the llama.cpp detection snapshot. The slow path
+// double-checks llamaCacheValid under llamaMu (concurrent first callers used
+// to write the multi-field cachedLlamaCpp struct unsynchronized); the cached
+// struct is copied out under the lock so a later invalidate + rescan never
+// rewrites a snapshot a caller still holds. Mirrors GetModels.
 func (a *App) GetLlamaCpp() *LlamaCppInfo {
 	if !llamaCacheValid.Load() {
-		cachedLlamaCpp = getLlamaCppInfo()
-		llamaCacheValid.Store(true)
+		llamaMu.Lock()
+		if !llamaCacheValid.Load() {
+			cachedLlamaCpp = getLlamaCppInfo()
+			llamaCacheValid.Store(true)
+		}
+		llamaMu.Unlock()
 	}
-	return &cachedLlamaCpp
+	llamaMu.Lock()
+	out := cachedLlamaCpp
+	llamaMu.Unlock()
+	return &out
 }
 
 func (a *App) GetOS() map[string]string {
@@ -915,7 +940,12 @@ func (a *App) BrowseLlamaCppDir() (string, error) {
 	customLlamaCppMu.Lock()
 	customLlamaCppDir = dir
 	customLlamaCppMu.Unlock()
+	// Invalidate under llamaMu (same discipline as invalidateModelCache /
+	// modelsMu) so the flag flip is serialized with the snapshot rewrite in
+	// GetLlamaCpp's slow path.
+	llamaMu.Lock()
 	llamaCacheValid.Store(false)
+	llamaMu.Unlock()
 	saveConfig()
 	return dir, nil
 }
@@ -1088,16 +1118,33 @@ func (a *App) PauseDownloadTask(id string) error {
 	return nil
 }
 
+// ResumeDownloadTask resumes a paused download task. Two paused flavors are
+// told apart by the runtime running flag: a task paused in this process has a
+// live goroutine parked in waitForTaskResume — flip the status and signal it
+// to continue. A task restored from the persisted queue after a restart has
+// NO goroutine (loadConfig never spawns one; signaling its fresh resumeCh
+// would reach nobody and leave the task stuck on "downloading" at its old
+// progress forever — a zombie only cancellable by the user), so it takes the
+// same rebuild-ctx + respawn path as RetryDownloadTask; downloadTask resumes
+// from the .part size already on disk.
 func (a *App) ResumeDownloadTask(id string) error {
 	dlTasksMu.Lock()
 	var found bool
 	for _, t := range dlTasks {
 		if t.ID == id && t.Status == "paused" {
-			t.Status = "downloading"
-			// Signal resume (non-blocking send to buffered channel)
-			select {
-			case t.resumeCh <- struct{}{}:
-			default:
+			if t.running {
+				// User-paused: the goroutine is parked on resumeCh.
+				t.Status = "downloading"
+				// Signal resume (non-blocking send to buffered channel)
+				select {
+				case t.resumeCh <- struct{}{}:
+				default:
+				}
+			} else {
+				// Restart-restored: nobody waits on resumeCh; restart the
+				// goroutine (retryDownloadTask rebuilds ctx and requires
+				// dlTasksMu held).
+				retryDownloadTask(t)
 			}
 			found = true
 			break
@@ -1113,10 +1160,12 @@ func (a *App) ResumeDownloadTask(id string) error {
 // RetryDownloadTask retries a download task: for finished tasks
 // (error/cancelled/done) or queued tasks, it rebuilds the ctx and restarts
 // the download goroutine; downloadTask checks .part file size as the resume
-// offset, naturally reusing resume capability. Tasks that are still
-// downloading or paused have an active goroutine, so retrying is disallowed
-// to prevent concurrent writes to the same .part file; when the id is not
-// found, returns nil silently, matching CancelDownloadTask semantics.
+// offset, naturally reusing resume capability. Downloading tasks have an
+// active goroutine, so retrying them is disallowed to prevent concurrent
+// writes to the same .part file; paused tasks are refused here too — a
+// running one is owned by ResumeDownloadTask's signal path and a
+// goroutine-less (restart-restored) one by its respawn path. When the id is
+// not found, returns nil silently, matching CancelDownloadTask semantics.
 func (a *App) RetryDownloadTask(id string) error {
 	dlTasksMu.Lock()
 	var found bool

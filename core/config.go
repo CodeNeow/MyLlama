@@ -564,7 +564,10 @@ func loadConfig() {
 	// normalized to paused (the downloading goroutine died with the process;
 	// the frontend can offer resume/retry); URLs are rebuilt via
 	// buildModelDownloadURL; resumeCh is a fresh buffered channel while
-	// ctx/cancel stay nil (RetryDownloadTask rebuilds ctx before starting).
+	// ctx/cancel stay nil and the running flag stays false (zero value — no
+	// goroutine exists), so ResumeDownloadTask's respawn branch and
+	// RetryDownloadTask both rebuild the ctx before starting a fresh
+	// goroutine.
 	// After restoring, bump dlTaskCounter to avoid id collisions with
 	// existing tasks.
 	restored := make([]*DlTask, 0, len(cfg.DownloadTasks))

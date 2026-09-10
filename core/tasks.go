@@ -30,9 +30,17 @@ type DlTask struct {
 	SizeHuman  string  `json:"sizeHuman"`
 	Speed      float64 `json:"speed"` // current download speed (bytes/sec)
 	Error      string  `json:"error"`
-	ctx        context.Context
-	cancel     context.CancelFunc
-	resumeCh   chan struct{}
+	// running reports whether a downloadTask goroutine is alive for this
+	// task. Runtime-only (never persisted or sent to the frontend): it is
+	// false after a process restart, which lets ResumeDownloadTask tell a
+	// user-paused task (goroutine parked in waitForTaskResume, resume via the
+	// resumeCh signal) apart from a restart-restored paused task (no
+	// goroutine at all, resume must spawn a fresh one). Guarded by dlTasksMu;
+	// set true by spawnDownloadTask, cleared when downloadTask returns.
+	running  bool `json:"-"`
+	ctx      context.Context
+	cancel   context.CancelFunc
+	resumeCh chan struct{}
 }
 
 var dlTasks []*DlTask
@@ -119,12 +127,24 @@ func persistTasksThrottled() {
 var dlTaskGoroutines sync.WaitGroup
 
 // spawnDownloadTask starts the download goroutine for one task, registered in
-// dlTaskGoroutines so tests can drain it (waitDlGoroutinesForTest).
+// dlTaskGoroutines so tests can drain it (waitDlGoroutinesForTest). It is the
+// single goroutine-start choke point, so it also maintains the runtime
+// running flag: set true before spawning (the caller holds dlTasksMu — both
+// production call sites, startHFDownload and retryDownloadTask, do), cleared
+// under the lock after downloadTask returns so the flag transitions stay
+// serialized with ResumeDownloadTask's branch on it.
 func spawnDownloadTask(task *DlTask) {
 	dlTaskGoroutines.Add(1)
+	task.running = true
 	go func() {
 		defer dlTaskGoroutines.Done()
 		downloadTask(task)
+		// downloadTask only returns in a terminal state (a user pause parks
+		// inside waitForTaskResume without returning), so clearing the flag
+		// here covers every exit path of the goroutine.
+		dlTasksMu.Lock()
+		task.running = false
+		dlTasksMu.Unlock()
 	}()
 }
 
