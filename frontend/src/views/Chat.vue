@@ -363,74 +363,29 @@
         @go-downloads="goDownloads"
         @go-runtime="goRuntime"
       />
-      <!-- Pending attachment preview bar -->
-      <div v-if="pendingImages.length" class="pending-bar">
-        <div class="pending-item" v-for="(img, i) in pendingImages" :key="i">
-          <img :src="img" class="pending-thumb" alt="" />
-          <button class="pending-remove" @click="removePendingImage(i)" :title="t('chat.removeImage')">✕</button>
-        </div>
-      </div>
-      <div class="input-row" :class="{ 'input-row--blocked': composerBlocked }">
-        <!-- Vision gate (issue #35): the attach entry is disabled only when a
-             model IS selected and it cannot take images (no sibling mmproj and
-             no explicit projector override) — with no selection, attachments
-             stay open and the send-time fallback guides instead. -->
-        <button class="attach-btn" @click="triggerAttach" :disabled="attachBlocked" :title="attachBlocked ? t('chat.attachBlocked') : t('chat.attach')" type="button">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
-          </svg>
-        </button>
-        <input
-          ref="fileInput"
-          type="file"
-          accept="image/*"
-          multiple
-          class="file-input-hidden"
-          @change="onFileSelected"
-        />
-        <textarea
-          ref="inputBox"
-          class="chat-input"
-          rows="1"
-          :placeholder="inputPlaceholder"
-          :disabled="serviceStarting || streaming || (!selectedModel && !isMobileTier)"
-          @keydown="onInputKeydown"
-          @input="onInputResize"
-          @paste="onInputPaste"
-        ></textarea>
-        <!-- Design frame ② composer: circular gradient send button that
-             flips to a red circular stop button while streaming — the state
-             must read at a glance, so the icons + aria-labels swap with it.
-             Phone tier (frame ⑦): with no model selected the button stays
-             enabled so tapping it runs the chatReadiness precheck, which
-             surfaces the guided "no models" notice + download CTA instead of
-             a dead button; the desktop keeps the disabled gate unchanged. -->
-        <button
-          v-if="!streaming"
-          class="send-btn"
-          :disabled="serviceStarting || (!selectedModel && !isMobileTier)"
-          :aria-label="t('chat.send')"
-          :title="t('chat.send')"
-          @click="send"
-          type="button"
-        >
-          <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M3 11.5L21 3l-8.5 18-2.3-7.2L3 11.5z"/>
-          </svg>
-        </button>
-        <button
-          v-else
-          class="send-btn stop-btn"
-          :aria-label="t('chat.stop')"
-          :title="t('chat.stop')"
-          @click="stop"
-          type="button"
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <rect x="5.5" y="5.5" width="13" height="13" rx="2.5"/>
-          </svg>
-        </button>
-      </div>
+      <!-- Composer extracted to ChatComposer.vue (behavior-neutral refactor):
+           the pending-image preview bar, the attach entry + hidden file input,
+           the auto-resizing textarea and the send/stop button moved with their
+           scoped styles. The draft (input text + pending attachments) is
+           component-owned state: it arrives here as send-emit arguments, the
+           original guard chain runs inside the child, and the success path
+           clears the composer through defineExpose — guided failures keep the
+           input exactly as before. The component is a fragment (pending bar +
+           input row as sibling flex items), so this column's DOM is unchanged. -->
+      <ChatComposer
+        ref="composer"
+        :streaming="streaming"
+        :service-starting="serviceStarting"
+        :has-selected-model="!!selectedModel"
+        :attach-blocked="attachBlocked"
+        :blocked="composerBlocked"
+        :mobile-tier="isMobileTier"
+        :tablet-tier="isTabletTier"
+        :has-models="modelOptions.length > 0"
+        @send="send"
+        @stop="stop"
+        @attach-rejected="onAttachRejected"
+      />
     </div>
   </div>
 </template>
@@ -476,6 +431,7 @@ import { usePlatform } from '../lib/platform'
 import ThemedSelect, { type SelectOption } from '../components/ThemedSelect.vue'
 import ChatMessageList from '../components/ChatMessageList.vue'
 import ChatNoticeStack, { type ChatNotice } from '../components/ChatNoticeStack.vue'
+import ChatComposer from '../components/ChatComposer.vue'
 
 const router = useRouter()
 const platform = usePlatform()
@@ -626,23 +582,6 @@ const showParams = ref(false)
  * stays the human-readable display name.
  */
 const modelOptions = computed<SelectOption[]>(() => localModels.value.map((m) => ({ value: m.alias || m.name, label: m.name })))
-
-/**
- * Composer placeholder: the desktop copy documents the Enter / Shift+Enter
- * keyboard affordances, which are meaningless on touch keyboards and wrap to
- * ~3 lines inside the narrow phone input. Touch tiers (phone + tablet, both
- * reactive across breakpoints) get the short copy instead; desktop keeps the
- * original text and behavior unchanged. A blocked precheck (no models /
- * runtime missing) swaps in the guided copy on the touch tiers — and an empty
- * model directory blocks the composer outright, so the same guided copy shows
- * there (tablet draft frames A⑦ "先下载模型后即可发送").
- */
-const inputPlaceholder = computed(() => {
-  if ((isMobileTier.value || isTabletTier.value) && (composerBlocked.value || modelOptions.value.length === 0)) {
-    return t('chat.blockedPlaceholder')
-  }
-  return isMobileTier.value || isTabletTier.value ? t('chat.inputPlaceholderShort') : t('chat.inputPlaceholder')
-})
 
 /**
  * Model-chip placeholder (frame ⑦): with an empty directory the touch-tier
@@ -802,11 +741,11 @@ const chipDotDown = computed(() => isTabletTier.value && composerBlocked.value)
 /** Handle to the extracted message list: the scroll container element and the
  *  reasoning blocks live in ChatMessageList.vue, reached via defineExpose. */
 const messageList = ref<InstanceType<typeof ChatMessageList> | null>(null)
-const inputBox = ref<HTMLTextAreaElement | null>(null)
-const fileInput = ref<HTMLInputElement | null>(null)
-
-/** Pending images to send (data URLs), cleared after sending */
-const pendingImages = ref<string[]>([])
+/** Handle to the extracted composer: the input text and the pending
+ *  attachments are component-owned state in ChatComposer.vue, reached via
+ *  defineExpose (clear on the send success path, focus/height reset for the
+ *  clear-conversation flow and the model-switch watch). */
+const composer = ref<InstanceType<typeof ChatComposer> | null>(null)
 
 /** Mirror a phase's running tok/s into its live ref (tokens / elapsed seconds); guarded against a zero elapsed window. */
 function updateLiveTps(target: Ref<number | null>, tokens: number, startedAt: number): void {
@@ -859,6 +798,16 @@ function showModelNotice(text: string): void {
   modelNoticeTimer = setTimeout(() => {
     modelNotice.value = ''
   }, 6000)
+}
+
+/**
+ * The composer dropped a pasted/attached image at the vision gate (issue #35):
+ * the notice stack is page-owned, so the child reports the rejection via emit
+ * and the guided copy is raised here (same call the inline addPendingImage
+ * made before the extraction).
+ */
+function onAttachRejected(): void {
+  showModelNotice(t('chat.imagesNeedVision'))
 }
 
 /**
@@ -1019,8 +968,9 @@ function clearChat() {
   // The reasoning expansion overrides live in ChatMessageList now; reset them there.
   messageList.value?.clearReasoningExpansion()
   persistChat()
-  inputBox.value?.focus()
-  resetInputHeight()
+  // The textarea element lives in ChatComposer now; same focus + height reset.
+  composer.value?.focus()
+  composer.value?.resetHeight()
 }
 
 /** Reset chat params to defaults (in-flight requests unaffected; takes effect on next send). */
@@ -1034,19 +984,9 @@ function resetParams() {
   persistChatParams()
 }
 
-/** Input auto-resizes to 1-6 rows: triggered by @input, reset after send/clear. */
-function onInputResize() {
-  const el = inputBox.value
-  if (!el) return
-  el.style.height = 'auto'
-  const maxPx = 1.5 * parseFloat(getComputedStyle(document.documentElement).fontSize) * 6 + 20
-  el.style.height = Math.min(el.scrollHeight, maxPx) + 'px'
-}
-
-function resetInputHeight() {
-  const el = inputBox.value
-  if (el) el.style.height = 'auto'
-}
+// The composer's input auto-resize helpers (onInputResize / resetInputHeight)
+// moved to ChatComposer.vue with the textarea; the page reaches the height
+// reset through the exposed resetHeight()/clear().
 
 /**
  * Stick-to-bottom scrolling, delegated to ChatMessageList (the scroll
@@ -1068,90 +1008,24 @@ function appendAssistant(content: string) {
   messages.value.push({ role: 'assistant', content })
 }
 
-/** Read file as data URL; only image types; silently ignore failures or non-images */
-async function readFileAsDataUrl(file: File): Promise<string | null> {
-  if (!file.type.startsWith('image/')) {
-    return null
-  }
-  return new Promise((resolve) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : null)
-    reader.onerror = () => resolve(null)
-    reader.readAsDataURL(file)
-  })
-}
+// The attachment pipeline (readFileAsDataUrl / triggerAttach / addPendingImage /
+// onFileSelected / onInputPaste / removePendingImage) moved to ChatComposer.vue
+// with the pending-images state; the vision-gate drop is reported back through
+// the attachRejected emit (handled by onAttachRejected above).
 
-function triggerAttach() {
-  fileInput.value?.click()
-}
-
-/**
- * Single pending-image write path (issue #35): both the file picker and the
- * paste handler funnel here, so the vision gate lives in exactly one place.
- * When a model is selected and it cannot take images, the data URL is silently
- * dropped and a light notice explains the fix; with no selection nothing is
- * dropped (send() guides instead).
- */
-function addPendingImage(dataUrl: string): void {
-  if (attachBlocked.value) {
-    showModelNotice(t('chat.imagesNeedVision'))
-    return
-  }
-  pendingImages.value.push(dataUrl)
-}
-
-async function onFileSelected(e: Event) {
-  const input = e.target as HTMLInputElement
-  const files = input.files
-  if (!files) return
-  for (const file of Array.from(files)) {
-    const dataUrl = await readFileAsDataUrl(file)
-    if (dataUrl) {
-      addPendingImage(dataUrl)
-    }
-  }
-  // Reset input so the same file can be selected again
-  input.value = ''
-}
-
-/** Paste handler: extract image/* files from clipboardData */
-async function onInputPaste(e: ClipboardEvent) {
-  const items = e.clipboardData?.items
-  if (!items) return
-  const imageFiles: File[] = []
-  for (const item of Array.from(items)) {
-    if (item.type.startsWith('image/')) {
-      const file = item.getAsFile()
-      if (file) imageFiles.push(file)
-    }
-  }
-  if (imageFiles.length === 0) return
-  for (const file of imageFiles) {
-    const dataUrl = await readFileAsDataUrl(file)
-    if (dataUrl) {
-      addPendingImage(dataUrl)
-    }
-  }
-}
-
-function removePendingImage(index: number) {
-  pendingImages.value.splice(index, 1)
-}
-
-async function send() {
-  // Re-entrancy guards: never interleave streams or start two bring-ups
-  if (streaming.value || serviceStarting.value) return
-  const input = inputBox.value
-  if (!input) return
-  const text = input.value.trim()
-  if (!text && pendingImages.value.length === 0) return
+async function send(text: string, images: string[]) {
+  // Re-entrancy and empty-input guards moved to ChatComposer: the composer
+  // emits only when the original inline chain would have proceeded (streaming
+  // / serviceStarting re-entrancy, element presence, non-empty draft), and the
+  // draft arrives as arguments. The composer is only cleared on the success
+  // path below, so guided failures keep the input exactly as before.
 
   // Vision fallback (issue #35): attached images need a vision-capable model —
   // sent anyway, llama-server would reject the whole request with a raw English
   // error. Block here with actionable bilingual guidance instead; images
   // already in the preview bar are kept so the user can retry after fixing the
   // model (download the mmproj or set the projector path in ModelSettings).
-  if (pendingImages.value.length > 0 && !selectedModelHasVision.value) {
+  if (images.length > 0 && !selectedModelHasVision.value) {
     showModelNotice(t('chat.imagesNeedVision'))
     return
   }
@@ -1177,12 +1051,13 @@ async function send() {
     await unloadOtherModels()
   }
 
-  const imgs = pendingImages.value.length ? [...pendingImages.value] : undefined
+  const imgs = images.length ? [...images] : undefined
   messages.value.push({ role: 'user', content: text, images: imgs })
   persistChat()
-  input.value = ''
-  pendingImages.value = []
-  resetInputHeight()
+  // Send success path: clear the composer draft (input text + pending
+  // attachments + auto-resize height) through the child, exactly the triple
+  // this function used to clear inline.
+  composer.value?.clear()
   appendAssistant('')
   streaming.value = true
   scrollToBottom()
@@ -1311,15 +1186,11 @@ function stop() {
   chatAbortController.current?.abort()
 }
 
-function onInputKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault()
-    send()
-  }
-}
+// The Enter/Shift+Enter keydown handler moved to ChatComposer (the textarea
+// lives there); Enter runs the same guard chain and emits send back here.
 
 watch(selectedModel, () => {
-  inputBox.value?.focus()
+  composer.value?.focus()
 })
 
 onMounted(async () => {
@@ -2169,174 +2040,10 @@ html[data-os='ios'] .chat-model-select :deep(button.themed-select__trigger:activ
   flex-shrink: 0;
 }
 
-.input-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 6px 6px 10px;
-  background: var(--glass);
-  border: 1px solid var(--glass-line);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow-island);
-  transition: border-color 0.2s;
-}
-
-.input-row:focus-within {
-  border-color: rgba(99, 102, 241, 0.45);
-}
-
-.pending-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.pending-item {
-  position: relative;
-  width: 64px;
-  height: 64px;
-  border-radius: 8px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-}
-
-.pending-thumb {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.pending-remove {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 18px;
-  height: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
-  border: none;
-  border-radius: 50%;
-  font-size: 10px;
-  cursor: pointer;
-  line-height: 1;
-}
-
-.attach-btn {
-  width: 42px;
-  height: 42px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  border-radius: 50%;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.2s;
-  flex-shrink: 0;
-}
-
-.attach-btn:hover:not(:disabled) {
-  background: var(--hover-bg);
-  color: var(--text-primary);
-}
-
-/* Vision-gated attach entry (issue #35): dimmed with a not-allowed cursor so
-   the blocked state reads at a glance (the title carries the reason). */
-.attach-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-/* Touch press feedback (OS-scoped): :hover never fires on touch input, so
-   the active state mirrors the hover visuals under html[data-os]. */
-html[data-os='android'] .attach-btn:active,
-html[data-os='ios'] .attach-btn:active {
-  background: var(--hover-bg);
-  color: var(--text-primary);
-}
-
-.file-input-hidden {
-  display: none;
-}
-
-.chat-input {
-  flex: 1;
-  resize: none;
-  padding: 10px 4px;
-  background: transparent;
-  border: none;
-  color: var(--text-primary);
-  font-size: 14px;
-  font-weight: 500;
-  font-family: var(--font-sans);
-  line-height: 1.5;
-  outline: none;
-  /* Auto-resize 1-6 rows; focus feedback lives on the glass bar
-     (.input-row:focus-within), not on the naked textarea */
-  min-height: 42px;
-  max-height: calc(1.5em * 6 + 20px);
-  overflow-y: auto;
-}
-
-.chat-input::placeholder {
-  color: var(--text-dim);
-}
-
-/* Circular gradient send button (design .composer .send): gradient = the one
-   actionable element. Desktop keeps the 42px band so the TaskDock pill's
-   vertical centering (dockSpace DOCK_BOTTOM_OFFSET 29px) is unchanged. */
-.send-btn {
-  width: 42px;
-  height: 42px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--grad);
-  color: #fff;
-  border: none;
-  border-radius: 50%;
-  cursor: pointer;
-  transition: all 0.2s;
-  flex-shrink: 0;
-  box-shadow: none;
-}
-
-.send-btn:hover:not(:disabled) {
-  filter: brightness(1.08);
-  box-shadow: none;
-}
-
-/* Touch press feedback (OS-scoped): mirrors the hover lift on touch (also
-   covers the streaming stop state, which shares this class). */
-html[data-os='android'] .send-btn:active:not(:disabled),
-html[data-os='ios'] .send-btn:active:not(:disabled) {
-  filter: brightness(1.08);
-  box-shadow: none;
-}
-
-.send-btn:disabled {
-  opacity: 0.35;
-  cursor: default;
-  box-shadow: none;
-}
-
-/* Streaming state flips the same circle to danger red (design frame ⑥:
-   red is reserved for stop/unload) with a square stop glyph */
-.stop-btn {
-  background: var(--danger);
-  box-shadow: none;
-}
-
-.stop-btn:hover:not(:disabled) {
-  filter: brightness(1.08);
-  box-shadow: none;
-}
+/* The composer skin (input row glass bar, pending-image previews, attach
+   entry, textarea, send/stop buttons and their phone/tablet variants) moved
+   to ChatComposer.vue with the markup; the .input-area band below stays here
+   because the page owns the flex column, the height chain and the dock lanes. */
 
 /* ─── Mobile (<=767px): shell sizing + compact composer ───
    The custom title bar follows the OS-scoped supportsFramelessTitlebar
@@ -2464,41 +2171,11 @@ html[data-os='ios'] .send-btn:active:not(:disabled) {
   /* (Precheck notices float above the composer on the phone band — the
      floating-stack styles moved to ChatNoticeStack.vue.) */
 
-  /* Degraded composer (frame ⑦): a visible precheck blocker dims the bar */
-  .input-row--blocked {
-    opacity: 0.6;
-  }
-
-  /* Disabled send (frame ⑦): neutral filled circle instead of a ghosted
-     gradient — the shape still reads, the affordance clearly gone */
-  .send-btn:disabled {
-    background: var(--bg-card);
-    color: #9aa1b2;
-    opacity: 1;
-    box-shadow: none;
-  }
+  /* (The degraded-composer dim, the disabled-send skin and the 44px touch
+     controls moved to ChatComposer.vue with the composer markup.) */
 
   /* (Streaming polish, stats hairline, image radius and the thinking-block
      card on the phone band moved to ChatMessageList.vue.) */
-
-  .attach-btn {
-    width: 44px;
-    height: 44px;
-  }
-
-  .chat-input {
-    min-height: 44px;
-  }
-
-  .send-btn {
-    width: 44px;
-    height: 44px;
-  }
-
-  .send-btn svg {
-    width: 20px;
-    height: 20px;
-  }
 }
 
 /* ─── Tablet (768..1099px): a comfortable centered message column (composer
@@ -2541,12 +2218,8 @@ html[data-os='ios'] .send-btn:active:not(:disabled) {
 
   /* (Empty states, thinking-block card, stats hairline, the precheck banner
      skins and the dimmed history on the tablet band moved to
-     ChatMessageList.vue / ChatNoticeStack.vue.) */
-
-  /* Frame A⑦: composer degrades */
-  .input-row--blocked {
-    opacity: 0.6;
-  }
+     ChatMessageList.vue / ChatNoticeStack.vue. The composer degrade dim,
+     frame A⑦, moved to ChatComposer.vue.) */
 
   /* Frame A⑦ .mchip red dot: precheck blocker turns the chip's status dot red */
   .chat-model-select--down :deep(.themed-select__trigger)::before {
