@@ -59,3 +59,8 @@ docs/branding/*.html
 # Playwright-MCP local scratch (browser snapshots, walkthrough screenshots,
 # task-package drafts). Never committed.
 .playwright-mcp/
+
+# Playwright GUI smoke test outputs (frontend/e2e via playwright.config.ts):
+# per-test traces/screenshots and the HTML report. Regenerated on every run.
+frontend/test-results/
+frontend/playwright-report/

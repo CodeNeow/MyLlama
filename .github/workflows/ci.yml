@@ -31,6 +31,14 @@ jobs:
       - name: Unit tests (vitest)
         working-directory: frontend
         run: npm test
+      - name: Install Playwright chromium
+        # GUI smoke suite (frontend/e2e) runs the real app against the in-repo
+        # mock runtime (npm run dev:mock); chromium is the only smoke browser.
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: GUI smoke tests (Playwright over dev:mock)
+        working-directory: frontend
+        run: npm run test:e2e
       - name: Upload frontend build (for go:embed)
         uses: actions/upload-artifact@v4
         with:

@@ -44,6 +44,31 @@ const config: Record<string, any> = {
   onboardingDismissed: true,
 }
 
+// Theme persistence mirror: the real backend keeps the theme in its config
+// file across process restarts, and store.ts's loadConfig lets the backend
+// value win over its own localStorage snapshot — so a page reload must keep a
+// switched theme for the mock to honor the same contract. SetTheme writes the
+// mirror; the restore below reads it back at module load. Best-effort: a
+// no-storage environment just loses the preference across reloads, like a
+// read-only config file would.
+const MOCK_THEME_KEY = 'myllama-mock-theme'
+
+function persistMockTheme(theme: string): void {
+  try {
+    localStorage.setItem(MOCK_THEME_KEY, theme)
+  } catch {
+    // Storage unavailable: theme resets on reload (see comment above).
+  }
+}
+
+// Restore before applyScenario so the ?th= walkthrough parameter still wins.
+try {
+  const persistedTheme = localStorage.getItem(MOCK_THEME_KEY)
+  if (persistedTheme === 'light' || persistedTheme === 'dark') config.theme = persistedTheme
+} catch {
+  // Storage unavailable: keep the default light theme.
+}
+
 // ─── System probes (android semantics: no GPU/CUDA, CPU-only accel) ─────────
 
 // Walkthrough persona: the default preview is the Android phone layout (?sc=
@@ -602,6 +627,7 @@ export const handlers: Record<string, (...args: any[]) => any> = {
   GetConfig: () => ({ ...config }),
   SetTheme: (theme: string) => {
     config.theme = theme
+    persistMockTheme(theme)
   },
   SetSidebarCollapsed: (collapsed: boolean) => {
     config.sidebarCollapsed = collapsed
