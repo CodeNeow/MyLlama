@@ -2,6 +2,22 @@
 
 更新日志的**权威来源**（见 `AGENTS.md`「版本发布」）：发版时先在此新增版本条目（含日期），`git tag` 注解消息与 GitHub Release 正文均从该条目复制，保持一致。自 v0.3.3 起条目为概括式双语（中文在上）；v0.3.0 之前的逐提交条目已随对应 tag 与 Release 的清理移除（见文末「历史版本」）。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化版本。
 
+## [v0.5.1] - 2026-09-10
+
+## 中文
+
+v0.5.1 是一个修复版本，解决 v0.5.0 的两个问题：
+
+- **安卓应用内更新修复（重要）** — v0.5.0 的安卓端在应用内点击「立即安装」后，系统安装确认弹窗不会出现，应用闪一下回到首页、更新静默失败。本次重建了安装状态回传链路：修复状态 PendingIntent 的可变标志、补齐确认弹窗的转发逻辑、主界面改为单实例并处理状态重投递——弹窗现已正常弹出，界面不再被重置，安装失败信息也会显示在更新弹窗中。**v0.5.0 安卓用户请在本发布页手动下载 APK 覆盖安装一次**，此后应用内更新恢复正常（安装完成后需手动重新打开应用，属系统行为）。
+- **设置页 API Key 状态修复** — API Key 为空时桌面端错误显示「已设置」；现在密钥为空（含纯空白）时，桌面与手机端统一显示「未设置（无鉴权）」，保存时同步按后端规则去除首尾空白。
+
+## English
+
+v0.5.1 is a fix release addressing two v0.5.0 issues:
+
+- **Android in-app update fixed (important)** — on v0.5.0, tapping "Install now" never raised the system confirmation dialog: the app flashed back to the home page and the update silently failed. The install-status handback has been rebuilt (mutable status PendingIntent, confirmation-intent forwarding, single-task MainActivity with status redelivery); the dialog now appears, the UI no longer resets, and install failures surface in the update modal. **Android users on v0.5.0: sideload this release's APK manually once** — in-app updates work again from this version on (after a completed install the app must be reopened manually; that is system behavior).
+- **Settings API-key status fixed** — with an empty key the desktop label incorrectly showed "already set"; an empty (or whitespace-only) key now shows "not set (no authentication)" on both desktop and phone, with the input trimmed on save to match the backend's persisted value.
+
 ## [v0.5.0] - 2026-09-09
 
 ## 中文
