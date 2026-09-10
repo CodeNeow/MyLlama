@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -490,7 +491,14 @@ func readGGUFMeta(path string) map[string]string {
 
 		field, wanted := targets[key]
 		if !wanted {
-			skipGGUFValue(f, valueType)
+			if err := skipGGUFValue(f, valueType, 0); err != nil {
+				if errors.Is(err, errGGUFDepth) {
+					// Hostile structure: fail fast with no result rather than
+					// parsing on from a stream we cannot trust.
+					return nil
+				}
+				break // I/O error: stop parsing, keep what we already have
+			}
 			continue
 		}
 
@@ -517,12 +525,34 @@ func readGGUFMeta(path string) map[string]string {
 			result[field] = ggufQuantName(uint32(val))
 			found++
 		default:
-			skipGGUFValue(f, valueType)
+			if err := skipGGUFValue(f, valueType, 0); err != nil {
+				if errors.Is(err, errGGUFDepth) {
+					return nil // same fail-fast as the unknown-key path above
+				}
+				break // I/O error: stop parsing, keep what we already have
+			}
 		}
 	}
 
 	return result
 }
+
+// errGGUFDepth marks a GGUF metadata array nested deeper than
+// maxGGUFArrayDepth — a malformed (hostile) structure, not an I/O failure.
+// readGGUFMeta turns it into a nil result (whole meta parse aborted);
+// readGGUFHeader (autotune.go) propagates it so its callers degrade to their
+// documented fallbacks.
+var errGGUFDepth = errors.New("gguf metadata array nesting too deep")
+
+// maxGGUFArrayDepth caps GGUF array nesting during value skipping. Real model
+// metadata arrays are flat — tokenizer vocabularies / token scores are arrays
+// of strings or scalars, one level deep — and no known converter emits
+// arrays-of-arrays at all, so 32 leaves generous headroom over anything
+// legitimate. Without the cap, each nesting level in a crafted file costs only
+// the 8-byte array header, so a ~40 MB file can drive recursion deep enough to
+// exhaust the goroutine stack (a fatal, unrecoverable error) during a plain
+// directory scan.
+const maxGGUFArrayDepth = 32
 
 func readGGUFString(r io.Reader) (string, error) {
 	var length uint64
@@ -539,33 +569,51 @@ func readGGUFString(r io.Reader) (string, error) {
 	return string(buf), nil
 }
 
-func skipGGUFValue(r io.Reader, valueType uint32) {
+// skipGGUFValue consumes one metadata value of the given GGUF type so the
+// stream stays aligned for subsequent fields. depth counts the array levels
+// enclosing this value; an array nested deeper than maxGGUFArrayDepth stops
+// the recursion with errGGUFDepth (fail fast on hostile structure — the
+// caller aborts the whole meta parse instead of guessing at a misaligned
+// stream). I/O errors (e.g. EOF) are returned as well.
+func skipGGUFValue(r io.Reader, valueType uint32, depth int) error {
 	switch valueType {
 	case 0, 1: // uint8, int8
-		binary.Read(r, binary.LittleEndian, make([]byte, 1))
+		return binary.Read(r, binary.LittleEndian, make([]byte, 1))
 	case 2, 3: // uint16, int16
-		binary.Read(r, binary.LittleEndian, make([]byte, 2))
+		return binary.Read(r, binary.LittleEndian, make([]byte, 2))
 	case 4, 5: // uint32, int32
-		binary.Read(r, binary.LittleEndian, make([]byte, 4))
+		return binary.Read(r, binary.LittleEndian, make([]byte, 4))
 	case 6: // float32
-		binary.Read(r, binary.LittleEndian, make([]byte, 4))
+		return binary.Read(r, binary.LittleEndian, make([]byte, 4))
 	case 7: // bool
-		binary.Read(r, binary.LittleEndian, make([]byte, 1))
+		return binary.Read(r, binary.LittleEndian, make([]byte, 1))
 	case 8: // string
-		readGGUFString(r)
+		_, err := readGGUFString(r)
+		return err
 	case 10, 11: // uint64, int64
-		binary.Read(r, binary.LittleEndian, make([]byte, 8))
+		return binary.Read(r, binary.LittleEndian, make([]byte, 8))
 	case 12: // float64
-		binary.Read(r, binary.LittleEndian, make([]byte, 8))
-	case 9: // array
+		return binary.Read(r, binary.LittleEndian, make([]byte, 8))
+	case 9: // array — the only value type that recurses
+		if depth >= maxGGUFArrayDepth {
+			return errGGUFDepth
+		}
 		var arrType uint32
 		var arrLen uint32
-		binary.Read(r, binary.LittleEndian, &arrType)
-		binary.Read(r, binary.LittleEndian, &arrLen)
-		for j := uint32(0); j < arrLen && j < 1000; j++ {
-			skipGGUFValue(r, arrType)
+		if err := binary.Read(r, binary.LittleEndian, &arrType); err != nil {
+			return err
 		}
+		if err := binary.Read(r, binary.LittleEndian, &arrLen); err != nil {
+			return err
+		}
+		for j := uint32(0); j < arrLen && j < 1000; j++ {
+			if err := skipGGUFValue(r, arrType, depth+1); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
+	return nil
 }
 
 func ggufQuantName(fileType uint32) string {

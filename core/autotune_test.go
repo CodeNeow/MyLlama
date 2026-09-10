@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // ─── readGGUFModelMetrics ────────────────────────────────────────
@@ -189,6 +191,97 @@ func TestReadGGUFModelMetricsLargeArraySkipsFully(t *testing.T) {
 	}
 	if m.Arch != "qwen35" || m.BlockCount != 36 || m.ContextLength != 262144 || m.HeadCount != 32 {
 		t.Errorf("metrics after large arrays = %+v, want block_count=36 context=262144 head_count=32", m)
+	}
+}
+
+// ─── Nested-array depth cap (skipMetricsValue) ───────────────────
+
+// metricsNestedArrayRaw builds the raw value bytes of a GGUF array chain
+// exactly depth levels deep, using the array header this parser reads:
+// element type u32 + element count u64 (the metrics reader's count is 64-bit,
+// unlike the shared skipGGUFValue's 32-bit one, so it needs its own builder).
+// The first depth-1 headers declare one array element each (elemType=9) and
+// the innermost header declares a single uint8 element, so the parser
+// legitimately walks all depth levels and terminates on the byte.
+func metricsNestedArrayRaw(depth int) []byte {
+	if depth <= 0 {
+		return []byte{42} // a plain scalar value, no array at all
+	}
+	var buf bytes.Buffer
+	if depth == 1 {
+		// Innermost array: its single element is a fixed-size uint8.
+		putU32(&buf, 0)
+		putU64(&buf, 1)
+		buf.WriteByte(42)
+		return buf.Bytes()
+	}
+	putU32(&buf, 9) // element type: array
+	putU64(&buf, 1) // one element
+	buf.Write(metricsNestedArrayRaw(depth - 1))
+	return buf.Bytes()
+}
+
+// TestReadGGUFModelMetricsArrayDepthBomb verifies a hostile GGUF whose header
+// carries an array nested maxGGUFArrayDepth×10 levels deep fails fast:
+// readGGUFModelMetrics degrades to ok=false (the documented conservative
+// fallback) well within the wall-clock bound instead of recursing until the
+// goroutine stack is exhausted — before the cap, each nesting level in a
+// crafted file cost only the 12-byte array header.
+func TestReadGGUFModelMetricsArrayDepthBomb(t *testing.T) {
+	dir := t.TempDir()
+	path := writeTempGGUF(t, dir, "depthbomb.gguf", buildGGUF(3,
+		ggufKV{key: "general.bomb", valueType: 9, raw: metricsNestedArrayRaw(maxGGUFArrayDepth * 10)},
+		strKV("general.name", "never reached"),
+	))
+
+	// End-to-end: the metrics reader must abort with ok=false, fast.
+	done := make(chan bool, 1)
+	go func() {
+		_, ok := readGGUFModelMetrics(path)
+		done <- ok
+	}()
+	select {
+	case ok := <-done:
+		if ok {
+			t.Error("over-deep nesting must abort the parse with ok=false")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("readGGUFModelMetrics did not terminate within 2s on a depth-bomb GGUF")
+	}
+
+	// The header reader surfaces the depth sentinel specifically (not a
+	// generic I/O error), so callers can tell hostile structure from EOF.
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if _, err := readGGUFHeader(f); !errors.Is(err, errGGUFDepth) {
+		t.Errorf("readGGUFHeader error = %v, want errGGUFDepth", err)
+	}
+}
+
+// TestReadGGUFModelMetricsLegalNestedArray verifies the cap does not overreach:
+// an array nested just below and exactly at maxGGUFArrayDepth walks the full
+// parse path, and the metric keys following the array still parse (the stream
+// stays aligned through the skipped nested array). The large-flat-array test
+// above covers the string-element walk; this one covers nested-array elements.
+func TestReadGGUFModelMetricsLegalNestedArray(t *testing.T) {
+	for _, depth := range []int{maxGGUFArrayDepth - 1, maxGGUFArrayDepth} {
+		dir := t.TempDir()
+		path := writeTempGGUF(t, dir, "nested.gguf", buildGGUF(3,
+			ggufKV{key: "general.vocab", valueType: 9, raw: metricsNestedArrayRaw(depth)},
+			strKV("general.architecture", "qwen35"),
+			u32KV("qwen35.block_count", 36),
+		))
+
+		m, ok := readGGUFModelMetrics(path)
+		if !ok {
+			t.Fatalf("depth %d: legal nesting must not abort the parse", depth)
+		}
+		if m.Arch != "qwen35" || m.BlockCount != 36 {
+			t.Errorf("depth %d: Arch/BlockCount = %q/%d, want qwen35/36 (stream must stay aligned after the array)", depth, m.Arch, m.BlockCount)
+		}
 	}
 }
 

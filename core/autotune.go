@@ -136,8 +136,10 @@ func readGGUFHeader(f *os.File) (ggufHeaderData, error) {
 			h.strs[key] = s
 		default:
 			// Other types (bool/float/array/...) carry no metric we need;
-			// skip them so the stream stays in sync.
-			if err := skipMetricsValue(f, valueType); err != nil {
+			// skip them so the stream stays in sync. An over-deep nested
+			// array (errGGUFDepth) aborts the whole header parse: a crafted
+			// structure invalidates everything that follows.
+			if err := skipMetricsValue(f, valueType, 0); err != nil {
 				return ggufHeaderData{}, err
 			}
 		}
@@ -202,7 +204,14 @@ func readGGUFModelMetrics(path string) (modelMetrics, bool) {
 // elements. Fixed-size elements are skipped with a single seek; crafted files
 // terminate at EOF (every skipped element still consumes file bytes), so the
 // walk is bounded by the file size.
-func skipMetricsValue(f *os.File, valueType uint32) error {
+//
+// depth counts the array levels enclosing this value; a chain nested deeper
+// than maxGGUFArrayDepth (the same cap the shared skipGGUFValue enforces —
+// one GGUF metadata format, one limit, so the two parsers cannot drift) stops
+// the recursion with errGGUFDepth. readGGUFHeader propagates the error and
+// aborts the whole header parse, so its callers degrade to their documented
+// fallbacks instead of continuing from a stream they cannot trust.
+func skipMetricsValue(f *os.File, valueType uint32, depth int) error {
 	if size, ok := ggufFixedValueSize(valueType); ok {
 		_, err := f.Seek(int64(size), io.SeekCurrent)
 		return err
@@ -221,6 +230,9 @@ func skipMetricsValue(f *os.File, valueType uint32) error {
 		_, err := f.Seek(int64(length), io.SeekCurrent)
 		return err
 	case 9: // array: element type u32 + count u64, then the elements
+		if depth >= maxGGUFArrayDepth {
+			return errGGUFDepth
+		}
 		var arrType uint32
 		if err := binary.Read(f, binary.LittleEndian, &arrType); err != nil {
 			return err
@@ -240,7 +252,7 @@ func skipMetricsValue(f *os.File, valueType uint32) error {
 		}
 		// String or nested-array elements must be walked one by one.
 		for i := uint64(0); i < arrLen; i++ {
-			if err := skipMetricsValue(f, arrType); err != nil {
+			if err := skipMetricsValue(f, arrType, depth+1); err != nil {
 				return err
 			}
 		}

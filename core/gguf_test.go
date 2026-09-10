@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // ggufKV is a test helper for GGUF metadata key-value pairs: valueType is the GGUF
@@ -193,5 +194,77 @@ func TestReadGGUFMetaRejectsHugeKVCount(t *testing.T) {
 
 	if meta := readGGUFMeta(path); meta != nil {
 		t.Errorf("kvCount over limit should return nil, got %v", meta)
+	}
+}
+
+// ─── Nested-array depth cap ──────────────────────────────────────
+
+// nestedArrayRaw builds the raw value bytes of a GGUF array chain exactly
+// depth levels deep: the first depth-1 headers declare one array element each
+// (elemType=9) and the innermost header declares a single uint8 element, so
+// the parser legitimately walks all depth levels and terminates on the byte.
+// The 32-bit element count matches this parser's array header layout.
+func nestedArrayRaw(depth int) []byte {
+	if depth <= 0 {
+		return []byte{42} // a plain scalar value, no array at all
+	}
+	var buf bytes.Buffer
+	if depth == 1 {
+		// Innermost array: its single element is a fixed-size uint8.
+		putU32(&buf, 0)
+		putU32(&buf, 1)
+		buf.WriteByte(42)
+		return buf.Bytes()
+	}
+	putU32(&buf, 9) // element type: array
+	putU32(&buf, 1) // one element
+	buf.Write(nestedArrayRaw(depth - 1))
+	return buf.Bytes()
+}
+
+// TestReadGGUFMetaNestedArrayDepthBomb verifies a hostile GGUF whose first
+// metadata value is an array nested maxGGUFArrayDepth×10 levels deep fails
+// fast: readGGUFMeta aborts with nil well within the wall-clock bound instead
+// of recursing until the goroutine stack is exhausted (before the cap, each
+// nesting level cost only the 8-byte array header, so a small crafted file
+// crashed the whole process during a plain directory scan).
+func TestReadGGUFMetaNestedArrayDepthBomb(t *testing.T) {
+	dir := t.TempDir()
+	path := writeTempGGUF(t, dir, "bomb.gguf", buildGGUF(3,
+		ggufKV{key: "general.bomb", valueType: 9, raw: nestedArrayRaw(maxGGUFArrayDepth * 10)},
+		strKV("general.name", "never reached"),
+	))
+
+	done := make(chan map[string]string, 1)
+	go func() { done <- readGGUFMeta(path) }()
+	select {
+	case meta := <-done:
+		if meta != nil {
+			t.Errorf("over-deep nesting must abort the whole parse with nil, got %v", meta)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("readGGUFMeta did not terminate within 2s on a depth-bomb GGUF")
+	}
+}
+
+// TestReadGGUFMetaLegalNestedArray verifies the cap does not overreach: an
+// array nested just below and exactly at maxGGUFArrayDepth walks the full
+// parse path, the stream stays aligned through it (the target KV following
+// the array is still read), and the result is returned normally.
+func TestReadGGUFMetaLegalNestedArray(t *testing.T) {
+	for _, depth := range []int{maxGGUFArrayDepth - 1, maxGGUFArrayDepth} {
+		dir := t.TempDir()
+		path := writeTempGGUF(t, dir, "nested.gguf", buildGGUF(3,
+			ggufKV{key: "general.vocab", valueType: 9, raw: nestedArrayRaw(depth)},
+			strKV("general.name", "Qwen2.5-7B"),
+		))
+
+		meta := readGGUFMeta(path)
+		if meta == nil {
+			t.Fatalf("depth %d: legal nesting must not abort the parse", depth)
+		}
+		if meta["name"] != "Qwen2.5-7B" {
+			t.Errorf("depth %d: name = %q, want Qwen2.5-7B (stream must stay aligned after the array)", depth, meta["name"])
+		}
 	}
 }
