@@ -14,7 +14,7 @@ The app supports three model sources, switched via the "Model Download Source" r
 
 1. Type a model name or keywords into the pill-shaped search box and press Enter or click "Search".
 2. Click a result card to open the **model detail** page:
-   - **File list**: every file in the repo, sorted by size with guessed quantization; tick the `.gguf` files you want (multimodal models also need the `mmproj` vision file), then click "Download Selected";
+   - **File list**: every file in the repo, sorted by size with guessed quantization; tick the `.gguf` files you want (multimodal models also need the `mmproj` vision file), then click "Download Selected"; `mmproj` files carry the 👁️ multimodal badge, and when the repo has one you have not ticked yet, a hint above the download bar asks you to select it too — without it a vision model cannot see images;
    - **Description**: the repo's README to help you judge the model.
 3. The download task starts immediately and progress updates live — in-progress downloads are pinned to the top of the page as progress cards, and clicking one also opens the download manager.
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sortModelFiles, guessQuant, matchLoadedModelSize, selectedBytes, localLibraryStats } from '../lib/modelFiles'
+import { sortModelFiles, guessQuant, matchLoadedModelSize, selectedBytes, localLibraryStats, isMMProjFile } from '../lib/modelFiles'
 
 describe('sortModelFiles', () => {
   // sort by size descending; missing size defaults to 0 (sorted to end)
@@ -116,6 +116,24 @@ describe('selectedBytes', () => {
 
   it('empty selection returns 0', () => {
     expect(selectedBytes([], files)).toBe(0)
+  })
+})
+
+describe('isMMProjFile', () => {
+  // Mirrors core/preset.go's same-directory auto-detect: lowercase name starts
+  // with "mmproj" AND ends with ".gguf"
+  it('recognizes mmproj gguf files (case-insensitive)', () => {
+    expect(isMMProjFile('mmproj-f16.gguf')).toBe(true)
+    expect(isMMProjFile('mmproj.gguf')).toBe(true)
+    expect(isMMProjFile('MMPROJ-F16.GGUF')).toBe(true)
+    expect(isMMProjFile('MmProj-Vision.Gguf')).toBe(true)
+  })
+
+  it('rejects non-mmproj and non-gguf names', () => {
+    expect(isMMProjFile('model-q4_k_m.gguf')).toBe(false)
+    expect(isMMProjFile('mmproj.txt')).toBe(false)
+    expect(isMMProjFile('notmmproj-f16.gguf')).toBe(false)
+    expect(isMMProjFile('')).toBe(false)
   })
 })
 

@@ -350,6 +350,8 @@ export const messages: Record<Locale, Record<string, string>> = {
     // suggestion-chip lead-in shown before any search has been performed
     'downloads.searchEmptyHint': '搜索以发现 Hugging Face / ModelScope 上的模型',
     'downloads.searchEmptyChips': '试试这些热门关键词：',
+    // Model detail page (issue #35): repo carries an mmproj file but none is selected yet
+    'downloads.mmprojHint': '该仓库包含视觉投影文件 (mmproj)，需要图片输入请一并勾选',
 
     // ─── Chat page (Chat.vue) ───
     'chat.title': '本地聊天',
@@ -357,6 +359,11 @@ export const messages: Record<Locale, Record<string, string>> = {
     'chat.clear': '清空对话',
     'chat.attach': '添加图片',
     'chat.removeImage': '移除图片',
+    // Vision gating (issue #35): attach button tooltip + light notice when the
+    // selected model has no mmproj (neither a sibling file nor an explicit
+    // projector path in the model settings)
+    'chat.attachBlocked': '当前模型不支持图片输入（缺少 mmproj 视觉投影文件）',
+    'chat.imagesNeedVision': '当前模型不支持图片输入。请到「模型管理 → 下载模型」补选 mmproj 视觉投影文件（带 👁️ 徽标），或在模型设置中手动指定投影路径后再发图。',
     'chat.startingServer': '正在启动本地服务…',
     'chat.switchingModel': '正在切换模型…',
     'chat.goRuntime': '去安装',
@@ -369,6 +376,9 @@ export const messages: Record<Locale, Record<string, string>> = {
     'chat.stop': '停止',
     'chat.generating': '正在生成…',
     'chat.error': '请求失败：{msg}',
+    // Vision-gated send/reply (issue #35): llama-server's raw image-input
+    // rejection mapped to actionable guidance; the original msg stays as detail
+    'chat.errorVision': '当前模型不支持图片输入（{msg}）。请到「模型管理 → 下载模型」补选 mmproj 视觉投影文件（带 👁️ 徽标），或在模型设置中手动指定投影路径后重试。',
     'chat.emptyHint': '开始与模型对话吧',
     'chat.assistant': '助手',
     'chat.settings': '参数设置',
@@ -1097,6 +1107,8 @@ export const messages: Record<Locale, Record<string, string>> = {
     // suggestion-chip lead-in shown before any search has been performed
     'downloads.searchEmptyHint': 'Search to discover models on Hugging Face / ModelScope',
     'downloads.searchEmptyChips': 'Try a popular keyword:',
+    // Model detail page (issue #35): repo carries an mmproj file but none is selected yet
+    'downloads.mmprojHint': 'This repo has a vision projector file (mmproj) — select it too if you need image input',
 
     // ─── Chat page (Chat.vue) ───
     'chat.title': 'Local Chat',
@@ -1104,6 +1116,11 @@ export const messages: Record<Locale, Record<string, string>> = {
     'chat.clear': 'Clear chat',
     'chat.attach': 'Attach image',
     'chat.removeImage': 'Remove image',
+    // Vision gating (issue #35): attach button tooltip + light notice when the
+    // selected model has no mmproj (neither a sibling file nor an explicit
+    // projector path in the model settings)
+    'chat.attachBlocked': 'This model cannot take images (no mmproj vision projector)',
+    'chat.imagesNeedVision': 'This model cannot take image input. Add the mmproj vision projector file in Models → Download (👁️ badge), or set the projector path in the model settings, then attach again.',
     'chat.startingServer': 'Starting the local service…',
     'chat.switchingModel': 'Switching model…',
     'chat.goRuntime': 'Install',
@@ -1116,6 +1133,9 @@ export const messages: Record<Locale, Record<string, string>> = {
     'chat.stop': 'Stop',
     'chat.generating': 'Generating…',
     'chat.error': 'Request failed: {msg}',
+    // Vision-gated send/reply (issue #35): llama-server's raw image-input
+    // rejection mapped to actionable guidance; the original msg stays as detail
+    'chat.errorVision': 'This model cannot take image input ({msg}). Add the mmproj vision projector file in Models → Download (👁️ badge), or set the projector path in the model settings, then retry.',
     'chat.emptyHint': 'Start chatting with your model',
     'chat.assistant': 'Assistant',
     'chat.settings': 'Sampling settings',

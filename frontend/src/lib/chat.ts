@@ -41,6 +41,51 @@ export function chatReadiness(modelCount: number, runtimeInstalled: boolean): Ch
 }
 
 /**
+ * Whether a model can take image input. True when the local scan found a
+ * sibling mmproj file (hasMmproj), OR when the model settings carry an explicit
+ * mmproj override: ModelSettings lets users point at a projector file manually,
+ * and the backend preset then injects that explicit path even when the
+ * same-directory scan reports no mmproj — so the override must count as vision
+ * capability here too. Pure.
+ */
+export function isVisionCapable(hasMmproj: boolean, mmprojOverride: string | undefined | null): boolean {
+  if (hasMmproj) return true
+  return typeof mmprojOverride === 'string' && mmprojOverride.trim() !== ''
+}
+
+/**
+ * Resolve the config-persistence key for the selected model. Per-model configs
+ * are keyed by the model's display Name on the backend: core/app.go's
+ * GetModelConfig reads cachedModelConfigs[modelID], and both consumers index
+ * cfgs[m.Name] (core/bridge.go direct mode, core/preset.go's router preset
+ * writer) — ModelSettings.vue likewise loads/saves by model.name. The chat
+ * picker's value is the router id (alias || name), so an INI-sanitized or
+ * deduplicated alias would MISS the config store and lose the explicit mmproj
+ * override. Resolve the record with the same identity rule the picker uses
+ * ((m.alias || m.name) === selectedId) and return its Name, falling back to
+ * the selected id itself when the list has no match. Pure.
+ */
+export function visionConfigKey(models: { name: string; alias?: string }[], selectedId: string): string {
+  const hit = models.find((m) => (m.alias || m.name) === selectedId)
+  return hit?.name || selectedId
+}
+
+/**
+ * Classify a raw llama-server error message. 'vision-unsupported' matches the
+ * known rejection a text-only model produces when a chat request carries image
+ * parts ("image input is not supported - hint: ... may need to provide the
+ * mmproj ...", or any message naming mmproj), so the chat page can map it to
+ * actionable bilingual guidance instead of the raw English text. Pure.
+ */
+export function chatErrorKind(raw: string): 'vision-unsupported' | null {
+  const msg = (raw || '').toLowerCase()
+  if (msg.includes('image input is not supported') || msg.includes('mmproj')) {
+    return 'vision-unsupported'
+  }
+  return null
+}
+
+/**
  * Determine which currently loaded models must be unloaded so the selected
  * model becomes the only resident: exactly the entries whose status is
  * 'loaded' (llama-server's router status string) excluding the selected id.

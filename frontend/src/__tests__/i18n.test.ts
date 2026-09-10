@@ -85,6 +85,21 @@ describe('lib/i18n', () => {
     expect(t('models.dirAndroidHint')).toBe('Android uses app-internal storage; paths are managed by the system')
   })
 
+  it('chat vision-guidance keys render in both locales (issue #35)', () => {
+    setLocale('zh')
+    expect(t('chat.attachBlocked')).toContain('mmproj')
+    expect(t('chat.imagesNeedVision')).toContain('mmproj')
+    expect(t('chat.errorVision', { msg: 'boom' })).toContain('boom')
+    expect(t('chat.errorVision', { msg: 'boom' })).toContain('mmproj')
+    expect(t('downloads.mmprojHint')).toContain('mmproj')
+    setLocale('en')
+    expect(t('chat.attachBlocked')).toContain('mmproj')
+    expect(t('chat.imagesNeedVision')).toContain('mmproj')
+    expect(t('chat.errorVision', { msg: 'boom' })).toContain('boom')
+    expect(t('chat.errorVision', { msg: 'boom' })).toContain('mmproj')
+    expect(t('downloads.mmprojHint')).toContain('mmproj')
+  })
+
   it('settings docs-entry keys render in both locales (former nav docs entry card)', () => {
     setLocale('zh')
     expect(t('settings.docsEntry')).toBe('帮助与教程')

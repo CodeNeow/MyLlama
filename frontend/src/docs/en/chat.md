@@ -15,6 +15,8 @@ Sending a message first unloads every OTHER loaded model so the selected one is 
 
 Multimodal models (with an mmproj file) can also take images: use the paperclip button next to the input bar to attach one and let the model describe it.
 
+A vision model needs **two files**: the main weights `.gguf` and the `mmproj` vision projector `.gguf`. If the selected model has no projector (no mmproj file next to the weights and no explicit projector path in the model settings), the chat page disables the attach button; pasting or picking an image is dropped with a hint; sending with images attached is blocked with guidance — re-open the model's detail page under Models → Download and grab the mmproj file carrying the 👁️ multimodal badge, or set the projector path in the model settings.
+
 ## Tuning chat parameters
 
 Sampling parameters are owned by the **sampling preset** picker next to the model capsule in the top toolbar, borrowed from unsloth's generation presets: **Default** (no override — the per-model sampling parameters saved in the model settings apply), **Precise** (temperature 0.3 / top_p 0.8 / top_k 20 / repeat_penalty 1.1), **Balanced** (0.7 / 0.9 / 40 / 1.1), **Creative** (1.0 / 0.95 / 60 / 1.05) and **Random** (1.2 / 1.0 / 80 / 1.0). With any non-default preset selected, the sent request body carries those four sampling override fields; with "Default" none are attached and the server-side parameters decide. The selection is remembered across sessions.

@@ -465,7 +465,11 @@
         </div>
       </div>
       <div class="input-row" :class="{ 'input-row--blocked': composerBlocked }">
-        <button class="attach-btn" @click="triggerAttach" :title="t('chat.attach')" type="button">
+        <!-- Vision gate (issue #35): the attach entry is disabled only when a
+             model IS selected and it cannot take images (no sibling mmproj and
+             no explicit projector override) — with no selection, attachments
+             stay open and the send-time fallback guides instead. -->
+        <button class="attach-btn" @click="triggerAttach" :disabled="attachBlocked" :title="attachBlocked ? t('chat.attachBlocked') : t('chat.attach')" type="button">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
           </svg>
@@ -528,15 +532,18 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick, watch, onUnmounted, type ComponentPublicInstance, type Ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { getServerStatus, getServerConfig, getModels, getLlamaCpp, startServerWithModel, unloadModel } from '../wails'
+import { getServerStatus, getServerConfig, getModels, getModelConfig, getLlamaCpp, startServerWithModel, unloadModel } from '../wails'
 import {
+  chatErrorKind,
   chatParamsLayout,
   chatReadiness,
   directModeNeedsSwitch,
   fetchRouterModels,
+  isVisionCapable,
   modelsToUnload,
   streamChatCompletion,
   tokenRates,
+  visionConfigKey,
   type BuildChatBodyOptions,
   type ChatReadiness,
 } from '../lib/chat'
@@ -653,8 +660,61 @@ const activeNotices = computed<PageNotice[]>(() => {
   return out
 })
 
-/** Local (scanned) models backing the picker; independent of server state. */
-const localModels = ref<{ name: string; alias?: string }[]>([])
+/** Local (scanned) models backing the picker; independent of server state.
+ *  hasMmproj (GetModels already returns it) feeds the chat vision gate. */
+const localModels = ref<{ name: string; alias?: string; hasMmproj?: boolean }[]>([])
+
+// ─── Vision capability of the selected model (issue #35) ────────────────────
+// Visual models need the main weights GGUF plus an mmproj projector GGUF. The
+// capability verdict mirrors the backend preset rules: a sibling mmproj file
+// (hasMmproj from the scan) OR an explicit mmproj path saved in the model
+// settings (core/preset.go writes the explicit line even when the same-dir
+// scan is false). The verdict drives the attach-entry gate, the pending-image
+// drop and the send-time fallback; raw server errors are re-mapped on arrival.
+
+/** Explicit mmproj path from the selected model's saved settings ('' = none). */
+const mmprojOverride = ref('')
+
+// Load the override whenever the selection OR the scanned list changes: on
+// mount the persisted selection exists before localModels fills, so watching
+// both re-resolves once refreshLocalModels lands (the re-fetch is acceptable —
+// the backend answers from an in-memory config map). The selected router id is
+// resolved to the display Name first via lib/chat.ts visionConfigKey, because
+// per-model configs are keyed by Name (core/preset.go / ModelSettings.vue),
+// not by the router alias. The synchronous reset keeps the PREVIOUS model's
+// override from leaking into the new selection while the fetch is in flight,
+// and the sequence guard drops stale responses from a fast switch. Load
+// failure degrades to '' (auto-detect verdict only), never blocks the page.
+let mmprojLoadSeq = 0
+watch([selectedModel, localModels], async ([id]) => {
+  mmprojOverride.value = ''
+  if (!id) return
+  const seq = ++mmprojLoadSeq
+  try {
+    const cfg = (await getModelConfig(visionConfigKey(localModels.value, id))) as { mmproj?: unknown } | null
+    if (seq !== mmprojLoadSeq) return
+    mmprojOverride.value = typeof cfg?.mmproj === 'string' ? cfg.mmproj : ''
+  } catch {
+    mmprojOverride.value = ''
+  }
+})
+
+/**
+ * Whether the currently selected model can take image input (lib/chat.ts
+ * isVisionCapable). The picker's option value is the router id — ModelInfo
+ * alias falling back to the display name — so lookup mirrors that identity.
+ */
+const selectedModelHasVision = computed(() => {
+  const sel = localModels.value.find((m) => (m.alias || m.name) === selectedModel.value)
+  return isVisionCapable(sel?.hasMmproj ?? false, mmprojOverride.value)
+})
+
+/**
+ * Attachment-entry gate: blocked only when a model IS picked and it cannot see
+ * images. With no selection attachments stay ungated (no nagging before a
+ * model is even chosen) — the send-time fallback covers that case instead.
+ */
+const attachBlocked = computed(() => !!selectedModel.value && !selectedModelHasVision.value)
 
 /** Whether the chat parameters panel is expanded */
 const showParams = ref(false)
@@ -1205,6 +1265,21 @@ function triggerAttach() {
   fileInput.value?.click()
 }
 
+/**
+ * Single pending-image write path (issue #35): both the file picker and the
+ * paste handler funnel here, so the vision gate lives in exactly one place.
+ * When a model is selected and it cannot take images, the data URL is silently
+ * dropped and a light notice explains the fix; with no selection nothing is
+ * dropped (send() guides instead).
+ */
+function addPendingImage(dataUrl: string): void {
+  if (attachBlocked.value) {
+    showModelNotice(t('chat.imagesNeedVision'))
+    return
+  }
+  pendingImages.value.push(dataUrl)
+}
+
 async function onFileSelected(e: Event) {
   const input = e.target as HTMLInputElement
   const files = input.files
@@ -1212,7 +1287,7 @@ async function onFileSelected(e: Event) {
   for (const file of Array.from(files)) {
     const dataUrl = await readFileAsDataUrl(file)
     if (dataUrl) {
-      pendingImages.value.push(dataUrl)
+      addPendingImage(dataUrl)
     }
   }
   // Reset input so the same file can be selected again
@@ -1234,7 +1309,7 @@ async function onInputPaste(e: ClipboardEvent) {
   for (const file of imageFiles) {
     const dataUrl = await readFileAsDataUrl(file)
     if (dataUrl) {
-      pendingImages.value.push(dataUrl)
+      addPendingImage(dataUrl)
     }
   }
 }
@@ -1250,6 +1325,16 @@ async function send() {
   if (!input) return
   const text = input.value.trim()
   if (!text && pendingImages.value.length === 0) return
+
+  // Vision fallback (issue #35): attached images need a vision-capable model —
+  // sent anyway, llama-server would reject the whole request with a raw English
+  // error. Block here with actionable bilingual guidance instead; images
+  // already in the preview bar are kept so the user can retry after fixing the
+  // model (download the mmproj or set the projector path in ModelSettings).
+  if (pendingImages.value.length > 0 && !selectedModelHasVision.value) {
+    showModelNotice(t('chat.imagesNeedVision'))
+    return
+  }
 
   // Service offline: auto-start llama-server and wait for readiness before
   // streaming. Guided failures return here with the input left untouched.
@@ -1354,7 +1439,14 @@ async function send() {
     requestFailed = true
     const last = messages.value[messages.value.length - 1]
     if (last && last.role === 'assistant') {
-      last.content = t('chat.error', { msg: e?.message || String(e) })
+      const raw = e?.message || String(e)
+      // Map llama-server's known image-input rejection (issue #35) to guided
+      // bilingual copy; the original message stays as secondary detail inside
+      // the guidance text. Everything else keeps the plain error template.
+      last.content =
+        chatErrorKind(raw) === 'vision-unsupported'
+          ? t('chat.errorVision', { msg: raw })
+          : t('chat.error', { msg: raw })
     }
   } finally {
     streaming.value = false
@@ -2754,9 +2846,16 @@ html[data-os='ios'] .chat-model-select :deep(button.themed-select__trigger:activ
   flex-shrink: 0;
 }
 
-.attach-btn:hover {
+.attach-btn:hover:not(:disabled) {
   background: var(--hover-bg);
   color: var(--text-primary);
+}
+
+/* Vision-gated attach entry (issue #35): dimmed with a not-allowed cursor so
+   the blocked state reads at a glance (the title carries the reason). */
+.attach-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 /* Touch press feedback (OS-scoped): :hover never fires on touch input, so

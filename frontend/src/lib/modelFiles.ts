@@ -13,6 +13,17 @@ export function sortModelFiles<T extends { filename: string; size?: number }>(fi
 }
 
 /**
+ * Whether a repo/scan filename is a vision projector (mmproj) GGUF. Mirrors the
+ * backend's same-directory auto-detect rule in core/preset.go (lowercase name
+ * starts with "mmproj" AND ends with ".gguf"), so the download-page badge and
+ * the chat-page vision gate agree with what llama-server will actually serve.
+ */
+export function isMMProjFile(filename: string): boolean {
+  const name = filename.toLowerCase()
+  return name.startsWith('mmproj') && name.endsWith('.gguf')
+}
+
+/**
  * Detect the quantization type from a filename (case-insensitive).
  * Returns the quant name (keeping the casing used in the table above), or an empty string when nothing matches.
  */

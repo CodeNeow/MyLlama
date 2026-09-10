@@ -20,6 +20,9 @@
            within its own parent's box. -->
       <div v-if="showActionBar && !isMobile" class="action-bar">
         <span class="selected-count">{{ selectedCountLabel }}</span>
+        <!-- Vision guidance (issue #35): repo carries an mmproj projector file
+             but none is selected yet — nudge once, full-width under the bar -->
+        <span v-if="mmprojHintVisible" class="mmproj-hint"><span aria-hidden="true">👁️</span> {{ t('downloads.mmprojHint') }}</span>
         <div class="action-actions">
           <button
             class="select-all-btn"
@@ -47,6 +50,7 @@
            list scrolls -->
       <div v-if="showActionBar && isMobile" class="action-bar action-bar-sticky">
         <span class="selected-count">{{ selectedCountLabel }}</span>
+        <span v-if="mmprojHintVisible" class="mmproj-hint"><span aria-hidden="true">👁️</span> {{ t('downloads.mmprojHint') }}</span>
         <div class="action-actions">
           <button
             class="select-all-btn"
@@ -110,6 +114,9 @@
                 <span class="file-ck" :class="{ on: selectedFiles.includes(f.filename) }" aria-hidden="true"></span>
                 <span class="file-name" :title="f.filename">{{ f.filename }}</span>
                 <span v-if="guessQuant(f.filename)" class="file-quant">{{ guessQuant(f.filename) }}</span>
+                <!-- Vision projector badge (issue #35): same mmproj detection as
+                     the backend preset auto-detect (lib/modelFiles.isMMProjFile) -->
+                <span v-if="isMMProjFile(f.filename)" class="mmproj-badge" :title="t('models.multimodalTitle')">👁️ {{ t('models.multimodal') }}</span>
                 <span v-if="f.size" class="file-size">{{ formatBytes(f.size) }}</span>
               </label>
             </div>
@@ -124,7 +131,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { getModelFiles, getModelDescription, startDownload } from '../wails'
-import { sortModelFiles, guessQuant, selectedBytes } from '../lib/modelFiles'
+import { sortModelFiles, guessQuant, selectedBytes, isMMProjFile } from '../lib/modelFiles'
 import { formatBytes } from '../lib/format'
 import { renderDescription } from '../lib/markdown'
 import { handleLinkClick } from '../lib/linkHandler'
@@ -185,6 +192,15 @@ const selectedCountLabel = computed(() => {
 
 // Whether all files are selected
 const allSelected = computed(() => files.value.length > 0 && selectedFiles.length === files.value.length)
+
+// Vision guidance (issue #35): repos carrying an mmproj projector file badge
+// those rows and nudge the user to also tick the projector when image input is
+// wanted. The hint hides once an mmproj file IS selected (or when the repo has
+// none); toggleSelectAll behavior stays untouched.
+const hasMmprojFile = computed(() => files.value.some((f) => isMMProjFile(f.filename)))
+const mmprojHintVisible = computed(
+  () => hasMmprojFile.value && !selectedFiles.some((f) => isMMProjFile(f))
+)
 
 // Viewport tier gate: the phone action bar is a different DOM placement
 // (sticky island inside the scroll band), so it branches on platform state
@@ -330,12 +346,42 @@ onMounted(() => {
 /* ─── Action bar ─── */
 .action-bar {
   display: flex;
+  /* The mmproj guidance hint (issue #35) is flex-basis:100% and wraps onto its
+     own full-width row under the count + actions row */
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   padding: 10px 0;
   margin-top: 12px;
   border-top: 1px solid var(--border);
+}
+
+/* Repo has an mmproj projector file but none is selected yet (issue #35):
+   full-width guidance row inside both action-bar placements */
+.mmproj-hint {
+  flex-basis: 100%;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #c084fc;
+}
+
+/* Vision projector badge on file rows (issue #35): same mmproj purple chip
+   family as My Models' .mmproj-badge, sized to sit beside .file-quant */
+.mmproj-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  background: rgba(168, 85, 247, 0.12);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+  letter-spacing: 0.3px;
 }
 
 /* Desktop glass sticky action bar (design draft D11): glassmorphism pill bar */

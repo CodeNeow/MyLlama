@@ -4,6 +4,7 @@ import {
   buildMessageContent,
   chatContextRows,
   chatContextSummary,
+  chatErrorKind,
   chatParamsLayout,
   chatReadiness,
   chatRequestHeaders,
@@ -12,11 +13,13 @@ import {
   estimateConversationTokens,
   fetchRouterModels,
   formatTokenCount,
+  isVisionCapable,
   lastReplyTps,
   modelsToUnload,
   parseSSEChunks,
   streamChatCompletion,
   tokenRates,
+  visionConfigKey,
   type ChatParams,
 } from '../lib/chat'
 
@@ -763,5 +766,68 @@ describe('chatContextRows', () => {
       copy
     )
     expect(rows.find((r) => r.key === 'model')?.value).toBe('No models')
+  })
+})
+
+describe('isVisionCapable', () => {
+  // Vision gate (issue #35): scan-found mmproj OR an explicit projector path
+  // from the model settings counts as vision capability
+  it('scan-found mmproj is capable regardless of the override', () => {
+    expect(isVisionCapable(true, undefined)).toBe(true)
+    expect(isVisionCapable(true, '')).toBe(true)
+    expect(isVisionCapable(true, 'mmproj-f16.gguf')).toBe(true)
+  })
+
+  it('no scanned mmproj needs a non-blank explicit override', () => {
+    expect(isVisionCapable(false, undefined)).toBe(false)
+    expect(isVisionCapable(false, null)).toBe(false)
+    expect(isVisionCapable(false, '')).toBe(false)
+    expect(isVisionCapable(false, '   ')).toBe(false)
+    expect(isVisionCapable(false, 'C:/models/mmproj-f16.gguf')).toBe(true)
+  })
+})
+
+describe('visionConfigKey', () => {
+  // Per-model configs are keyed by display Name on the backend, while the
+  // chat picker carries the router id (alias || name) — the key must resolve
+  // back to the Name or the explicit mmproj override lookup misses
+  const models = [
+    { name: 'Qwen3-VL-8B', alias: 'Qwen3-VL-8B-2' },
+    { name: 'Llama-3.2-3B' },
+  ]
+
+  it('resolves an aliased router id to its display Name', () => {
+    expect(visionConfigKey(models, 'Qwen3-VL-8B-2')).toBe('Qwen3-VL-8B')
+  })
+
+  it('resolves a plain-name id to itself', () => {
+    expect(visionConfigKey(models, 'Llama-3.2-3B')).toBe('Llama-3.2-3B')
+  })
+
+  it('falls back to the selected id when no record matches', () => {
+    expect(visionConfigKey(models, 'Gone-Model')).toBe('Gone-Model')
+  })
+
+  it('empty list falls back to the selected id', () => {
+    expect(visionConfigKey([], 'Llama-3.2-3B')).toBe('Llama-3.2-3B')
+  })
+})
+
+describe('chatErrorKind', () => {
+  // llama-server's raw image-input rejection maps to guided copy (issue #35)
+  it('matches the known image-unsupported and mmproj errors', () => {
+    expect(chatErrorKind('image input is not supported - hint: the model may not support it')).toBe('vision-unsupported')
+    expect(chatErrorKind("this model does not support mmproj - make sure it isn't corrupt")).toBe('vision-unsupported')
+  })
+
+  it('matches case-insensitively', () => {
+    expect(chatErrorKind('Image Input Is Not Supported By This Model')).toBe('vision-unsupported')
+    expect(chatErrorKind('MMPROJ file missing')).toBe('vision-unsupported')
+  })
+
+  it('returns null for unrelated errors', () => {
+    expect(chatErrorKind('connection refused')).toBeNull()
+    expect(chatErrorKind('HTTP 500')).toBeNull()
+    expect(chatErrorKind('')).toBeNull()
   })
 })

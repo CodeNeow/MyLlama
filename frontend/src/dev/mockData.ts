@@ -100,7 +100,9 @@ const models: any[] = [
     sizeHuman: '2.3 GB',
     architecture: 'qwen3',
     quantization: 'Q4_K_M',
-    hasMmproj: false,
+    // One vision-capable entry so `npm run dev:mock` exercises the chat page's
+    // mmproj gating (attach enabled) and My Models' badge instead of a flat all-false list
+    hasMmproj: true,
     sourceDir: config.modelDownloadDir,
     alias: 'Qwen3-4B-Instruct-Q4_K_M',
   },
