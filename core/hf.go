@@ -42,6 +42,24 @@ type HFFileOut struct {
 const hfMirrorBase = "https://hf-mirror.com"
 const hfDirectBase = "https://huggingface.co"
 
+// hfJSONMaxBytes caps how many bytes of an HF API JSON response (search pages
+// and model file lists) the decoder will read. Declared as a var (same style
+// as readmeMaxBytes) so tests can shrink it. 16 MiB is orders of magnitude
+// above any real response — a limit=200&full=true search page or a model's
+// full sibling list stays well under 1 MiB — while bounding what a hostile or
+// misbehaving mirror can make the process buffer. A response beyond the cap
+// fails through the existing error path: the reader is truncated mid-JSON, so
+// Decode returns an unexpected-EOF style error like any other malformed
+// payload.
+var hfJSONMaxBytes int64 = 16 << 20
+
+// decodeHFJSON decodes one capped HF API JSON response body into v. The
+// LimitReader budget is hfJSONMaxBytes+1 so an exactly-at-cap payload still
+// decodes whole while anything larger truncates and errors.
+func decodeHFJSON(body io.Reader, v interface{}) error {
+	return json.NewDecoder(io.LimitReader(body, hfJSONMaxBytes+1)).Decode(v)
+}
+
 // activeHFBase returns the HF-compatible API base for the active non-ModelScope
 // source: the official Hugging Face host for "huggingface", otherwise the
 // hf-mirror.com mirror. Both expose identical Hub API paths, so the same
@@ -53,17 +71,37 @@ func activeHFBase() string {
 	return hfMirrorBase
 }
 
+// escapeRepoPath escapes a model repo id for use inside an HF-compatible URL
+// path: each slash-separated segment is percent-escaped (url.PathEscape) and
+// the segments are rejoined with a literal "/". The separating slash must stay
+// unescaped because HF-compatible routes address a model as
+// {namespace}/{name} — a whole-id url.PathEscape would send "%2F" and break
+// the route. Every other metacharacter, including "?", "#" and "%" that would
+// rewrite the URL's query or fragment, is escaped inside its segment, so a
+// hostile modelID coming from a search API response cannot reshape the
+// request beyond the {namespace}/{name} shape. (The ModelScope branch differs
+// on purpose: its legacy API accepts the %2F form, so it keeps the existing
+// whole-id url.PathEscape — both branches neutralize injection, each in the
+// form its endpoint accepts.)
+func escapeRepoPath(modelID string) string {
+	segs := strings.Split(modelID, "/")
+	for i, s := range segs {
+		segs[i] = url.PathEscape(s)
+	}
+	return strings.Join(segs, "/")
+}
+
 // buildModelDownloadURL builds the model file download URL per download source:
-//   - hf: {hfMirrorBase}/{modelID}/resolve/main/{fileName} (filename PathEscaped)
+//   - hf: {hfMirrorBase}/{modelID}/resolve/main/{fileName} (modelID segment-escaped, filename PathEscaped)
 //   - huggingface: same path on the official Hugging Face host (hfDirectBase)
 //   - modelscope: delegates to buildModelScopeDownloadURL (the legacy API repo endpoint)
 //   - unknown source returns an error (defense in depth; callers must not pass invalid values)
 func buildModelDownloadURL(source, modelID, fileName string) (string, error) {
 	switch source {
 	case sourceHF:
-		return fmt.Sprintf("%s/%s/resolve/main/%s", hfMirrorBase, modelID, url.PathEscape(fileName)), nil
+		return fmt.Sprintf("%s/%s/resolve/main/%s", hfMirrorBase, escapeRepoPath(modelID), url.PathEscape(fileName)), nil
 	case sourceHuggingFace:
-		return fmt.Sprintf("%s/%s/resolve/main/%s", hfDirectBase, modelID, url.PathEscape(fileName)), nil
+		return fmt.Sprintf("%s/%s/resolve/main/%s", hfDirectBase, escapeRepoPath(modelID), url.PathEscape(fileName)), nil
 	case sourceModelScope:
 		return buildModelScopeDownloadURL(modelscopeLegacyBase, modelID, fileName), nil
 	default:
@@ -143,7 +181,10 @@ func searchHFMirrorAt(baseURL, q, filter string) ([]HFSearchResult, error) {
 // searchHFMirrorAt then decides to skip the whole route (other sorts are
 // unaffected).
 func searchHFMirrorSortAt(baseURL, q, sort string) ([]HFSearchResult, error) {
-	apiURL := fmt.Sprintf("%s/api/models?search=%s&sort=%s&limit=200&full=true", baseURL, q, sort)
+	// QueryEscape the user search term: raw spaces, "&", "?", "#" etc. would
+	// otherwise corrupt the query string (splitting/injecting parameters or
+	// truncating the term at the fragment).
+	apiURL := fmt.Sprintf("%s/api/models?search=%s&sort=%s&limit=200&full=true", baseURL, url.QueryEscape(q), sort)
 
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
@@ -172,7 +213,7 @@ func searchHFMirrorSortAt(baseURL, q, sort string) ([]HFSearchResult, error) {
 		Tags        []string `json:"tags"`
 		Siblings    []HFFile `json:"siblings"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&rawResults); err != nil {
+	if err := decodeHFJSON(resp.Body, &rawResults); err != nil {
 		return nil, err
 	}
 
@@ -321,7 +362,7 @@ func getHFModelFilesAt(baseURL, modelID string) ([]HFFileOut, error) {
 	var raw struct {
 		Siblings []HFFile `json:"siblings"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+	if err := decodeHFJSON(resp.Body, &raw); err != nil {
 		return nil, err
 	}
 
@@ -373,7 +414,7 @@ func getHFModelMaxGGUFSizeAt(baseURL, modelID string) (int64, error) {
 	var raw struct {
 		Siblings []HFFile `json:"siblings"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+	if err := decodeHFJSON(resp.Body, &raw); err != nil {
 		return 0, err
 	}
 

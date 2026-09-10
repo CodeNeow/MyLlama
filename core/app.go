@@ -159,22 +159,22 @@ func (a *App) Shutdown(ctx context.Context) {
 		return
 	}
 
-	// Stop running llama-server if any (#3): take a local copy under
-	// serverMu, then Signal the copy outside the lock, avoiding data races
-	// with concurrent start/stop during app exit. An adopted server (handed
-	// over from headless mode: cmd nil, adoptedPid set) is killed by pid and
-	// its handover record removed.
-	if stopAdoptedServerIfAny() {
-		// adopted server stopped and handover record removed
-	} else {
-		serverMu.Lock()
-		running := serverRunning
-		cmd := serverCmd
-		serverMu.Unlock()
-		if running && cmd != nil {
-			addServerLog("[INFO] Stopping llama-server on shutdown...")
-			cmd.Process.Signal(osInterrupt)
-		}
+	// Stop running llama-server if any (#3): stopServerInternal is the single
+	// stop path shared with the StopServer binding — it covers both flavors
+	// (adopted server: kill by pid + handover record removal; own child:
+	// interrupt → bounded grace → Kill escalation → bounded exit
+	// confirmation plus state cleanup). The previous inline fire-and-forget
+	// signal was a simplified duplicate of the child branch: it ignored the
+	// delivery result, never escalated when the interrupt did not take effect
+	// (a Unix llama-server delaying SIGINT handling would survive app exit as
+	// an orphan) and nobody confirmed the exit. Reusing the shared path gives
+	// Shutdown the same bounded-wait budget as a manual stop: worst case
+	// stopGrace + stopExitWait (5s + 8s today) before Shutdown proceeds, so
+	// app exit can never hang forever.
+	if err := stopServerInternal(); err != nil {
+		// stopServerInternal currently always returns nil; log defensively so
+		// a future error branch cannot be swallowed silently.
+		log.Printf("[WARN] stopServerInternal during shutdown: %v", err)
 	}
 
 	// Cancel ongoing llama.cpp download (#3): downloadCancel is guarded by

@@ -987,3 +987,117 @@ func TestGetLlamaCppConcurrentFirstCall(t *testing.T) {
 		}
 	}
 }
+
+// TestTempExtForURL verifies the panic-guarded temp-file extension derivation
+// for download URLs: dot-bearing URLs keep the historical expression's result,
+// while a dot-less URL yields the empty extension instead of panicking on
+// url[-1:] (strings.LastIndex == -1) — the old expression crashed inside the
+// download goroutine, taking the whole process down.
+func TestTempExtForURL(t *testing.T) {
+	cases := []struct {
+		rawURL string
+		want   string
+	}{
+		{"https://github.com/llama.cpp/releases/download/b1/llama-b1-bin-win-cuda-12.4-x64.zip", ".zip"},
+		{"https://example.com/asset.tar.gz", ".gz"},
+		{"https://example.com/download", ""}, // no dot at all: the former panic case
+		{"https://example.com/a.b/c", ""},    // dot not in the final path element
+		{"", ""},                             // empty URL
+	}
+	for _, tc := range cases {
+		if got := tempExtForURL(tc.rawURL); got != tc.want {
+			t.Errorf("tempExtForURL(%q) = %q, want %q", tc.rawURL, got, tc.want)
+		}
+	}
+}
+
+// TestStartLlamaCppDownloadSingleFlight verifies the guard against double
+// triggers: with a live flow registered (llamaDownloadActive / downloadCancel),
+// a repeated trigger is refused without resetting the status or spawning a
+// second flow; from clean state the trigger launches exactly one flow, which
+// releases the markers again once cancelled (no stuck guard).
+func TestStartLlamaCppDownloadSingleFlight(t *testing.T) {
+	saveDownloadState(t)
+
+	// Live flow: both markers set, mid-download status. The trigger must be
+	// refused and leave everything untouched.
+	downloadMu.Lock()
+	llamaDownloadActive = true
+	downloadCancel = func() {}
+	downloadState.Status = "downloading"
+	downloadMu.Unlock()
+
+	startLlamaCppDownload()
+
+	downloadMu.Lock()
+	status := downloadState.Status
+	active := llamaDownloadActive
+	cancel := downloadCancel
+	downloadMu.Unlock()
+	if status != "downloading" {
+		t.Errorf("refused trigger must not reset the status, got %q", status)
+	}
+	if !active || cancel == nil {
+		t.Errorf("live-flow markers must survive a refused trigger: active=%v cancelNil=%v", active, cancel == nil)
+	}
+
+	// Clean state: point the release fetch at a hanging server so the spawned
+	// flow stays alive until cancelled; then verify the single-flight markers
+	// are released when the flow ends.
+	hang := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer hang.Close()
+	origAPI := githubReleasesAPI
+	githubReleasesAPI = hang.URL
+	t.Cleanup(func() { githubReleasesAPI = origAPI })
+
+	downloadMu.Lock()
+	llamaDownloadActive = false
+	downloadCancel = nil
+	downloadState.Status = "idle"
+	downloadMu.Unlock()
+
+	startLlamaCppDownload()
+
+	// Cancel the flow and wait (bounded) for the goroutine to release the
+	// markers: a guard that never clears would permanently block retries.
+	// The cancel handle is installed by the goroutine itself, so first wait
+	// (bounded) for it to appear before invoking it.
+	deadline := time.Now().Add(5 * time.Second)
+	var flowCancel func()
+	for {
+		downloadMu.Lock()
+		active = llamaDownloadActive
+		flowCancel = downloadCancel
+		downloadMu.Unlock()
+		if flowCancel != nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("launched flow never installed its cancel handle")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	downloadMu.Lock()
+	status = downloadState.Status
+	downloadMu.Unlock()
+	if status != "fetching" || !active {
+		t.Fatalf("clean trigger should launch one flow (status fetching, flag set), got status=%q active=%v", status, active)
+	}
+
+	flowCancel()
+	deadline = time.Now().Add(5 * time.Second)
+	for {
+		downloadMu.Lock()
+		released := !llamaDownloadActive && downloadCancel == nil
+		downloadMu.Unlock()
+		if released {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("download flow did not release its single-flight markers after cancel")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}

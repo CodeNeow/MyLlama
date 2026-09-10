@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // ─── Model preset generation ────────────────────────────────────
@@ -238,6 +240,48 @@ func modelPresetKV(m ModelInfo, cfg ModelConfig) ([]presetKV, error) {
 	return kvs, nil
 }
 
+// lastPresetPath records the temp INI file written by the most recent
+// generateModelsPresetFrom call in this process, so it can be removed once no
+// llama-server can need it anymore (guarded by presetPathMu).
+//
+// Deletion-timing reasoning — when is the INI no longer needed? The file is
+// passed to llama-server as --models-preset and parsed ONCE at child startup
+// (argument processing registers the models; with router-mode lazy loading
+// the model FILES are loaded on demand, but their paths are already in
+// memory — the INI itself is never re-read). A temp INI is therefore garbage
+// exactly when no live llama-server booted from it. Two deletion points
+// uphold that invariant:
+//  1. removeLastPreset in stopServerInternal, after the child's exit has been
+//     confirmed (the done channel only closes after cmd.Wait returned, so the
+//     process is gone — on Windows a still-running child could hold the file
+//     and make the delete fail, which is why removal waits for exit);
+//  2. before writing the NEXT preset in this process: lastPresetPath only
+//     ever holds a path whose owning child already exited (start-after-stop
+//     is the only in-process re-generation path — the StartServer bindings
+//     no-op while running, and the headless startup attempts a start only
+//     alongside an ADOPTED server whose INI was written by the previous
+//     process and is never recorded here). Both removals are best-effort:
+//     failures are logged and never break the start/stop flow.
+var lastPresetPath string
+var presetPathMu sync.Mutex
+
+// removeLastPreset deletes the previously generated preset temp file
+// (best-effort: a missing file is already the desired state; any other
+// failure is only logged). Caller-agnostic helper shared by the
+// stopServerInternal post-exit cleanup and the next-generation cleanup.
+func removeLastPreset() {
+	presetPathMu.Lock()
+	prev := lastPresetPath
+	lastPresetPath = ""
+	presetPathMu.Unlock()
+	if prev == "" {
+		return
+	}
+	if err := os.Remove(prev); err != nil && !os.IsNotExist(err) {
+		log.Printf("[WARN] failed to remove previous llama-server preset %s: %v", prev, err)
+	}
+}
+
 // generateModelsPreset scans the default model directory and writes a llama-server
 // INI preset to a temp file, returning its path.
 func generateModelsPreset() (string, error) {
@@ -284,6 +328,12 @@ func generateModelsPresetFrom(models []ModelInfo, cfgs map[string]ModelConfig) (
 		buf.WriteString("\n")
 	}
 
+	// The previous run's preset temp file is garbage by now (see the
+	// lastPresetPath deletion-timing reasoning): remove it before recording
+	// the new one, so repeated server starts no longer leak one
+	// llama-models-*.ini per launch into the system temp directory.
+	removeLastPreset()
+
 	tmpFile, err := os.CreateTemp(resolveTempDir(), "llama-models-*.ini")
 	if err != nil {
 		return "", err
@@ -294,6 +344,9 @@ func generateModelsPresetFrom(models []ModelInfo, cfgs map[string]ModelConfig) (
 		return "", err
 	}
 	tmpFile.Close()
+	presetPathMu.Lock()
+	lastPresetPath = path
+	presetPathMu.Unlock()
 	return path, nil
 }
 

@@ -631,6 +631,10 @@ func stopServerInternal() error {
 		select {
 		case <-done:
 			// The child exited within the grace period; nothing more to do.
+			// done only closes after cmd.Wait reaped the child, so its preset
+			// INI (parsed once at boot, never re-read) is garbage now —
+			// best-effort cleanup of the temp file.
+			removeLastPreset()
 			return nil
 		case <-time.After(stopGrace):
 			log.Printf("[WARN] llama-server did not exit within %v, killed", stopGrace)
@@ -657,13 +661,42 @@ func stopServerInternal() error {
 	case <-time.After(stopExitWait):
 		log.Printf("[WARN] llama-server exit not confirmed within %v; continuing", stopExitWait)
 	}
+	// The child was interrupted/Killed and (except on the bounded-timeout
+	// path) confirmed exited: its preset INI is no longer needed by anyone.
+	// Best-effort, after exit — on Windows deleting while the child still
+	// ran could fail on an open handle.
+	removeLastPreset()
 	return nil
 }
 
 // ─── llama.cpp download trigger ──────────────────────────────────
 
+// startLlamaCppDownload launches the llama.cpp download flow unless one is
+// already running. Single-flight guard: a second trigger while a flow is live
+// is refused — two concurrent flows would download into the same temp files
+// and extract into the same target directory, and the first flow's deferred
+// cleanup would wipe the second flow's cancel handle (making it unstoppable).
+// The guard checks the two downloadMu-guarded flow-liveness markers:
+//   - llamaDownloadActive: set synchronously here so the check-and-launch
+//     below is atomic against concurrent triggers even before the goroutine
+//     starts (downloadCancel is only installed at downloadLlamaCpp entry);
+//   - downloadCancel: non-nil for the whole flow lifetime, covering any flow
+//     started without the flag.
+//
+// The refusal only logs the current downloadState.Status value — the shared
+// vocabulary (idle / fetching / downloading / paused / extracting / done /
+// error, mirrored by the frontend's LLAMA_CPP_DOWNLOAD_STATUSES) gains no new
+// status, and the frontend keeps showing the in-flight progress area for the
+// flow that is actually running.
 func startLlamaCppDownload() {
 	downloadMu.Lock()
+	if llamaDownloadActive || downloadCancel != nil {
+		status := downloadState.Status
+		downloadMu.Unlock()
+		log.Printf("[WARN] llama.cpp download already in progress (status %q); repeated trigger ignored", status)
+		return
+	}
+	llamaDownloadActive = true
 	downloadState.Status = "fetching"
 	downloadState.Paused = false
 	downloadMu.Unlock()

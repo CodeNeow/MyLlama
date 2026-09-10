@@ -463,3 +463,113 @@ func TestGetHFModelMaxGGUFSizeAtHTTPError(t *testing.T) {
 		t.Error("404 response should return error")
 	}
 }
+
+// TestBuildModelDownloadURLEscapesRepoPath verifies the modelID is escaped in
+// the HF download-URL branches: a normal {author}/{name} id passes through
+// byte-identical (the separating slash must stay a literal slash — a whole-id
+// PathEscape would send %2F and break the route), while query/fragment
+// metacharacters smuggled in a hostile id (e.g. from a search API response)
+// are percent-escaped so they cannot reshape the request URL.
+func TestBuildModelDownloadURLEscapesRepoPath(t *testing.T) {
+	// Normal ids unchanged on both HF sources.
+	for _, source := range []string{"hf", sourceHuggingFace} {
+		base := hfMirrorBase
+		if source == sourceHuggingFace {
+			base = hfDirectBase
+		}
+		u, err := buildModelDownloadURL(source, "author/model", "a.gguf")
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := base + "/author/model/resolve/main/a.gguf"
+		if u != want {
+			t.Errorf("source %q: URL = %q, want unchanged %q", source, u, want)
+		}
+	}
+
+	// Hostile ids: query/fragment/percent metacharacters escaped per segment.
+	cases := []struct {
+		modelID string
+		wantSeg string
+	}{
+		{"author/evil?x=1#f", "author/evil%3Fx=1%23f"},
+		{"a/b%c", "a/b%25c"},
+		{"my models/x y", "my%20models/x%20y"},
+	}
+	for _, tc := range cases {
+		u, err := buildModelDownloadURL("hf", tc.modelID, "a.gguf")
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := hfMirrorBase + "/" + tc.wantSeg + "/resolve/main/a.gguf"
+		if u != want {
+			t.Errorf("modelID %q: URL = %q, want escaped %q", tc.modelID, u, want)
+		}
+	}
+}
+
+// TestSearchHFMirrorSortAtEscapesQuery verifies the search term is
+// query-escaped: a term containing spaces, "&", "?" and "#" must arrive at the
+// server intact as the search parameter instead of being split into extra
+// parameters or truncated at the fragment.
+func TestSearchHFMirrorSortAtEscapesQuery(t *testing.T) {
+	var gotSearch string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotSearch = r.URL.Query().Get("search")
+		w.Write([]byte("[" + hfModelJSON("A", true) + "]"))
+	}))
+	defer srv.Close()
+
+	q := `bge small&fake=1?x#anchor`
+	if _, err := searchHFMirrorSortAt(srv.URL, q, "downloads"); err != nil {
+		t.Fatal(err)
+	}
+	if gotSearch != q {
+		t.Errorf("server saw search = %q, want the full escaped term %q", gotSearch, q)
+	}
+}
+
+// TestHFJSONResponseSizeCap verifies the size cap on HF API JSON responses:
+// with hfJSONMaxBytes shrunk, a valid JSON body beyond the cap fails through
+// the existing decode-error path (the truncated stream is malformed JSON),
+// while a body within the cap (the +1 budget keeps an exactly-at-cap payload
+// whole) decodes normally.
+func TestHFJSONResponseSizeCap(t *testing.T) {
+	filesPayload := `{"siblings":[{"rfilename":"model-q8_0.gguf","size":1024}]}`
+	searchPayload := "[" + hfModelJSON("A", true) + "]"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/api/models" {
+			w.Write([]byte(searchPayload))
+			return
+		}
+		w.Write([]byte(filesPayload))
+	}))
+	defer srv.Close()
+
+	orig := hfJSONMaxBytes
+	defer func() { hfJSONMaxBytes = orig }()
+
+	// Beyond the (shrunk) cap: decode must fail on both endpoints.
+	hfJSONMaxBytes = 16
+	if _, err := getHFModelFilesAt(srv.URL, "author/model"); err == nil {
+		t.Error("file-list response beyond the JSON cap should fail to decode")
+	}
+	if _, err := searchHFMirrorSortAt(srv.URL, "q", "downloads"); err == nil {
+		t.Error("search response beyond the JSON cap should fail to decode")
+	}
+
+	// Within the cap: decode succeeds.
+	hfJSONMaxBytes = int64(len(filesPayload))
+	files, err := getHFModelFilesAt(srv.URL, "author/model")
+	if err != nil {
+		t.Fatalf("file-list response at the cap should decode: %v", err)
+	}
+	if len(files) != 1 || files[0].Filename != "model-q8_0.gguf" {
+		t.Errorf("files = %+v, want the single q8_0 gguf", files)
+	}
+	hfJSONMaxBytes = int64(len(searchPayload))
+	if _, err := searchHFMirrorSortAt(srv.URL, "q", "downloads"); err != nil {
+		t.Errorf("search response at the cap should decode: %v", err)
+	}
+}

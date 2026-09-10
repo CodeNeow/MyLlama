@@ -21,12 +21,27 @@ import (
 var maxExtractFileSize int64 = 4 << 30   // per-file extraction cap: 4GB
 var maxExtractTotalSize int64 = 16 << 30 // per-run total extraction cap: 16GB
 
+// maxExtractZipEntries caps how many entries extractZip will process. Real
+// llama.cpp release zips carry a few dozen entries (binaries plus GGML backend
+// libraries), so 20000 sits far above any legitimate archive while cutting zip
+// bombs whose damage comes from millions of tiny entries — the per-file and
+// total size caps do not bound entry count. Declared as a var (same style as
+// the size caps) so tests can shrink it. Exceeding the cap aborts the
+// extraction up front (zip.OpenReader has already read the central directory,
+// so the check runs before anything is written), following the function's
+// existing error semantics: nothing new has been extracted at that point.
+var maxExtractZipEntries = 20000
+
 func extractZip(src, dest string) error {
 	r, err := zip.OpenReader(src)
 	if err != nil {
 		return err
 	}
 	defer r.Close()
+
+	if len(r.File) > maxExtractZipEntries {
+		return fmt.Errorf(tr("zip 条目数超出上限: %d", "zip entry count exceeds the limit: %d"), len(r.File))
+	}
 
 	var totalBytes int64
 	for _, f := range r.File {

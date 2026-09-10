@@ -787,3 +787,46 @@ func TestGenerateModelsPresetFromCtxCheckpoints(t *testing.T) {
 		t.Errorf("zero config must not emit ctx-checkpoints: %q", string(data))
 	}
 }
+
+// TestGenerateModelsPresetRemovesPreviousTempFile verifies the temp-INI
+// cleanup: generating a preset removes the previous run's temp file instead of
+// leaking one llama-models-*.ini into the system temp directory per server
+// start. The INI is parsed by llama-server once at child boot, so the previous
+// file is garbage by the time a next preset is written.
+func TestGenerateModelsPresetRemovesPreviousTempFile(t *testing.T) {
+	presetPathMu.Lock()
+	lastPresetPath = ""
+	presetPathMu.Unlock()
+	t.Cleanup(func() {
+		presetPathMu.Lock()
+		p := lastPresetPath
+		lastPresetPath = ""
+		presetPathMu.Unlock()
+		if p != "" {
+			os.Remove(p)
+		}
+	})
+
+	models := []ModelInfo{{Name: "cleanup", Path: "/models/cleanup.gguf"}}
+	first, err := generateModelsPresetFrom(models, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(first); err != nil {
+		t.Fatalf("first preset missing: %v", err)
+	}
+
+	second, err := generateModelsPresetFrom(models, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second == first {
+		t.Fatalf("second generation should write a fresh temp file, got %q twice", second)
+	}
+	if _, err := os.Stat(first); !os.IsNotExist(err) {
+		t.Errorf("previous preset %s should be removed by the next generation, stat err = %v", first, err)
+	}
+	if _, err := os.Stat(second); err != nil {
+		t.Errorf("current preset %s must survive: %v", second, err)
+	}
+}

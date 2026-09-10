@@ -256,6 +256,27 @@ func pickUpdateAsset(assets []GitHubAsset, kind string) *GitHubAsset {
 	return nil
 }
 
+// sanitizeTagName whitelists a release tag for use inside a download file
+// name: every character outside [A-Za-z0-9._-] is replaced with "-", and a
+// tag that sanitizes to empty is rejected. Defense in depth: the normal path
+// serves TagName from this repository's own releases (a v-prefixed semver),
+// but the value ultimately arrives in a remote API response and is spliced
+// into a file name placed next to the running executable — path separators or
+// other file-name metacharacters must never reach it untouched.
+func sanitizeTagName(tag string) (string, error) {
+	s := strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '.', r == '_', r == '-':
+			return r
+		}
+		return '-'
+	}, tag)
+	if s == "" {
+		return "", fmt.Errorf(tr("发布版本号无效: %q", "invalid release tag: %q"), tag)
+	}
+	return s, nil
+}
+
 // downloadUpdateRelease downloads the artifact matching the current install
 // kind to the executable's directory: a setup install downloads the installer,
 // a portable install downloads the portable exe (the running exe cannot be
@@ -323,6 +344,16 @@ func downloadUpdateRelease(version string) {
 	updateDownloadState.Installer = isInstallerAsset
 	updateDownloadMu.Unlock()
 
+	// The tag lands verbatim inside the saved file name below; whitelist-
+	// sanitize it first so a hostile API payload cannot smuggle path
+	// separators or other metacharacters into a file placed next to the
+	// running executable (defense in depth — see sanitizeTagName).
+	tag, err := sanitizeTagName(release.TagName)
+	if err != nil {
+		setUpdateDownloadError(err.Error())
+		return
+	}
+
 	// Step 2: download into the executable's directory, named by the selected
 	// asset type (not the local install kind): installer assets (name contains
 	// setup / installer) → MyLlama-setup-v<tag>.exe, anything else →
@@ -346,11 +377,11 @@ func downloadUpdateRelease(version string) {
 			setUpdateDownloadError(tr("无法定位应用数据目录", "cannot resolve the app data directory"))
 			return
 		}
-		fileName = "MyLlama-android-" + release.TagName + ".apk"
+		fileName = "MyLlama-android-" + tag + ".apk"
 	} else if isInstallerAsset {
-		fileName = "MyLlama-setup-" + release.TagName + ".exe"
+		fileName = "MyLlama-setup-" + tag + ".exe"
 	} else {
-		fileName = "MyLlama-portable-" + release.TagName + ".exe"
+		fileName = "MyLlama-portable-" + tag + ".exe"
 	}
 	destPath := filepath.Join(dir, fileName)
 

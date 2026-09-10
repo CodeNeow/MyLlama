@@ -71,6 +71,16 @@ var downloadState = &DownloadState{Status: "idle"}
 var downloadMu sync.Mutex
 var downloadCancel context.CancelFunc
 var downloadResumeCh = make(chan struct{}, 1)
+
+// llamaDownloadActive records whether a llama.cpp download flow has been
+// launched and has not finished yet. Set synchronously by startLlamaCppDownload
+// (under downloadMu, together with the status flip) and cleared by
+// downloadLlamaCpp's exit defer (also under downloadMu). Together with
+// downloadCancel it is the single-flight guard in startLlamaCppDownload: the
+// flag covers the trigger→goroutine gap (cancel is only installed at
+// downloadLlamaCpp entry), while cancel covers the whole flow lifetime.
+var llamaDownloadActive bool
+
 var customLlamaCppDir string
 var customLlamaCppMu sync.Mutex
 
@@ -476,6 +486,7 @@ func downloadLlamaCpp() {
 	defer func() {
 		downloadMu.Lock()
 		downloadCancel = nil
+		llamaDownloadActive = false
 		downloadMu.Unlock()
 		cancel()
 	}()
@@ -736,6 +747,23 @@ func sleepDownloadRetry(ctx context.Context) bool {
 	}
 }
 
+// tempExtForURL derives the temp-file extension suffix for a download URL,
+// replacing the unguarded filepath.Ext(url[strings.LastIndex(url, "."):])
+// expression: on a URL without any dot, LastIndex returns -1 and url[-1:]
+// panics — inside the download goroutine, taking the whole process down. A
+// dot-less URL now yields the empty extension (os.CreateTemp keeps just the
+// pattern prefix), which is safe: extraction dispatch keys on the release
+// asset NAME, never on this suffix. For any dot-bearing URL the result is
+// byte-identical to the old expression (the guard only removes the panic
+// case).
+func tempExtForURL(rawURL string) string {
+	i := strings.LastIndex(rawURL, ".")
+	if i < 0 {
+		return ""
+	}
+	return filepath.Ext(rawURL[i:])
+}
+
 // downloadWithResume downloads a file with pause/resume support.
 // baseDownloaded is the total bytes of assets already completed before this
 // file: in sequential multi-asset downloads (e.g. llama.cpp main program +
@@ -748,7 +776,7 @@ func sleepDownloadRetry(ctx context.Context) bool {
 // instead of returning a corrupt zip for extraction.
 // Returns the path to the downloaded temp file.
 func downloadWithResume(ctx context.Context, url string, totalSize int64, baseDownloaded int64) (string, error) {
-	tmpFile, err := os.CreateTemp(resolveTempDir(), "llamacpp-download-*"+filepath.Ext(url[strings.LastIndex(url, "."):]))
+	tmpFile, err := os.CreateTemp(resolveTempDir(), "llamacpp-download-*"+tempExtForURL(url))
 	if err != nil {
 		return "", fmt.Errorf(tr("创建临时文件失败: %w", "failed to create temporary file: %w"), err)
 	}

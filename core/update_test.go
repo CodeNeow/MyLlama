@@ -672,3 +672,42 @@ func TestInstallUpdateNowLaunchesAndQuits(t *testing.T) {
 		t.Error("quit was not called after the delay")
 	}
 }
+
+// TestSanitizeTagName verifies the whitelist sanitization of release tags used
+// inside update download file names: [A-Za-z0-9._-] pass through unchanged,
+// every other character is replaced with '-', and a tag that sanitizes to
+// empty is rejected. This is the defense-in-depth layer keeping a hostile
+// API-served TagName from smuggling path separators into a file name next to
+// the running executable.
+func TestSanitizeTagName(t *testing.T) {
+	cases := []struct {
+		name    string
+		tag     string
+		want    string
+		wantErr bool
+	}{
+		{"plain semver passes through", "v0.3.3", "v0.3.3", false},
+		{"prerelease suffix passes through", "v1.2.3-beta.1", "v1.2.3-beta.1", false},
+		{"path traversal separators replaced", "../../evil", "..-..-evil", false},
+		{"slash and backslash replaced", "a/b\\c", "a-b-c", false},
+		{"spaces and URL metacharacters replaced", "v1 x?y#z", "v1-x-y-z", false},
+		{"empty tag rejected", "", "", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := sanitizeTagName(tc.tag)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("sanitizeTagName(%q) should fail, got %q", tc.tag, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("sanitizeTagName(%q) unexpected error: %v", tc.tag, err)
+			}
+			if got != tc.want {
+				t.Errorf("sanitizeTagName(%q) = %q, want %q", tc.tag, got, tc.want)
+			}
+		})
+	}
+}

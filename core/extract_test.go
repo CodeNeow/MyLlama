@@ -299,3 +299,49 @@ func TestExtractZipDefaultsTo0644WhenModeAbsent(t *testing.T) {
 		t.Errorf("mode-less zip entry extracted with mode %v, want 0644 default", got)
 	}
 }
+
+// TestExtractZipEntryCountCap verifies extractZip aborts archives carrying
+// more entries than maxExtractZipEntries: the per-file and total size caps do
+// not bound entry count, so an entry-count bomb needs its own ceiling. The
+// check runs up front (zip.OpenReader has already read the central directory),
+// so nothing is extracted when the cap aborts.
+func TestExtractZipEntryCountCap(t *testing.T) {
+	setLanguageForTest(t, "zh")
+	orig := maxExtractZipEntries
+	maxExtractZipEntries = 2
+	defer func() { maxExtractZipEntries = orig }()
+
+	zipPath := filepath.Join(t.TempDir(), "many.zip")
+	if err := writeTestZip(zipPath, map[string]string{
+		"a.txt": "A",
+		"b.txt": "B",
+		"c.txt": "C",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	dest := t.TempDir()
+	err := extractZip(zipPath, dest)
+	if err == nil {
+		t.Fatal("超过条目数上限的 zip 应返回错误")
+	}
+	if !strings.Contains(err.Error(), "条目数超出上限") {
+		t.Errorf("错误信息应说明条目数超限: %v", err)
+	}
+	entries, readErr := os.ReadDir(dest)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if len(entries) != 0 {
+		t.Errorf("上限应在解压前中止, 不应写出任何条目, 实际 %d 个", len(entries))
+	}
+
+	// Control: at exactly the cap, extraction succeeds.
+	ctrl := filepath.Join(t.TempDir(), "ok.zip")
+	if err := writeTestZip(ctrl, map[string]string{"a.txt": "A", "b.txt": "B"}); err != nil {
+		t.Fatal(err)
+	}
+	dest2 := t.TempDir()
+	if err := extractZip(ctrl, dest2); err != nil {
+		t.Fatalf("恰好在条目数上限的 zip 不应报错: %v", err)
+	}
+}
