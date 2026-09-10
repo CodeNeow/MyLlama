@@ -314,20 +314,21 @@
          pass-through (column, flex:1), so the desktop/phone layout chain
          (.chat-page → messages → input) is unchanged. -->
     <div class="chat-body">
-      <!-- Messages area -->
-      <!-- Delegated link handler: links in assistant markdown open in the system
-           browser, the WebView never navigates — left click, middle click and
-           drag included (see lib/linkHandler.ts) -->
-      <div
-        ref="messagesContainer"
-        class="messages-area"
-        :class="{
-          'messages-area--streaming': streaming,
-          'messages-area--blocked': isTabletTier && composerBlocked,
-        }"
-        @click="handleLinkClick"
-        @auxclick="handleLinkAuxClick"
-        @dragstart="handleLinkDragStart"
+      <!-- Message list extracted to ChatMessageList.vue (behavior-neutral
+           refactor): the scroll container, empty states, bubbles, reasoning
+           blocks and their scoped styles moved with it; the stick-to-bottom
+           wiring stays here and drives the child through defineExpose. -->
+      <ChatMessageList
+        ref="messageList"
+        :messages="messages"
+        :streaming="streaming"
+        :mobile-tier="isMobileTier"
+        :tablet-tier="isTabletTier"
+        :blocked="isTabletTier && composerBlocked"
+        :has-models="modelOptions.length > 0"
+        :assistant-label="assistantLabel"
+        :live-answer-tps="liveAnswerTps"
+        :live-reasoning-tps="liveReasoningTps"
       >
         <!-- Tablet precheck banner (tablet draft frames A⑦/B⑦): the send
              precheck / auto-start notices render INLINE at the top of the
@@ -335,98 +336,14 @@
              screen, history dimmed below (.messages-area--blocked) — instead
              of floating above the composer. Same notices array drives both
              placements; phone/desktop keep the input-area stack. -->
-        <div v-if="isTabletTier && activeNotices.length" class="start-notice-stack chat-precheck-stack" role="status">
-          <div
-            v-for="notice in activeNotices"
-            :key="notice.kind"
-            class="start-notice"
-            :class="{ 'start-notice--error': notice.kind === 'error' }"
-          >
-            <template v-if="notice.kind === 'error'">
-              <span class="start-notice-text">{{ notice.text }}</span>
-              <button v-if="notice.cause === 'needModels'" class="start-notice-btn" @click="goDownloads">
-                {{ t('action.gotoDownloads') }}
-              </button>
-              <button v-else-if="notice.cause === 'needRuntime'" class="start-notice-btn" @click="goRuntime">
-                {{ t('chat.goRuntime') }}
-              </button>
-            </template>
-            <template v-else>
-              <span v-if="notice.kind === 'starting'" class="start-notice-spinner" aria-hidden="true"></span>
-              <span>{{ notice.text }}</span>
-            </template>
-          </div>
-        </div>
-      <!-- Empty states (design frames ⑤⑦ .emptystate): two-line structure with
-           an emoji mark on the phone tier; the desktop keeps the original
-           single-line text (icon + sub-line are display:none there). -->
-      <div v-if="modelOptions.length === 0" class="empty-hint">
-        <span class="empty-ico" aria-hidden="true">📦</span>
-        <b class="empty-title">{{ isMobileTier ? t('chat.noModelsTitle') : t('chat.noModels') }}</b>
-        <span class="empty-sub">{{ t('chat.noModelsSub') }}</span>
-      </div>
-      <template v-else>
-        <div v-if="messages.length === 0" class="empty-hint">
-          <span class="empty-ico" aria-hidden="true">💬</span>
-          <b class="empty-title">{{ t('chat.emptyHint') }}</b>
-          <span class="empty-sub">{{ t('chat.emptySub') }}</span>
-        </div>
-        <div
-          v-for="(msg, idx) in messages"
-          :key="idx"
-          class="message-row"
-          :class="msg.role === 'user' ? 'is-user' : 'is-assistant'"
-        >
-          <div class="message-bubble">
-            <!-- Design frame ②: only assistant bubbles carry a small header —
-                 the answering model's display name (user bubbles are identified
-                 by position + the gradient skin) -->
-            <span v-if="msg.role === 'assistant'" class="message-role">{{ assistantLabel }}</span>
-            <!-- Reasoning (thinking) block, assistant messages with thinking output only -->
-            <div v-if="msg.reasoning" class="reasoning-block" :class="{ expanded: isReasoningExpanded(idx, msg) }">
-              <button class="reasoning-header" type="button" @click="toggleReasoning(idx)">
-                <span>{{ thinkingLabel(idx, msg) }}</span>
-                <svg class="reasoning-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="6 9 12 15 18 9"/>
-                </svg>
-              </button>
-              <!-- Ref/scroll wiring is bound to the last message only: that is the
-                   streaming stick-to-bottom target (see setReasoningBodyRef) -->
-              <div
-                v-if="isReasoningExpanded(idx, msg)"
-                class="reasoning-body"
-                :ref="idx === messages.length - 1 ? setReasoningBodyRef : undefined"
-                @scroll="onReasoningScroll"
-              >{{ msg.reasoning }}</div>
-            </div>
-            <!-- Images (attached to user messages) -->
-            <div v-if="msg.images && msg.images.length" class="message-images">
-              <img v-for="(img, i) in msg.images" :key="i" :src="img" class="message-image" alt="" />
-            </div>
-            <!-- Assistant output renders as markdown (raw HTML escaped by
-                 renderMarkdown); user input stays plain text with preserved breaks -->
-            <div
-              v-if="msg.role === 'assistant'"
-              class="message-content markdown-body"
-              v-html="renderMarkdown(msg.content)"
-            ></div>
-            <p v-else class="message-content">{{ msg.content }}</p>
-            <!-- Streaming state (last assistant bubble only): breathing typing
-                 dots while no answer text has landed yet, then a small
-                 "Generating… · N tok/s" meta line fed by the live per-stream
-                 counters; the existing statsLine takes over once the stream
-                 ends. Rendering only — the stream wiring below is untouched. -->
-            <template v-if="idx === messages.length - 1 && streaming && msg.role === 'assistant'">
-              <div v-if="!msg.content" class="typing-dots" aria-hidden="true"><i /><i /><i /></div>
-              <div class="stream-meta">{{ streamMetaLine }}</div>
-            </template>
-            <span v-if="idx === messages.length - 1 && streaming" class="streaming-cursor" />
-            <!-- Per-phase token rates footer, present after streaming ends -->
-            <div v-if="statsLine(msg)" class="message-stats">{{ statsLine(msg) }}</div>
-          </div>
-        </div>
-      </template>
-      </div>
+        <ChatNoticeStack
+          v-if="isTabletTier && activeNotices.length"
+          class="chat-precheck-stack"
+          :notices="activeNotices"
+          @go-downloads="goDownloads"
+          @go-runtime="goRuntime"
+        />
+      </ChatMessageList>
     </div>
 
     <!-- Input area -->
@@ -437,29 +354,15 @@
            overlap there in practice); the phone tier floats the stack above
            the composer as anchored cards (media-scoped); tablet tiers render
            the same notices INLINE at the top of the conversation instead (the
-           .chat-precheck-stack copy inside .messages-area). -->
-      <div v-if="!isTabletTier && activeNotices.length" class="start-notice-stack" role="status">
-        <div
-          v-for="notice in activeNotices"
-          :key="notice.kind"
-          class="start-notice"
-          :class="{ 'start-notice--error': notice.kind === 'error' }"
-        >
-          <template v-if="notice.kind === 'error'">
-            <span class="start-notice-text">{{ notice.text }}</span>
-            <button v-if="notice.cause === 'needModels'" class="start-notice-btn" @click="goDownloads">
-              {{ t('action.gotoDownloads') }}
-            </button>
-            <button v-else-if="notice.cause === 'needRuntime'" class="start-notice-btn" @click="goRuntime">
-              {{ t('chat.goRuntime') }}
-            </button>
-          </template>
-          <template v-else>
-            <span v-if="notice.kind === 'starting'" class="start-notice-spinner" aria-hidden="true"></span>
-            <span>{{ notice.text }}</span>
-          </template>
-        </div>
-      </div>
+           .chat-precheck-stack copy inside the messages area). The stack
+           markup is extracted to ChatNoticeStack.vue — same notices array,
+           guided-fix buttons emit back here. -->
+      <ChatNoticeStack
+        v-if="!isTabletTier && activeNotices.length"
+        :notices="activeNotices"
+        @go-downloads="goDownloads"
+        @go-runtime="goRuntime"
+      />
       <!-- Pending attachment preview bar -->
       <div v-if="pendingImages.length" class="pending-bar">
         <div class="pending-item" v-for="(img, i) in pendingImages" :key="i">
@@ -533,7 +436,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick, watch, onUnmounted, type ComponentPublicInstance, type Ref } from 'vue'
+import { ref, computed, onMounted, watch, onUnmounted, type Ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { getServerStatus, getServerConfig, getModels, getModelConfig, getLlamaCpp, startServerWithModel, unloadModel } from '../wails'
 import {
@@ -565,15 +468,14 @@ import {
   type GenPreset,
   type GenPresetSampling,
 } from '../lib/genPresets'
-import { messages, selectedModel, streaming, chatAbortController, persistChat, reconcileSelectedModel, chatParams, persistChatParams, stepMaxTokens, isUnlimitedMaxTokens, type ChatMessage, type ChatParams } from '../lib/chatState'
+import { messages, selectedModel, streaming, chatAbortController, persistChat, reconcileSelectedModel, chatParams, persistChatParams, stepMaxTokens, isUnlimitedMaxTokens, type ChatParams } from '../lib/chatState'
 import { nudgeDock } from '../lib/dockNudge'
 import { dockLane, dockWidth } from '../lib/dockSpace'
 import { t } from '../lib/i18n'
-import { renderMarkdown } from '../lib/markdown'
-import { handleLinkClick, handleLinkAuxClick, handleLinkDragStart } from '../lib/linkHandler'
-import { isNearBottom } from '../lib/scroll'
 import { usePlatform } from '../lib/platform'
 import ThemedSelect, { type SelectOption } from '../components/ThemedSelect.vue'
+import ChatMessageList from '../components/ChatMessageList.vue'
+import ChatNoticeStack, { type ChatNotice } from '../components/ChatNoticeStack.vue'
 
 const router = useRouter()
 const platform = usePlatform()
@@ -635,21 +537,15 @@ const startErrorCause = ref<'needModels' | 'needRuntime' | ''>('')
  */
 const composerBlocked = computed(() => startErrorCause.value !== '')
 
-/** One floating notice card. Error cards carry the guided-fix cause; 'info'
- * cards are transient model-list notices (#33). */
-interface PageNotice {
-  kind: 'starting' | 'switching' | 'error' | 'info'
-  text: string
-  cause: '' | 'needModels' | 'needRuntime'
-}
-
 /**
  * Independent notice flags as a stack (frame ⑦): starting, switching and the
  * last start error are not mutually exclusive states, so each contributes its
  * own card instead of the previous v-if / else-if chain picking a single one.
+ * Cards render in ChatNoticeStack.vue (both placements); the card shape is
+ * that component's exported ChatNotice interface.
  */
-const activeNotices = computed<PageNotice[]>(() => {
-  const out: PageNotice[] = []
+const activeNotices = computed<ChatNotice[]>(() => {
+  const out: ChatNotice[] = []
   if (serviceStarting.value) {
     out.push({
       kind: 'starting',
@@ -885,20 +781,15 @@ const assistantLabel = computed<string>(() => {
 
 // ─── Live streaming rate (display only) ──────────────────────────────────────
 // Per-stream token counters already lived in send(); these refs mirror them
-// into the "Generating… · N tok/s" meta line (design frame ②). Purely visual:
-// the SSE parsing / persistence contracts in lib/chat.ts are untouched.
+// into the "Generating… · N tok/s" meta line (design frame ②), now rendered
+// by ChatMessageList.vue and fed through props. Purely visual: the SSE
+// parsing / persistence contracts in lib/chat.ts are untouched.
 
 /** Live answer-phase tok/s while the stream runs; null outside streaming. */
 const liveAnswerTps = ref<number | null>(null)
 
 /** Live reasoning-phase tok/s shown until the first answer delta lands. */
 const liveReasoningTps = ref<number | null>(null)
-
-/** Streaming meta copy: "Generating…" plus the active phase's live tok/s. */
-const streamMetaLine = computed<string>(() => {
-  const tps = liveAnswerTps.value ?? liveReasoningTps.value
-  return tps !== null ? `${t('chat.generating')} · ${tps.toFixed(1)} tok/s` : t('chat.generating')
-})
 
 // ─── Model-chip state (tablet draft frame A⑦/B⑦) ─────────────────────────────
 
@@ -908,98 +799,14 @@ const streamMetaLine = computed<string>(() => {
  */
 const chipDotDown = computed(() => isTabletTier.value && composerBlocked.value)
 
-const messagesContainer = ref<HTMLDivElement | null>(null)
+/** Handle to the extracted message list: the scroll container element and the
+ *  reasoning blocks live in ChatMessageList.vue, reached via defineExpose. */
+const messageList = ref<InstanceType<typeof ChatMessageList> | null>(null)
 const inputBox = ref<HTMLTextAreaElement | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 
 /** Pending images to send (data URLs), cleared after sending */
 const pendingImages = ref<string[]>([])
-
-/** Explicit user toggles of reasoning-block expansion, keyed by message index (component-local; never persisted) */
-const reasoningExpanded = ref<Record<number, boolean>>({})
-
-/**
- * Effective reasoning-block expansion: an explicit user toggle wins; otherwise the
- * block auto-expands only while streaming the last assistant message that has
- * reasoning but no answer content yet, and auto-collapses once content starts
- * arriving or streaming ends.
- */
-function isReasoningExpanded(idx: number, msg: ChatMessage): boolean {
-  if (idx in reasoningExpanded.value) return reasoningExpanded.value[idx]
-  return idx === messages.value.length - 1 && streaming.value && !!msg.reasoning && !msg.content
-}
-
-/** Toggle the reasoning block, recording an explicit override for this message. */
-function toggleReasoning(idx: number) {
-  const msg = messages.value[idx]
-  if (!msg) return
-  reasoningExpanded.value[idx] = !isReasoningExpanded(idx, msg)
-}
-
-/**
- * Reasoning-block header copy (frame ⑥ .think): the touch tiers state the
- * block's live phase — "deep thinking" while reasoning deltas stream in with
- * no answer text yet, "deep thought" once done; desktop keeps the original
- * static label.
- */
-function thinkingLabel(idx: number, msg: ChatMessage): string {
-  if (!isMobileTier.value && !isTabletTier.value) return t('chat.thinking')
-  const active = idx === messages.value.length - 1 && streaming.value && !!msg.reasoning && !msg.content
-  return active ? t('chat.thinkingActive') : t('chat.thinkingDone')
-}
-
-// ─── Reasoning body stick-to-bottom ─────────────────────────────────────────
-
-/** Reasoning-body element of the last message (stick-to-bottom scroll target); null when collapsed or unmounted */
-const reasoningBodyEl = ref<HTMLDivElement | null>(null)
-
-/** Whether the reasoning body is pinned to its bottom; flipped false when the user scrolls up to read earlier thinking */
-const reasoningStuck = ref(true)
-
-/**
- * Function ref for the last message's reasoning body: captures the element and
- * resets the stick state when a NEW element appears (a fresh block starts
- * pinned). Vue re-invokes function refs on every patch with the same element,
- * so the identity guard keeps per-delta re-invocations from resetting a
- * user-scrolled-up state. Element-null transitions (collapse, message stops
- * being last, component unmount/navigation) simply clear the capture.
- */
-function setReasoningBodyRef(el: Element | ComponentPublicInstance | null): void {
-  const dom = el instanceof HTMLDivElement ? el : null
-  if (dom === reasoningBodyEl.value) return
-  reasoningBodyEl.value = dom
-  reasoningStuck.value = true
-}
-
-/** Record near-bottom state from user scrolling; ignores bodies other than the captured target. */
-function onReasoningScroll(e: Event) {
-  const el = reasoningBodyEl.value
-  if (!el || e.target !== el) return
-  reasoningStuck.value = isNearBottom(el.scrollTop, el.scrollHeight, el.clientHeight)
-}
-
-/**
- * Keep the expanded reasoning body pinned to its bottom while reasoning deltas
- * stream in — but only while the user is themselves near the bottom, so a user
- * reading earlier thinking is never yanked around. Runs after nextTick so the
- * DOM (and scrollHeight) reflects the appended delta; the null check follows
- * scrollToBottom's style and guards element absence after unmount/navigation.
- */
-function scrollReasoningToBottom() {
-  nextTick(() => {
-    const el = reasoningBodyEl.value
-    if (el && reasoningStuck.value) el.scrollTop = el.scrollHeight
-  })
-}
-
-/** One-line stats footer, e.g. "思考 45.2 tok/s · 生成 38.6 tok/s"; each part shown only when defined. */
-function statsLine(msg: ChatMessage): string {
-  if (!msg.stats) return ''
-  const parts: string[] = []
-  if (msg.stats.reasoningTps !== undefined) parts.push(t('chat.statsThinking', { v: msg.stats.reasoningTps.toFixed(1) }))
-  if (msg.stats.answerTps !== undefined) parts.push(t('chat.statsAnswer', { v: msg.stats.answerTps.toFixed(1) }))
-  return parts.join(' · ')
-}
 
 /** Mirror a phase's running tok/s into its live ref (tokens / elapsed seconds); guarded against a zero elapsed window. */
 function updateLiveTps(target: Ref<number | null>, tokens: number, startedAt: number): void {
@@ -1209,7 +1016,8 @@ function pickModel(id: string) {
 /** Clear conversation messages (preserves selected model preference) and persist. */
 function clearChat() {
   messages.value = []
-  reasoningExpanded.value = {}
+  // The reasoning expansion overrides live in ChatMessageList now; reset them there.
+  messageList.value?.clearReasoningExpansion()
   persistChat()
   inputBox.value?.focus()
   resetInputHeight()
@@ -1240,11 +1048,20 @@ function resetInputHeight() {
   if (el) el.style.height = 'auto'
 }
 
+/**
+ * Stick-to-bottom scrolling, delegated to ChatMessageList (the scroll
+ * container element moved there with the list). Same-named wrappers keep
+ * every existing callsite in send() / the stream callbacks unchanged; the
+ * child mirrors the original nextTick + null-check behavior, and the optional
+ * chain preserves the old ref-null guard after unmount/navigation.
+ */
 function scrollToBottom() {
-  nextTick(() => {
-    const el = messagesContainer.value
-    if (el) el.scrollTop = el.scrollHeight
-  })
+  messageList.value?.scrollToBottom()
+}
+
+/** Reasoning-body stick-to-bottom, delegated to ChatMessageList (the block moved with the list). */
+function scrollReasoningToBottom() {
+  messageList.value?.scrollReasoningToBottom()
 }
 
 function appendAssistant(content: string) {
@@ -2067,65 +1884,8 @@ html[data-os='ios'] .chat-model-select :deep(button.themed-select__trigger:activ
   border-color: var(--overlay-20);
 }
 
-/* ─── Auto-start / model-switch notice (glass pill above the composer) ─── */
-.start-notice {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  background: var(--glass);
-  border: 1px solid var(--glass-line);
-}
-
-/* Error variant: message + guided CTA sharing the .stop-btn color family
-   (rgba overlays stay readable on both light and dark themes) */
-.start-notice--error {
-  justify-content: space-between;
-  color: #f87171;
-  background: rgba(239, 68, 68, 0.08);
-  border-color: rgba(239, 68, 68, 0.25);
-}
-
-.start-notice-text {
-  flex: 1;
-  min-width: 0;
-  word-break: break-word;
-}
-
-.start-notice-btn {
-  padding: 4px 12px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  flex-shrink: 0;
-  background: rgba(239, 68, 68, 0.12);
-  color: #f87171;
-  border: 1px solid rgba(239, 68, 68, 0.3);
-}
-
-.start-notice-btn:hover {
-  background: rgba(239, 68, 68, 0.2);
-}
-
-.start-notice-spinner {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 2px solid var(--border);
-  border-top-color: var(--accent-light);
-  animation: notice-spin 0.8s linear infinite;
-  flex-shrink: 0;
-}
-
-@keyframes notice-spin {
-  to { transform: rotate(360deg); }
-}
+/* (Auto-start notice pill styles + the tablet precheck banner and the whole
+   message-list surface moved to ChatNoticeStack.vue / ChatMessageList.vue.) */
 
 /* ─── Conversation body wrapper ───
    Pure flex pass-through (column) on every tier. Keeping the wrapper
@@ -2136,58 +1896,6 @@ html[data-os='ios'] .chat-model-select :deep(button.themed-select__trigger:activ
   min-height: 0;
   display: flex;
   flex-direction: column;
-}
-
-/* ─── Tablet precheck banner (tablet draft frames A⑦/B⑦) ───
-   Rendered inline at the top of the conversation, filling the content
-   column; only mounts behind the isTabletTier gate, so these base styles
-   never apply on desktop/phone. Tier card skins live in the Track A band. */
-.chat-precheck-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-/* ─── Messages ─── */
-.messages-area {
-  flex: 1;
-  /* min-height: 0 lets this flex child shrink below its content size so
-     overflow-y scrolling kicks in; with the default min-height: auto the
-     growing conversation pushes .input-area out of the viewport instead */
-  min-height: 0;
-  overflow-y: auto;
-  padding: 8px 0 16px;
-}
-
-.empty-hint {
-  text-align: center;
-  padding: 48px 0;
-  color: var(--text-dim);
-  font-size: 14px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.empty-ico {
-  font-size: 32px;
-  line-height: 1;
-}
-
-.empty-title {
-  display: block;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.empty-sub {
-  display: block;
-  font-size: 13px;
-  color: var(--text-muted);
-  line-height: 1.6;
 }
 
 /* ─── Phone params sheet (design frame ⑤ .dim / .sheet) ───
@@ -2440,323 +2148,6 @@ html[data-os='ios'] .chat-model-select :deep(button.themed-select__trigger:activ
 
 .ptext::placeholder {
   color: var(--text-dim);
-}
-
-/* ─── Message bubbles (design frame ②) ───
-   User: brand gradient, white text, small radius tucked at the sender corner
-   (22/22/6/22). Assistant: lifted island surface, mirrored radius
-   (22/22/22/6), small model-name header on top. Colors ride the theme tokens
-   so the dark mapping (lifted #161622 family) comes for free. */
-.message-row {
-  display: flex;
-  margin-bottom: 14px;
-}
-
-.message-row.is-user {
-  justify-content: flex-end;
-}
-
-.message-row.is-assistant {
-  justify-content: flex-start;
-}
-
-.message-bubble {
-  max-width: 78%;
-  padding: 12px 16px;
-  /* No blanket pre-wrap: markdown output manages its own spacing (code must
-     not wrap); plain-text spots scope pre-wrap individually */
-  font-size: 13.5px;
-  line-height: 1.75;
-  font-weight: 400;
-  word-break: break-word;
-}
-
-.is-user .message-bubble {
-  background: var(--grad);
-  color: #fff;
-  border-radius: var(--r-md) var(--r-md) 6px var(--r-md);
-  box-shadow: none;
-}
-
-.is-assistant .message-bubble {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md) var(--r-md) var(--r-md) 6px;
-  box-shadow: var(--shadow-island);
-  color: var(--text-primary);
-}
-
-/* Assistant-only header: the answering model's display name (design .who) */
-.message-role {
-  display: block;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.4px;
-  color: var(--text-muted);
-  margin-bottom: 5px;
-  user-select: none;
-}
-
-.message-images {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.message-image {
-  max-width: 100%;
-  border-radius: 8px;
-  max-height: 280px;
-  object-fit: contain;
-}
-
-.message-content {
-  margin: 0;
-}
-
-/* User input stays plain text: preserve explicit line breaks */
-.is-user .message-content {
-  white-space: pre-wrap;
-}
-
-/* ─── Markdown rendering (assistant bubbles) ───
-   v-html content does not carry the scope attribute, so child selectors need
-   :deep(). Sizes are relative to the 13px bubble text; colors ride the theme
-   CSS variables so light/dark both work. */
-.markdown-body :deep(h1),
-.markdown-body :deep(h2),
-.markdown-body :deep(h3),
-.markdown-body :deep(h4),
-.markdown-body :deep(h5),
-.markdown-body :deep(h6) {
-  margin: 12px 0 6px;
-  line-height: 1.35;
-  color: var(--text-primary);
-}
-
-.markdown-body :deep(h1) { font-size: 1.35em; }
-.markdown-body :deep(h2) { font-size: 1.2em; }
-.markdown-body :deep(h3) { font-size: 1.08em; }
-.markdown-body :deep(h4),
-.markdown-body :deep(h5),
-.markdown-body :deep(h6) { font-size: 1em; }
-
-.markdown-body :deep(p) {
-  margin: 6px 0;
-}
-
-.markdown-body :deep(ul),
-.markdown-body :deep(ol) {
-  margin: 6px 0;
-  padding-left: 1.4em;
-}
-
-.markdown-body :deep(li) {
-  margin: 2px 0;
-}
-
-.markdown-body :deep(li > ul),
-.markdown-body :deep(li > ol) {
-  margin: 2px 0;
-}
-
-/* Inline code: subtle inset chip */
-.markdown-body :deep(code) {
-  background: var(--overlay-8);
-  border: 1px solid var(--border-light);
-  border-radius: 4px;
-  padding: 0.5px 5px;
-  font-size: 0.92em;
-  word-break: break-word;
-}
-
-/* Fenced code blocks: monospace via the global code/pre rule; long lines
-   scroll horizontally instead of wrapping */
-.markdown-body :deep(pre) {
-  margin: 8px 0;
-  padding: 10px 12px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow-x: auto;
-}
-
-.markdown-body :deep(pre code) {
-  background: transparent;
-  border: none;
-  padding: 0;
-  font-size: 0.95em;
-  line-height: 1.5;
-  white-space: pre;
-  word-break: normal;
-}
-
-.markdown-body :deep(blockquote) {
-  margin: 8px 0;
-  padding: 2px 0 2px 12px;
-  border-left: 3px solid var(--accent-glow);
-  color: var(--text-secondary);
-}
-
-.markdown-body :deep(blockquote p) {
-  margin: 4px 0;
-}
-
-/* Tables: block + auto scroll so wide tables stay inside the bubble */
-.markdown-body :deep(table) {
-  display: block;
-  margin: 8px 0;
-  border-collapse: collapse;
-  overflow-x: auto;
-  max-width: 100%;
-}
-
-.markdown-body :deep(th),
-.markdown-body :deep(td) {
-  border: 1px solid var(--border);
-  padding: 4px 10px;
-  text-align: left;
-}
-
-.markdown-body :deep(th) {
-  background: var(--surface);
-  font-weight: 600;
-}
-
-.markdown-body :deep(a) {
-  color: var(--accent-light);
-}
-
-.markdown-body :deep(a:hover) {
-  text-decoration: underline;
-}
-
-.markdown-body :deep(img) {
-  max-width: 100%;
-  height: auto;
-}
-
-.markdown-body :deep(hr) {
-  border: none;
-  border-top: 1px solid var(--border);
-  margin: 12px 0;
-}
-
-/* Avoid doubled spacing where the markdown content meets the bubble padding */
-.markdown-body > :deep(:first-child) {
-  margin-top: 0;
-}
-
-.markdown-body > :deep(:last-child) {
-  margin-bottom: 0;
-}
-
-/* ─── Reasoning (thinking) block ─── */
-.reasoning-block {
-  margin-bottom: 8px;
-}
-
-.reasoning-header {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: transparent;
-  border: none;
-  padding: 0;
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  user-select: none;
-}
-
-.reasoning-header:hover {
-  color: var(--text-secondary);
-}
-
-.reasoning-chevron {
-  transition: transform 0.2s;
-}
-
-.reasoning-block.expanded .reasoning-chevron {
-  transform: rotate(180deg);
-}
-
-.reasoning-body {
-  margin-top: 4px;
-  /* Slightly smaller and muted so long thinking stays secondary to the answer */
-  font-size: 12.5px;
-  line-height: 1.5;
-  font-weight: 500;
-  color: var(--text-secondary);
-  white-space: pre-wrap;
-  max-height: 220px;
-  overflow-y: auto;
-}
-
-/* ─── Token rate stats footer ─── */
-.message-stats {
-  margin-top: 6px;
-  font-size: 11px;
-  color: var(--text-dim);
-  user-select: none;
-}
-
-/* ─── Streaming typing indicator (design .typing) ───
-   Three breathing dots shown in the streaming bubble before the first answer
-   text lands; the meta line under it carries the live per-stream tok/s. */
-.typing-dots {
-  display: inline-flex;
-  gap: 4px;
-  padding: 4px 0;
-}
-
-.typing-dots i {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--text-muted);
-  animation: typing-breathe 1.2s infinite;
-}
-
-.typing-dots i:nth-child(2) {
-  animation-delay: 0.2s;
-}
-
-.typing-dots i:nth-child(3) {
-  animation-delay: 0.4s;
-}
-
-@keyframes typing-breathe {
-  0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
-  30% { transform: translateY(-4px); opacity: 1; }
-}
-
-/* Live "Generating… · N tok/s" line under the streaming bubble */
-.stream-meta {
-  margin-top: 7px;
-  font-size: 10.5px;
-  font-weight: 600;
-  color: var(--text-muted);
-  user-select: none;
-}
-
-/* ─── Streaming cursor ─── */
-.streaming-cursor {
-  display: inline-block;
-  width: 6px;
-  height: 14px;
-  margin-left: 2px;
-  vertical-align: text-bottom;
-  background: var(--accent-light);
-  border-radius: 1px;
-  animation: blink 1s steps(2) infinite;
-}
-
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
 }
 
 /* ─── Input: floating glass composer (design .composer) ───
@@ -3058,39 +2449,6 @@ html[data-os='ios'] .send-btn:active:not(:disabled) {
     box-shadow: none;
   }
 
-  .message-bubble {
-    max-width: 88%;
-  }
-
-  /* Two-line empty states (frame ⑦ .emptystate): emoji mark + bold title +
-     muted sub-caption */
-  .empty-hint {
-    display: block;
-    padding: 60px 20px 0;
-    color: var(--text-muted);
-  }
-
-  .empty-ico {
-    display: block;
-    font-size: 40px;
-    margin-bottom: 12px;
-  }
-
-  .empty-title {
-    display: block;
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--text-secondary);
-  }
-
-  .empty-sub {
-    display: block;
-    margin-top: 6px;
-    font-size: 12.5px;
-    line-height: 1.6;
-    color: var(--text-muted);
-  }
-
   /* Composer: 44px touch controls, trimmed band above the bottom tab bar.
      The 10px bottom padding anchors the TaskDock phone offset arithmetic
      (padding-bottom 10 + (row 44 - pill 44) / 2 = 10, see TaskDock.vue's
@@ -3103,67 +2461,8 @@ html[data-os='ios'] .send-btn:active:not(:disabled) {
     position: relative;
   }
 
-  /* Precheck notices float as stacked cards above the composer band (frame ⑦
-     .notify): anchored to the input-area's top edge, inside the page's
-     symmetric 16px gutters (the phone tier reserves no dock lane). */
-  .start-notice-stack {
-    position: absolute;
-    bottom: calc(100% + 8px);
-    left: 0;
-    right: 0;
-    z-index: 5;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .start-notice {
-    flex-wrap: wrap;
-    background: var(--bg-card);
-    border: none;
-    border-radius: var(--r-md);
-    padding: 10px 14px;
-    box-shadow: var(--shadow-island);
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-secondary);
-  }
-
-  html[data-theme='dark'] .start-notice {
-    background: var(--surface-2);
-  }
-
-  .start-notice--error {
-    background: var(--danger-bg);
-    color: #b91c1c;
-  }
-
-  html[data-theme='dark'] .start-notice--error {
-    color: #fca5a5;
-  }
-
-  .start-notice-btn {
-    background: transparent;
-    border: none;
-    padding: 8px 0 8px 10px;
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--accent-light);
-  }
-
-  .start-notice-btn:hover {
-    background: transparent;
-    text-decoration: underline;
-  }
-
-  /* Spinner card (frame ⑦ .spin): 13px ring, purple top arc */
-  .start-notice-spinner {
-    width: 13px;
-    height: 13px;
-    border: 2px solid var(--border);
-    border-top-color: var(--accent-light);
-    animation-duration: 1s;
-  }
+  /* (Precheck notices float above the composer on the phone band — the
+     floating-stack styles moved to ChatNoticeStack.vue.) */
 
   /* Degraded composer (frame ⑦): a visible precheck blocker dims the bar */
   .input-row--blocked {
@@ -3179,53 +2478,8 @@ html[data-os='ios'] .send-btn:active:not(:disabled) {
     box-shadow: none;
   }
 
-  /* Streaming polish (frame ⑥): finished assistant bubbles recede while a
-     new reply streams; stats/meta numerals go mono; stats line gets the
-     dashed hairline; attached images round to 12px */
-  .messages-area--streaming .message-row.is-assistant:not(:last-child) .message-bubble {
-    opacity: 0.72;
-  }
-
-  .stream-meta {
-    font-family: var(--font-mono);
-  }
-
-  .message-stats {
-    font-size: 10.5px;
-    margin-top: 8px;
-    padding-top: 6px;
-    border-top: 1px dashed var(--border);
-    font-family: var(--font-mono);
-  }
-
-  .message-image {
-    border-radius: var(--r-sm);
-  }
-
-  /* Thinking block container (frame ⑥ .think): bordered inset card with the
-     11/700 state header and 11.5/1.7 muted body */
-  .reasoning-block {
-    border: 1px solid var(--border);
-    border-radius: var(--r-sm);
-    background: var(--bg-card);
-    padding: 10px 12px;
-  }
-
-  html[data-theme='dark'] .reasoning-block {
-    background: var(--surface-2);
-  }
-
-  .reasoning-header {
-    font-size: 11px;
-    font-weight: 700;
-  }
-
-  .reasoning-body {
-    margin-top: 4px;
-    font-size: 11.5px;
-    line-height: 1.7;
-    color: var(--text-muted);
-  }
+  /* (Streaming polish, stats hairline, image radius and the thinking-block
+     card on the phone band moved to ChatMessageList.vue.) */
 
   .attach-btn {
     width: 44px;
@@ -3249,9 +2503,10 @@ html[data-os='ios'] .send-btn:active:not(:disabled) {
 
 /* ─── Tablet (768..1099px): a comfortable centered message column (composer
        included) instead of full-bleed bubbles; the sidebar rail keeps the
-       surrounding chrome. No-op above 1099px (desktop keeps the wide layout). ─── */
+       surrounding chrome. No-op above 1099px (desktop keeps the wide layout).
+       (.messages-area's half of the original shared rule moved to
+       ChatMessageList.vue with the container.) ─── */
 @media (min-width: 768px) and (max-width: 1099px) {
-  .messages-area,
   .input-area {
     width: 100%;
     max-width: 800px;
@@ -3284,126 +2539,11 @@ html[data-os='ios'] .send-btn:active:not(:disabled) {
     display: none;
   }
 
-  /* Frame A⑤ .emptystate: emoji mark + bold title + muted sub-caption, like
-     the phone tier's two-line empty states */
-  .empty-hint {
-    display: block;
-    padding: 60px 20px 0;
-    color: var(--text-muted);
-  }
+  /* (Empty states, thinking-block card, stats hairline, the precheck banner
+     skins and the dimmed history on the tablet band moved to
+     ChatMessageList.vue / ChatNoticeStack.vue.) */
 
-  .empty-ico {
-    display: block;
-    font-size: 40px;
-    margin-bottom: 12px;
-  }
-
-  .empty-title {
-    display: block;
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--text-secondary);
-  }
-
-  .empty-sub {
-    display: block;
-    margin-top: 6px;
-    font-size: 12.5px;
-    line-height: 1.6;
-    color: var(--text-muted);
-  }
-
-  /* Frame A⑥ .think: bordered inset card with the 11/700 state header and the
-     11.5/1.7 muted body (same treatment as the phone band) */
-  .reasoning-block {
-    border: 1px solid var(--border);
-    border-radius: var(--r-sm);
-    background: var(--bg-card);
-    padding: 10px 12px;
-  }
-
-  html[data-theme='dark'] .reasoning-block {
-    background: var(--surface-2);
-  }
-
-  .reasoning-header {
-    font-size: 11px;
-    font-weight: 700;
-  }
-
-  .reasoning-body {
-    margin-top: 4px;
-    font-size: 11.5px;
-    line-height: 1.7;
-    color: var(--text-muted);
-  }
-
-  /* Frame A⑥: numerals go mono, stats footer gets the dashed hairline */
-  .stream-meta {
-    font-family: var(--font-mono);
-  }
-
-  .message-stats {
-    font-size: 10.5px;
-    margin-top: 8px;
-    padding-top: 6px;
-    border-top: 1px dashed var(--border);
-    font-family: var(--font-mono);
-  }
-
-  /* Frame A⑦ .notify: precheck banner fills the content column as a card */
-  .chat-precheck-stack .start-notice {
-    background: var(--bg-card);
-    border: none;
-    border-radius: var(--r-md);
-    padding: 10px 14px;
-    box-shadow: var(--shadow-island);
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-secondary);
-  }
-
-  html[data-theme='dark'] .chat-precheck-stack .start-notice {
-    background: var(--surface-2);
-  }
-
-  .chat-precheck-stack .start-notice--error {
-    background: var(--danger-bg);
-    color: #b91c1c;
-  }
-
-  html[data-theme='dark'] .chat-precheck-stack .start-notice--error {
-    color: #fca5a5;
-  }
-
-  .chat-precheck-stack .start-notice-btn {
-    background: transparent;
-    border: none;
-    padding: 8px 0 8px 10px;
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--accent-light);
-  }
-
-  .chat-precheck-stack .start-notice-btn:hover {
-    background: transparent;
-    text-decoration: underline;
-  }
-
-  /* Frame A⑦ .spin */
-  .chat-precheck-stack .start-notice-spinner {
-    width: 13px;
-    height: 13px;
-    border: 2px solid var(--border);
-    border-top-color: var(--accent-light);
-    animation-duration: 1s;
-  }
-
-  /* Frame A⑦: history dims behind the inline banner, composer degrades */
-  .messages-area--blocked .message-row {
-    opacity: 0.45;
-  }
-
+  /* Frame A⑦: composer degrades */
   .input-row--blocked {
     opacity: 0.6;
   }
