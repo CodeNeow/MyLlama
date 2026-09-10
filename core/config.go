@@ -463,10 +463,21 @@ func loadConfig() {
 	if cfg.Theme == "" {
 		cfg.Theme = "light"
 	}
+	// Defensive locking (theme / model configs / server config below):
+	// loadConfig runs only on the single startup goroutine (App.Startup,
+	// ShouldRunHeadless, RunHeadless — none of which hold these mutexes at
+	// call time, so the acquisitions cannot deadlock), but routing every
+	// write through the same mutex the saveConfig readers use costs nothing
+	// and removes the latent race for any future caller. dlTasksMu stays the
+	// last lock acquired (queue-restore block below), per the saveConfig
+	// lock-ordering rule.
+	configMu.Lock()
 	currentTheme = cfg.Theme
+	configMu.Unlock()
 	if cfg.ModelConfigs == nil {
 		cfg.ModelConfigs = make(map[string]ModelConfig)
 	}
+	modelConfigsMu.Lock()
 	cachedModelConfigs = cfg.ModelConfigs
 	// Migrate legacy mlock/noMmap to load-mode (both DEPRECATED since b10342):
 	// if an old config has no explicit loadMode, derive it from the old boolean
@@ -487,6 +498,7 @@ func loadConfig() {
 		c.NoMMap = false
 		cachedModelConfigs[k] = c
 	}
+	modelConfigsMu.Unlock()
 	// Merge server config with defaults
 	scfg := defaultServerConfig()
 	// Access scope: empty values or anything outside the {local,lan} whitelist
@@ -514,7 +526,9 @@ func loadConfig() {
 	if cfg.ServerConfig.CacheRAM != 0 {
 		scfg.CacheRAM = cfg.ServerConfig.CacheRAM
 	}
+	serverConfigMu.Lock()
 	cachedServerConfig = scfg
+	serverConfigMu.Unlock()
 
 	// Download source: empty or invalid values fall back to the default hf
 	// (no error when old configs lack this field or data is corrupt).

@@ -64,6 +64,11 @@ jobs:
         run: go build ./...
       - name: Unit tests (Go)
         run: go test ./...
+      - name: Unit tests (Go, race detector)
+        # The only race-verification environment for this repo: dev machines
+        # are Windows without a C toolchain, so -race cannot run locally; the
+        # ubuntu runner ships gcc (cgo + gtk3 tag via job-level GOFLAGS).
+        run: go test -race ./...
       - name: Restore e2e assets (llama.cpp cpu build + tiny model)
         # Pinned llama.cpp build (b10695) CPU binary + the ~2 MB tinyllamas
         # stories260K GGUF feed TestServiceChainE2E: the real model-scan ->

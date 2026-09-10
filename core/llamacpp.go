@@ -670,8 +670,13 @@ func downloadLlamaCpp() {
 	invalidateModelCache()
 	// Invalidate the llama.cpp detection cache: the result cached at mount
 	// time (Installed=false) is stale; re-detect after successful extraction,
-	// otherwise the home page keeps showing "not found"
+	// otherwise the home page keeps showing "not found". The flag flip runs
+	// under llamaMu (same discipline as the invalidation sites in app.go),
+	// serializing it with the snapshot rewrite in GetLlamaCpp's slow path;
+	// this goroutine never holds llamaMu, so the lock cannot deadlock.
+	llamaMu.Lock()
 	llamaCacheValid.Store(false)
+	llamaMu.Unlock()
 
 	log.Printf("[OK] llama.cpp %s downloaded and extracted to %s/", release.TagName, targetDir)
 }
