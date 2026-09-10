@@ -316,7 +316,8 @@
     <div class="chat-body">
       <!-- Messages area -->
       <!-- Delegated link handler: links in assistant markdown open in the system
-           browser, the WebView never navigates (see lib/linkHandler.ts) -->
+           browser, the WebView never navigates — left click, middle click and
+           drag included (see lib/linkHandler.ts) -->
       <div
         ref="messagesContainer"
         class="messages-area"
@@ -325,6 +326,8 @@
           'messages-area--blocked': isTabletTier && composerBlocked,
         }"
         @click="handleLinkClick"
+        @auxclick="handleLinkAuxClick"
+        @dragstart="handleLinkDragStart"
       >
         <!-- Tablet precheck banner (tablet draft frames A⑦/B⑦): the send
              precheck / auto-start notices render INLINE at the top of the
@@ -567,7 +570,7 @@ import { nudgeDock } from '../lib/dockNudge'
 import { dockLane, dockWidth } from '../lib/dockSpace'
 import { t } from '../lib/i18n'
 import { renderMarkdown } from '../lib/markdown'
-import { handleLinkClick } from '../lib/linkHandler'
+import { handleLinkClick, handleLinkAuxClick, handleLinkDragStart } from '../lib/linkHandler'
 import { isNearBottom } from '../lib/scroll'
 import { usePlatform } from '../lib/platform'
 import ThemedSelect, { type SelectOption } from '../components/ThemedSelect.vue'

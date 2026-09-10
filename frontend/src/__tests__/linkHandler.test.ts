@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const { browserOpenURL } = vi.hoisted(() => ({ browserOpenURL: vi.fn() }))
 vi.mock('@wailsio/runtime', () => ({ Browser: { OpenURL: browserOpenURL } }))
 
-import { externalUrlFor, handleLinkClick } from '../lib/linkHandler'
+import { externalUrlFor, handleLinkClick, handleLinkAuxClick, handleLinkDragStart } from '../lib/linkHandler'
 
 describe('externalUrlFor', () => {
   it('returns absolute http and https URLs unchanged', () => {
@@ -74,5 +74,75 @@ describe('handleLinkClick', () => {
     const event = clickIn('<p>plain text</p>', 'p')
     expect(event.defaultPrevented).toBe(false)
     expect(browserOpenURL).not.toHaveBeenCalled()
+  })
+})
+
+describe('handleLinkAuxClick', () => {
+  beforeEach(() => {
+    browserOpenURL.mockClear()
+  })
+
+  /** Dispatch a bubbling auxclick with the given button (mirrors Vue @auxclick). */
+  function auxClickIn(containerHtml: string, selector: string, button: number): MouseEvent {
+    const pane = document.createElement('div')
+    pane.innerHTML = containerHtml
+    document.body.appendChild(pane)
+    pane.addEventListener('auxclick', handleLinkAuxClick)
+    const target = pane.querySelector(selector) as Element
+    const event = new MouseEvent('auxclick', { bubbles: true, cancelable: true, button })
+    target.dispatchEvent(event)
+    pane.remove()
+    return event
+  }
+
+  it('opens absolute http(s) links in the system browser on middle click', () => {
+    const event = auxClickIn('<a href="https://example.com/x">x</a>', 'a', 1)
+    expect(event.defaultPrevented).toBe(true)
+    expect(browserOpenURL).toHaveBeenCalledTimes(1)
+    expect(browserOpenURL).toHaveBeenCalledWith('https://example.com/x')
+  })
+
+  it('blocks middle clicks on non-http(s) hrefs without opening anything', () => {
+    const jsEvent = auxClickIn('<a href="javascript:alert(1)">x</a>', 'a', 1)
+    expect(jsEvent.defaultPrevented).toBe(true)
+
+    const anchorEvent = auxClickIn('<a href="#top">y</a>', 'a', 1)
+    expect(anchorEvent.defaultPrevented).toBe(true)
+
+    const relEvent = auxClickIn('<a href="page.md">z</a>', 'a', 1)
+    expect(relEvent.defaultPrevented).toBe(true)
+
+    expect(browserOpenURL).not.toHaveBeenCalled()
+  })
+
+  it('ignores non-middle-button auxiliary events (left button stays untouched)', () => {
+    const event = auxClickIn('<a href="https://example.com/x">x</a>', 'a', 0)
+    expect(event.defaultPrevented).toBe(false)
+    expect(browserOpenURL).not.toHaveBeenCalled()
+  })
+})
+
+describe('handleLinkDragStart', () => {
+  /** Dispatch a bubbling dragstart on target inside a bound container (mirrors Vue @dragstart). */
+  function dragStartIn(containerHtml: string, selector: string): DragEvent {
+    const pane = document.createElement('div')
+    pane.innerHTML = containerHtml
+    document.body.appendChild(pane)
+    pane.addEventListener('dragstart', handleLinkDragStart)
+    const target = pane.querySelector(selector) as Element
+    const event = new DragEvent('dragstart', { bubbles: true, cancelable: true })
+    target.dispatchEvent(event)
+    pane.remove()
+    return event
+  }
+
+  it('cancels drags originating inside an anchor', () => {
+    const event = dragStartIn('<a href="https://example.com/x"><strong>x</strong></a>', 'strong')
+    expect(event.defaultPrevented).toBe(true)
+  })
+
+  it('leaves drags on non-link content alone', () => {
+    const event = dragStartIn('<p>plain text</p>', 'p')
+    expect(event.defaultPrevented).toBe(false)
   })
 })

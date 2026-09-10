@@ -8,7 +8,7 @@ import { nudgeDock } from '../lib/dockNudge'
 import { DOCK_POSITION_KEY } from '../lib/dockPosition'
 import { t } from '../lib/i18n'
 import { buildPlatformState, setPlatform } from '../lib/platform'
-import { getDownloadTasks, getServerStatus } from '../wails'
+import { getDownloadTasks, getServerStatus, retryDownloadTask } from '../wails'
 
 // Mock the Wails bridge (window.go is injected only by the Wails runtime).
 // Update-related exports are included because lib/update imports the same
@@ -22,9 +22,10 @@ vi.mock('../wails', () => ({
   ),
   unloadModel: vi.fn(() => Promise.resolve()),
   // Phone row-ops bindings (frame ⑲): imported by TaskDock for the pause /
-  // resume / cancel circles
+  // resume / retry / cancel circles
   pauseDownloadTask: vi.fn(() => Promise.resolve()),
   resumeDownloadTask: vi.fn(() => Promise.resolve()),
+  retryDownloadTask: vi.fn(() => Promise.resolve()),
   cancelDownloadTask: vi.fn(() => Promise.resolve()),
   checkForUpdate: vi.fn(() => Promise.resolve({ hasUpdate: false, version: '', notes: '', published: '' })),
   startUpdateDownload: vi.fn(() => Promise.resolve()),
@@ -496,5 +497,47 @@ describe('TaskDock dock-space wiring', () => {
     // Unmount clears the polling interval and the reserved space
     wrapper.unmount()
     expect(dockReserve.value).toBe(0)
+  })
+})
+
+// ─── Queued-row retry op (restart-restored queued tasks have no goroutine) ───
+
+describe('TaskDock queued retry op', () => {
+  /** Mount with one model task in the given status and the popover expanded. */
+  async function mountDockWithTask(status: string) {
+    vi.stubGlobal('ResizeObserver', MockResizeObserver)
+    vi.mocked(getDownloadTasks).mockImplementationOnce(() =>
+      Promise.resolve([{ id: 'task-1', fileName: 'model.gguf', status, progress: 40, speed: 0 }])
+    )
+    vi.mocked(getServerStatus).mockImplementationOnce(() =>
+      Promise.resolve({ running: false, log: [] })
+    )
+    const wrapper = await mountDock()
+    await wrapper.find('.dock-pill').trigger('click')
+    await nextTick()
+    return wrapper
+  }
+
+  const retrySelector = `.dock-op[aria-label="${t('downloads.retry')}"]`
+
+  it('offers retry on a queued row and calls the retry binding on click', async () => {
+    const wrapper = await mountDockWithTask('queued')
+
+    const retryOp = wrapper.find(retrySelector)
+    expect(retryOp.exists()).toBe(true)
+    // The queued row keeps its cancel escape hatch next to the new retry op
+    expect(wrapper.find(`.dock-op[aria-label="${t('downloads.cancel')}"]`).exists()).toBe(true)
+
+    await retryOp.trigger('click')
+    await flushPromises()
+    expect(retryDownloadTask).toHaveBeenCalledTimes(1)
+    expect(retryDownloadTask).toHaveBeenCalledWith('task-1')
+    wrapper.unmount()
+  })
+
+  it('does not offer retry on non-queued rows', async () => {
+    const wrapper = await mountDockWithTask('downloading')
+    expect(wrapper.find(retrySelector).exists()).toBe(false)
+    wrapper.unmount()
   })
 })

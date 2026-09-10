@@ -37,7 +37,17 @@
            instance (lib/markdown.ts) runs with html:false, so raw HTML in the
            docs source is escaped, never rendered — the same injection defense
            as Docs.vue and chat messages. -->
-      <article class="docpost" :class="{ 'is-loading': loading }" v-html="rendered" @click="handleLinkClick"></article>
+      <!-- Delegated link handler: external links open in the system browser,
+           the WebView never navigates — left click, middle click and drag
+           included (see lib/linkHandler.ts) -->
+      <article
+        class="docpost"
+        :class="{ 'is-loading': loading }"
+        v-html="rendered"
+        @click="handleLinkClick"
+        @auxclick="handleLinkAuxClick"
+        @dragstart="handleLinkDragStart"
+      ></article>
 
       <!-- Prev / next pager (frame ⑱ .pager): pushes /docs/{id}; each end
            hides its own side -->
@@ -58,7 +68,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { docSections, type DocSectionId } from '../docs/manifest'
 import { renderMarkdown } from '../lib/markdown'
-import { handleLinkClick } from '../lib/linkHandler'
+import { handleLinkClick, handleLinkAuxClick, handleLinkDragStart } from '../lib/linkHandler'
 import { t } from '../lib/i18n'
 import { usePlatform } from '../lib/platform'
 // Shared remote-first content pipeline (bundled → online → disk cache, with

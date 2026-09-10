@@ -110,6 +110,18 @@
                   :title="t('downloads.resume')"
                   @click.stop="resumeTask(task.id)"
                 >▶</button>
+                <!-- Retry on queued rows only: a queued task restored from the
+                     persisted queue after an app restart has no live goroutine
+                     and would otherwise be stuck (cancel + re-download was the
+                     only way out). Same key as the downloads page's retry. -->
+                <button
+                  v-if="task.status === 'queued'"
+                  class="dock-op"
+                  type="button"
+                  :aria-label="t('downloads.retry')"
+                  :title="t('downloads.retry')"
+                  @click.stop="retryTask(task.id)"
+                >↻</button>
                 <button
                   v-if="task.status === 'downloading' || task.status === 'paused' || task.status === 'queued'"
                   class="dock-op dock-op--danger"
@@ -228,6 +240,7 @@ import {
   stopServer,
   pauseDownloadTask,
   resumeDownloadTask,
+  retryDownloadTask,
   cancelDownloadTask
 } from '../wails'
 import { formatSpeed } from '../lib/format'
@@ -819,6 +832,22 @@ async function pauseTask(id: string) {
 async function resumeTask(id: string) {
   try {
     await resumeDownloadTask(id)
+    nudgeDock()
+  } catch {
+    // Best-effort: the next poll reconciles the real state
+  }
+}
+
+// Retry re-kicks a queued task (backend RetryDownloadTask: rebuild ctx +
+// respawn, resuming from the .part offset). The payload cannot distinguish a
+// restart-restored queued task (goroutine died with the process — the target
+// of this button) from the transient live queued window right after creation,
+// but retrying the latter is harmless: the backend's queued branch IS a
+// restart by definition and the .part resume keeps the download position, and
+// the live window is far below the 1s poll cadence that surfaces the button.
+async function retryTask(id: string) {
+  try {
+    await retryDownloadTask(id)
     nudgeDock()
   } catch {
     // Best-effort: the next poll reconciles the real state

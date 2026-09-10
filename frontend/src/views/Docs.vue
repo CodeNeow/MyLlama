@@ -82,8 +82,17 @@
            docs source is escaped, never rendered — the same injection defense
            as chat messages. -->
       <!-- Delegated link handler: external links open in the system browser,
-           the WebView never navigates (see lib/linkHandler.ts) -->
-      <article ref="contentEl" class="docs-content" :class="{ 'is-loading': loading }" v-html="rendered" @click="handleLinkClick"></article>
+           the WebView never navigates — left click, middle click and drag
+           included (see lib/linkHandler.ts) -->
+      <article
+        ref="contentEl"
+        class="docs-content"
+        :class="{ 'is-loading': loading }"
+        v-html="rendered"
+        @click="handleLinkClick"
+        @auxclick="handleLinkAuxClick"
+        @dragstart="handleLinkDragStart"
+      ></article>
     </div>
 
     <!-- Load failure of a bundled asset is practically impossible; still handled without silently swallowing -->
@@ -223,7 +232,7 @@ import { nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { docSections } from '../docs/manifest'
 import { renderMarkdown } from '../lib/markdown'
-import { handleLinkClick } from '../lib/linkHandler'
+import { handleLinkClick, handleLinkAuxClick, handleLinkDragStart } from '../lib/linkHandler'
 import { DOCS_GITHUB_URLS, docsPageMode } from '../lib/remoteDocs'
 import { Browser } from '@wailsio/runtime'
 import { usePlatform } from '../lib/platform'

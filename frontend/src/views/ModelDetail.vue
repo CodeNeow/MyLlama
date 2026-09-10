@@ -84,8 +84,16 @@
           <div class="desc-body">
             <div v-if="descLoading" class="desc-loading">{{ t('downloads.loadingDesc') }}</div>
             <!-- Delegated link handler: external links open in the system browser,
-                 the WebView never navigates (see lib/linkHandler.ts) -->
-            <div v-else-if="description" class="desc-text" v-html="renderDescription(description)" @click="handleLinkClick"></div>
+                 the WebView never navigates — left click, middle click and drag
+                 included (see lib/linkHandler.ts) -->
+            <div
+              v-else-if="description"
+              class="desc-text"
+              v-html="renderDescription(description)"
+              @click="handleLinkClick"
+              @auxclick="handleLinkAuxClick"
+              @dragstart="handleLinkDragStart"
+            ></div>
             <div v-else class="desc-empty">{{ t('downloads.noDesc') }}</div>
           </div>
         </section>
@@ -134,7 +142,7 @@ import { getModelFiles, getModelDescription, startDownload } from '../wails'
 import { sortModelFiles, guessQuant, selectedBytes, isMMProjFile } from '../lib/modelFiles'
 import { formatBytes } from '../lib/format'
 import { renderDescription } from '../lib/markdown'
-import { handleLinkClick } from '../lib/linkHandler'
+import { handleLinkClick, handleLinkAuxClick, handleLinkDragStart } from '../lib/linkHandler'
 import { searchResults } from '../lib/downloadsState'
 import { t } from '../lib/i18n'
 import { usePlatform } from '../lib/platform'
