@@ -228,12 +228,12 @@
           </div>
           <!-- Desktop / tablet: "设置 ›" button opening a centered dialog (design draft F5) -->
           <button v-if="!isPhone" type="button" class="row-tail-api-key" @click="showApiKeyDialog = true">
-            <span>{{ t('settings.apiKeySet') }}</span>
+            <span>{{ apiKeyLabel }}</span>
             <span aria-hidden="true">›</span>
           </button>
           <!-- Phone tail (frame ⑯): "未设置（无鉴权）›" / "已设置 ›" -->
           <button v-else type="button" class="row-tail-api-key" @click="showApiKeySheet = true">
-            <span>{{ apiKeyInput ? t('settings.apiKeySet') : t('settings.apiKeyNotSet') }}</span>
+            <span>{{ apiKeyLabel }}</span>
             <span aria-hidden="true">›</span>
           </button>
         </div>
@@ -712,6 +712,12 @@ const apiKeySwitching = ref(false)
 const showApiKeySheet = ref(false)
 const showApiKeyDialog = ref(false)
 
+// Status label for the API-key row: mirrors the backend's save normalization
+// (core/app.go TrimSpaces the key, so whitespace-only counts as "not set").
+const apiKeyLabel = computed(() =>
+  apiKeyInput.value.trim() ? t('settings.apiKeySet') : t('settings.apiKeyNotSet'),
+)
+
 // Saved-while-running restart prompt (#32): llama-server reads the key from
 // its LLAMA_API_KEY environment at spawn, so a save while the service runs
 // takes effect only after a restart — surface that instead of failing silently.
@@ -724,6 +730,9 @@ async function saveApiKey() {
   apiKeyError.value = ''
   try {
     await applyApiKey(apiKeyInput.value)
+    // The backend trims the key before persisting (core/app.go); mirror that
+    // here so the optimistic UI shows the exact value that was saved.
+    apiKeyInput.value = apiKeyInput.value.trim()
     // Silent save stays silent only while the service is stopped; running
     // llama-server keeps the key it was spawned with, so offer the restart.
     try {
