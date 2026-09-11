@@ -229,6 +229,9 @@ func TestBenchSingleFlight(t *testing.T) {
 // above the platform clock's resolution even on fast machines, so the
 // burst-until-measurable repetition rarely engages.
 func TestMeasureRAMBandwidthSmoke(t *testing.T) {
+	if raceEnabled {
+		t.Skip("the benchmark asserts real memory throughput; race instrumentation slows memory traffic by about an order of magnitude, so the measured value necessarily falls outside the plausibility window - environmental, not a regression")
+	}
 	oldPasses := benchTimedPasses
 	benchTimedPasses = 2
 	defer func() { benchTimedPasses = oldPasses }()
