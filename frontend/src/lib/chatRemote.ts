@@ -45,10 +45,10 @@ export function remoteEndpoint(p: RemoteChatProfile): ChatEndpoint | null {
 }
 
 // ─── QR / clipboard pairing payload ──────────────────────────────────────────
-// The PC side renders its pairing as a QR code (Settings "LAN Connection"
-// card) and copies it as a link; the phone side scans it (or imports it from
-// the clipboard) and fills the remote-chat form. Both directions share the
-// single versioned format below.
+// The PC side renders its pairing as a QR code (Settings "LAN Pairing"
+// card, share section) and copies it as a link; the phone side scans it (or
+// imports it from the clipboard) and fills the remote-chat form. Both
+// directions share the single versioned format below.
 
 /**
  * Canonical QR/copy pairing payload: myllama://pair?v=1&host=<enc>&port=<n>[&key=<enc>].

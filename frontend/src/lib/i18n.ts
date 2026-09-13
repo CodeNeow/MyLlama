@@ -524,9 +524,13 @@ export const messages: Record<Locale, Record<string, string>> = {
     'settings.gpu.hint': '所选显卡通过 CUDA_VISIBLE_DEVICES 传给 llama-server；自动调优也按该显卡规划显存',
     'settings.gpu.none': '未检测到 NVIDIA 显卡：llama-server 将使用默认设备',
     'settings.gpu.error': '保存推理显卡设置失败，请稍后重试',
-    // ─── LAN pairing card (PC side of the phone-to-PC LAN chat) ───
-    'settings.lanPairing.title': '局域网连接',
-    'settings.lanPairing.desc': '同一局域网内的设备（如手机 MyLlama）可连接本机推理服务：手机扫描下方二维码即可导入，或复制地址手动填写',
+    // ─── LAN pairing card (one card, two directions of one pairing) ───
+    'settings.lanPairing.title': '局域网互联',
+    'settings.lanPairing.desc': '同一网络内两台 MyLlama 互连：一端共享本机服务，另一端连接对方电脑进行对话',
+    'settings.lanPairing.shareTitle': '共享本机服务',
+    'settings.lanPairing.shareSub': '我把本机模型分享给同一网络的其他设备',
+    'settings.lanPairing.connectTitle': '连接其他电脑',
+    'settings.lanPairing.connectSub': '我去使用对方电脑上的模型进行对话',
     'settings.lanPairing.address': '本机地址',
     'settings.lanPairing.port': '服务端口',
     'settings.lanPairing.apiKey': 'API Key',
@@ -544,9 +548,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     // connects only after the inline switch flips the scope to LAN
     'settings.lanPairing.localWarn': '当前为本地访问（仅本机可访问），手机扫码无法连接',
     'settings.lanPairing.localSwitch': '切换为局域网',
-    // ─── Remote chat form (client side of the phone-to-PC LAN chat) ───
-    'settings.remoteChat.title': '远程聊天',
-    'settings.remoteChat.desc': '将本应用（如手机）连接到同一局域网内另一台电脑的 llama-server 进行对话',
+    // ─── Remote chat form (connect side of the LAN pairing card) ───
     'settings.remoteChat.enabled': '启用远程聊天',
     'settings.remoteChat.host': '电脑地址',
     'settings.remoteChat.hostPh': '如 192.168.1.5',
@@ -1331,9 +1333,13 @@ export const messages: Record<Locale, Record<string, string>> = {
     'settings.gpu.hint': 'The selected GPU is passed to llama-server via CUDA_VISIBLE_DEVICES; auto-tuning plans against it too',
     'settings.gpu.none': 'No NVIDIA GPU detected: llama-server uses the default device',
     'settings.gpu.error': 'Failed to save the inference GPU setting, please try again later',
-    // ─── LAN pairing card (PC side of the phone-to-PC LAN chat) ───
-    'settings.lanPairing.title': 'LAN Connection',
-    'settings.lanPairing.desc': "Devices on the same network (e.g. MyLlama on a phone) can reach this machine's inference service: scan the QR code below to import the pairing, or copy the addresses over manually",
+    // ─── LAN pairing card (one card, two directions of one pairing) ───
+    'settings.lanPairing.title': 'LAN Pairing',
+    'settings.lanPairing.desc': "Two MyLlama devices on one network link up: one shares its service, the other connects out to chat",
+    'settings.lanPairing.shareTitle': "Share this machine's service",
+    'settings.lanPairing.shareSub': "I share this machine's models with other devices on the network",
+    'settings.lanPairing.connectTitle': 'Connect to another PC',
+    'settings.lanPairing.connectSub': "I chat with the models running on the other computer",
     'settings.lanPairing.address': 'This machine',
     'settings.lanPairing.port': 'Service port',
     'settings.lanPairing.apiKey': 'API Key',
@@ -1351,9 +1357,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     // connects only after the inline switch flips the scope to LAN
     'settings.lanPairing.localWarn': 'Currently local-only (this machine only) — the phone cannot connect via the QR code',
     'settings.lanPairing.localSwitch': 'Switch to LAN',
-    // ─── Remote chat form (client side of the phone-to-PC LAN chat) ───
-    'settings.remoteChat.title': 'Remote Chat',
-    'settings.remoteChat.desc': 'Connect this app (e.g. a phone) to the llama-server of another computer on the same network',
+    // ─── Remote chat form (connect side of the LAN pairing card) ───
     'settings.remoteChat.enabled': 'Enable remote chat',
     'settings.remoteChat.host': 'PC address',
     'settings.remoteChat.hostPh': 'e.g. 192.168.1.5',

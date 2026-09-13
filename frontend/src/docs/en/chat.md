@@ -25,11 +25,11 @@ The "Chat target" switcher at the top of the toolbar toggles between **This PC**
 
 1. Under "Settings → Server Access Scope", switch the service to **LAN (0.0.0.0)** (applies the next time the service starts);
 2. Set a key under "Settings → API Key" (strongly recommended: any device on the network can find the service port);
-3. Open the "LAN Connection" card: on desktop it shows the **pairing QR code** (this machine's address, port and API key) — scanning it with MyLlama on the phone imports the whole pairing; "Copy link" hands it over through the clipboard instead, or copy the address, port and key individually for manual entry.
+3. Open "Settings → LAN Pairing → Share this machine's service": on desktop it shows the **pairing QR code** (this machine's address, port and API key) — scanning it with another MyLlama device imports the whole pairing; "Copy link" hands it over through the clipboard instead, or copy the address, port and key individually for manual entry.
 
 **Phone side (chatting) — three steps**:
 
-1. Under "Settings → Remote Chat", tap "**Scan to import**" (Android) and aim at the pairing QR on the PC to fill in the address, port and API key automatically — the first use asks for the **camera permission**, granted once and not asked again; without a camera (or while working on the PC itself), tap "**Import from clipboard**" and paste the `myllama://pair` link copied on the PC, or enter the PC address (the host or IP only, e.g. `192.168.1.5`), the port and the API key set on the PC manually;
+1. Under "Settings → LAN Pairing → Connect to another PC", tap "**Scan to import**" (Android) and aim at the pairing QR on the PC to fill in the address, port and API key automatically — the first use asks for the **camera permission**, granted once and not asked again; without a camera (or while working on the PC itself), tap "**Import from clipboard**" and paste the `myllama://pair` link copied on the PC, or enter the PC address (the host or IP only, e.g. `192.168.1.5`), the port and the API key set on the PC manually;
 2. Review the imported fields, then turn on **Enable remote chat** and save (importing only fills the form — nothing saves by itself);
 3. Back on the chat page, switch "Chat target" to **Remote PC** — the model list becomes the PC's models; just type and stream.
 

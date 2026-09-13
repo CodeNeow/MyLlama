@@ -217,105 +217,6 @@
         <p v-if="accessError" class="row-error">{{ accessError }}</p>
       </div>
 
-      <!-- LAN pairing card (PC side of the phone-to-PC LAN chat): what a peer
-           device needs to connect — this machine's LAN addresses, the service
-           port and the API-key status — each row with a copy button for the
-           pairing, plus the pairing QR (desktop) in every access mode.
-           Local mode keeps the QR visible but shows an amber warning that
-           pairing connects only after switching the access scope, with an
-           inline switch to do exactly that. -->
-      <div class="group-item">
-        <div class="group-row">
-          <span class="row-ic ic-sky" v-html="ICON_ACCESS"></span>
-          <div class="row-text">
-            <span class="row-title">{{ t('settings.lanPairing.title') }}</span>
-            <span class="row-sub">{{ t('settings.lanPairing.desc') }}</span>
-          </div>
-        </div>
-        <!-- Address-area state machine, driven by address availability FIRST
-             and the access mode SECOND, so the pairing QR stays discoverable
-             in every mode: no addresses → plain hint; local mode → amber
-             warning with an inline scope switch (the QR below is still
-             rendered — the phone side can see the full pairing, it just
-             cannot connect until the switch applies); LAN mode → the ready
-             status + address rows. The port / key rows and the QR block live
-             OUTSIDE the mode gate on purpose. -->
-        <p v-if="lanAddresses.length === 0" class="row-foot lan-pairing-body">{{ t('settings.lanPairing.none') }}</p>
-        <div v-else-if="appConfig.serverAccessMode !== 'lan'" class="lan-pairing-body">
-          <div class="lan-warn">
-            <span class="lan-warn-ic" aria-hidden="true" v-html="ICON_WARN"></span>
-            <span class="lan-warn-text">{{ t('settings.lanPairing.localWarn') }}</span>
-            <button class="lan-warn-btn" type="button" :disabled="accessSwitching" @click="setAccessScope('lan')">
-              {{ t('settings.lanPairing.localSwitch') }}
-            </button>
-          </div>
-          <p v-if="accessError" class="row-error lan-warn-error">{{ accessError }}</p>
-        </div>
-        <div v-else class="lan-pairing-body">
-          <!-- Pairing status: green "ready" dot (this machine is addressable);
-               a key-less service still pairs, but point at the API-key row -->
-          <div class="lan-status">
-            <span class="lan-status-dot" aria-hidden="true"></span>
-            <span class="lan-status-text">{{ t('settings.lanPairing.ready') }}</span>
-            <span v-if="!lanApiKey.trim()" class="lan-status-hint">{{ t('settings.lanPairing.suggestKey') }}</span>
-          </div>
-          <div v-for="addr in lanAddresses" :key="addr" class="lan-row">
-            <span class="lan-label">{{ t('settings.lanPairing.address') }}</span>
-            <span class="lan-value lan-mono">{{ addr }}</span>
-            <button class="lan-copy" type="button" @click="copyLanValue(addr)">
-              {{ lanCopied === addr ? t('settings.lanPairing.copied') : t('settings.lanPairing.copy') }}
-            </button>
-          </div>
-        </div>
-        <div class="lan-pairing-body">
-          <div class="lan-row">
-            <span class="lan-label">{{ t('settings.lanPairing.port') }}</span>
-            <span class="lan-value lan-mono">{{ lanPort }}</span>
-            <button class="lan-copy" type="button" @click="copyLanValue(String(lanPort))">
-              {{ lanCopied === String(lanPort) ? t('settings.lanPairing.copied') : t('settings.lanPairing.copy') }}
-            </button>
-          </div>
-          <div class="lan-row">
-            <span class="lan-label">{{ t('settings.lanPairing.apiKey') }}</span>
-            <span class="lan-value">{{ lanApiKey.trim() ? t('settings.apiKeySet') : t('settings.apiKeyNotSet') }}</span>
-            <button v-if="lanApiKey.trim()" class="lan-copy" type="button" @click="copyLanValue(lanApiKey)">
-              {{ lanCopied === lanApiKey ? t('settings.lanPairing.copied') : t('settings.lanPairing.copy') }}
-            </button>
-          </div>
-        </div>
-        <!-- Pairing QR code: the PC side SHOWS it, the phone side scans it
-             (the scanner lives in the Android app's remote-chat form), so the
-             canvas is desktop-only. Rendered in every access mode — local mode
-             pairs only after the scope switch above. Falls back to the raw
-             payload text when no 2D canvas is available. -->
-        <template v-if="!isAndroid && pairPayload">
-          <div class="lan-pairing-body lan-qr">
-            <div class="lan-qr-card">
-              <canvas v-show="!qrFailed" ref="qrCanvas" class="lan-qr-canvas" aria-hidden="true"></canvas>
-              <div v-if="qrFailed" class="lan-qr-text">{{ pairPayload }}</div>
-            </div>
-            <div v-if="lanAddresses.length > 1" class="lan-qr-select">
-              <ThemedSelect
-                :model-value="pairAddr"
-                :options="lanAddrOptions"
-                :placeholder="t('settings.lanPairing.address')"
-                variant="toolbar"
-                :label="t('settings.lanPairing.address')"
-                @update:model-value="setPairAddr"
-              />
-            </div>
-            <p class="lan-qr-caption">{{ t('settings.lanPairing.noScanHint') }}</p>
-            <div class="lan-qr-actions">
-              <button class="lan-copy" type="button" @click="refreshPairQr">{{ t('settings.lanPairing.qrRefresh') }}</button>
-              <button class="lan-copy" type="button" @click="copyPairLink">
-                {{ lanCopied === pairPayload ? t('settings.lanPairing.copied') : t('settings.lanPairing.copyLink') }}
-              </button>
-            </div>
-            <p class="lan-qr-privacy">{{ t('settings.lanPairing.qrPrivacy') }}</p>
-          </div>
-        </template>
-      </div>
-
       <!-- API key: always visible — it also protects the inference API in
            local mode, not only when the service is exposed to the LAN -->
       <div class="group-item">
@@ -485,91 +386,195 @@
       </template>
     </section>
 
-    <!-- ─── Group: remote chat (client side of the LAN pairing) ───
-         Connect this app (e.g. a phone) to another computer's llama-server on
-         the same network: the chat page's "Remote PC" tier then streams
-         directly to that address. The draft is validated inline (same rules
-         the backend enforces) and submitted as a whole through
-         store.setRemoteChat. Rendered on every platform and tier — the
-         pairing is symmetric. -->
-    <section class="settings-group group-remote" :aria-label="t('settings.remoteChat.title')">
+    <!-- ─── Group: LAN pairing — one pairing, two directions, one card ───
+         The former "LAN Connection" and "Remote Chat" cards merged: they are
+         the two ends of the SAME pairing. Section A ("share") is the serving
+         side — status, addresses and the pairing QR of THIS machine's
+         llama-server; section B ("connect") is the dialing side — the
+         remote-chat form this app uses to chat against ANOTHER computer's
+         llama-server. All state and logic is unchanged from the former two
+         cards; only the containers merged. Rendered on every platform and
+         tier — the pairing is symmetric. -->
+    <section class="settings-group group-lan" :aria-label="t('settings.lanPairing.title')">
       <div class="group-item">
         <div class="group-row">
-          <span class="row-ic ic-indigo" v-html="ICON_SHARE"></span>
+          <span class="row-ic ic-sky" v-html="ICON_ACCESS"></span>
           <div class="row-text">
-            <span class="row-title">{{ t('settings.remoteChat.title') }}</span>
-            <span class="row-sub">{{ t('settings.remoteChat.desc') }}</span>
+            <span class="row-title">{{ t('settings.lanPairing.title') }}</span>
+            <span class="row-sub">{{ t('settings.lanPairing.desc') }}</span>
           </div>
-          <div class="row-tail row-tail-switch">
-            <div
-              class="switch"
-              :class="{ on: remoteDraft.enabled }"
-              role="switch"
-              :aria-checked="remoteDraft.enabled"
-              :aria-label="t('settings.remoteChat.enabled')"
-              tabindex="0"
-              @click="toggleRemoteEnabled"
-              @keydown.enter="toggleRemoteEnabled"
-            >
+        </div>
+
+        <!-- Role A: share this machine's service (former LAN card body). The
+             address area is a state machine driven by address availability
+             FIRST and the access mode SECOND, so the pairing QR stays
+             discoverable in every mode: no addresses → plain hint; local mode
+             → amber warning with an inline scope switch (the QR below is
+             still rendered — the phone side can see the full pairing, it just
+             cannot connect until the switch applies); LAN mode → the ready
+             status + address rows. The port / key rows and the QR block live
+             OUTSIDE the mode gate on purpose. -->
+        <div role="group" class="lan-role" :aria-label="t('settings.lanPairing.shareTitle')">
+          <div class="lan-role-head">
+            <div class="lan-role-text">
+              <span class="lan-role-title">{{ t('settings.lanPairing.shareTitle') }}</span>
+              <span class="lan-role-sub">{{ t('settings.lanPairing.shareSub') }}</span>
             </div>
           </div>
+          <p v-if="lanAddresses.length === 0" class="row-foot lan-pairing-body">{{ t('settings.lanPairing.none') }}</p>
+          <div v-else-if="appConfig.serverAccessMode !== 'lan'" class="lan-pairing-body">
+            <div class="lan-warn">
+              <span class="lan-warn-ic" aria-hidden="true" v-html="ICON_WARN"></span>
+              <span class="lan-warn-text">{{ t('settings.lanPairing.localWarn') }}</span>
+              <button class="lan-warn-btn" type="button" :disabled="accessSwitching" @click="setAccessScope('lan')">
+                {{ t('settings.lanPairing.localSwitch') }}
+              </button>
+            </div>
+            <p v-if="accessError" class="row-error lan-warn-error">{{ accessError }}</p>
+          </div>
+          <div v-else class="lan-pairing-body">
+            <!-- Pairing status: green "ready" dot (this machine is addressable);
+                 a key-less service still pairs, but point at the API-key row -->
+            <div class="lan-status">
+              <span class="lan-status-dot" aria-hidden="true"></span>
+              <span class="lan-status-text">{{ t('settings.lanPairing.ready') }}</span>
+              <span v-if="!lanApiKey.trim()" class="lan-status-hint">{{ t('settings.lanPairing.suggestKey') }}</span>
+            </div>
+            <div v-for="addr in lanAddresses" :key="addr" class="lan-row">
+              <span class="lan-label">{{ t('settings.lanPairing.address') }}</span>
+              <span class="lan-value lan-mono">{{ addr }}</span>
+              <button class="lan-copy" type="button" @click="copyLanValue(addr)">
+                {{ lanCopied === addr ? t('settings.lanPairing.copied') : t('settings.lanPairing.copy') }}
+              </button>
+            </div>
+          </div>
+          <div class="lan-pairing-body">
+            <div class="lan-row">
+              <span class="lan-label">{{ t('settings.lanPairing.port') }}</span>
+              <span class="lan-value lan-mono">{{ lanPort }}</span>
+              <button class="lan-copy" type="button" @click="copyLanValue(String(lanPort))">
+                {{ lanCopied === String(lanPort) ? t('settings.lanPairing.copied') : t('settings.lanPairing.copy') }}
+              </button>
+            </div>
+            <div class="lan-row">
+              <span class="lan-label">{{ t('settings.lanPairing.apiKey') }}</span>
+              <span class="lan-value">{{ lanApiKey.trim() ? t('settings.apiKeySet') : t('settings.apiKeyNotSet') }}</span>
+              <button v-if="lanApiKey.trim()" class="lan-copy" type="button" @click="copyLanValue(lanApiKey)">
+                {{ lanCopied === lanApiKey ? t('settings.lanPairing.copied') : t('settings.lanPairing.copy') }}
+              </button>
+            </div>
+          </div>
+          <!-- Pairing QR code: the PC side SHOWS it, the phone side scans it
+               (the scanner lives in this card's connect section on Android),
+               so the canvas is desktop-only. Rendered in every access mode —
+               local mode pairs only after the scope switch above. Falls back
+               to the raw payload text when no 2D canvas is available. -->
+          <template v-if="!isAndroid && pairPayload">
+            <div class="lan-pairing-body lan-qr">
+              <div class="lan-qr-card">
+                <canvas v-show="!qrFailed" ref="qrCanvas" class="lan-qr-canvas" aria-hidden="true"></canvas>
+                <div v-if="qrFailed" class="lan-qr-text">{{ pairPayload }}</div>
+              </div>
+              <div v-if="lanAddresses.length > 1" class="lan-qr-select">
+                <ThemedSelect
+                  :model-value="pairAddr"
+                  :options="lanAddrOptions"
+                  :placeholder="t('settings.lanPairing.address')"
+                  variant="toolbar"
+                  :label="t('settings.lanPairing.address')"
+                  @update:model-value="setPairAddr"
+                />
+              </div>
+              <p class="lan-qr-caption">{{ t('settings.lanPairing.noScanHint') }}</p>
+              <div class="lan-qr-actions">
+                <button class="lan-copy" type="button" @click="refreshPairQr">{{ t('settings.lanPairing.qrRefresh') }}</button>
+                <button class="lan-copy" type="button" @click="copyPairLink">
+                  {{ lanCopied === pairPayload ? t('settings.lanPairing.copied') : t('settings.lanPairing.copyLink') }}
+                </button>
+              </div>
+              <p class="lan-qr-privacy">{{ t('settings.lanPairing.qrPrivacy') }}</p>
+            </div>
+          </template>
         </div>
-        <!-- Pairing import: the Android build scans the PC's QR code through
-             the native scanner (the WebView has no camera path — no
-             WebChromeClient getUserMedia), every platform can paste a copied
-             myllama://pair link. Both fill the draft below for review; nothing
-             is saved until the user presses Save. -->
-        <div class="remote-fields remote-import-row">
-          <button v-if="isAndroid" class="dir-btn" type="button" :disabled="scanBusy" @click="startScanImport">
-            {{ t('settings.remoteChat.scan') }}
-          </button>
-          <button class="dir-btn" type="button" @click="importFromClipboard">
-            {{ t('settings.remoteChat.clipboard') }}
-          </button>
+
+        <!-- Role B: connect out to another PC (former remote-chat card). The
+             Android build scans the PC's QR code through the native scanner
+             (the WebView has no camera path — no WebChromeClient
+             getUserMedia), every platform can paste a copied myllama://pair
+             link. Both fill the draft below for review; nothing is saved
+             until the user presses Save. -->
+        <div role="group" class="lan-role" :aria-label="t('settings.lanPairing.connectTitle')">
+          <div class="lan-role-head">
+            <div class="lan-role-text">
+              <span class="lan-role-title">{{ t('settings.lanPairing.connectTitle') }}</span>
+              <span class="lan-role-sub">{{ t('settings.lanPairing.connectSub') }}</span>
+            </div>
+            <div class="row-tail row-tail-switch">
+              <div
+                class="switch"
+                :class="{ on: remoteDraft.enabled }"
+                role="switch"
+                :aria-checked="remoteDraft.enabled"
+                :aria-label="t('settings.remoteChat.enabled')"
+                tabindex="0"
+                @click="toggleRemoteEnabled"
+                @keydown.enter="toggleRemoteEnabled"
+              >
+              </div>
+            </div>
+          </div>
+          <div class="remote-fields remote-import-row">
+            <button v-if="isAndroid" class="dir-btn" type="button" :disabled="scanBusy" @click="startScanImport">
+              {{ t('settings.remoteChat.scan') }}
+            </button>
+            <button class="dir-btn" type="button" @click="importFromClipboard">
+              {{ t('settings.remoteChat.clipboard') }}
+            </button>
+          </div>
+          <p v-if="scanMsg" class="row-foot remote-scan-msg" :class="{ 'remote-scan-msg-err': scanMsgError }">{{ scanMsg }}</p>
+          <div class="remote-fields">
+            <label class="remote-field">
+              <span class="remote-label">{{ t('settings.remoteChat.host') }}</span>
+              <input
+                v-model="remoteDraft.host"
+                type="text"
+                class="remote-input"
+                autocomplete="off"
+                spellcheck="false"
+                :placeholder="t('settings.remoteChat.hostPh')"
+              />
+            </label>
+            <label class="remote-field remote-field-port">
+              <span class="remote-label">{{ t('settings.remoteChat.port') }}</span>
+              <input
+                v-model.number="remoteDraft.port"
+                type="number"
+                min="1"
+                max="65535"
+                class="remote-input"
+              />
+            </label>
+            <label class="remote-field">
+              <span class="remote-label">{{ t('settings.remoteChat.apiKey') }}</span>
+              <input
+                v-model="remoteDraft.apiKey"
+                type="password"
+                class="remote-input"
+                autocomplete="new-password"
+                spellcheck="false"
+                :placeholder="t('settings.remoteChat.apiKeyPh')"
+              />
+            </label>
+          </div>
+          <p v-if="remoteError" class="row-error">{{ remoteError }}</p>
+          <p v-else-if="remoteSaved" class="row-foot remote-saved">{{ t('settings.remoteChat.saved') }}</p>
+          <div class="remote-actions">
+            <button class="dir-btn" type="button" :disabled="remoteSaving" @click="saveRemoteDraft">
+              {{ remoteSaving ? t('settings.remoteChat.saving') : t('settings.remoteChat.save') }}
+            </button>
+          </div>
+          <p class="row-foot">{{ t('settings.remoteChat.hint') }}</p>
         </div>
-        <p v-if="scanMsg" class="row-foot remote-scan-msg" :class="{ 'remote-scan-msg-err': scanMsgError }">{{ scanMsg }}</p>
-        <div class="remote-fields">
-          <label class="remote-field">
-            <span class="remote-label">{{ t('settings.remoteChat.host') }}</span>
-            <input
-              v-model="remoteDraft.host"
-              type="text"
-              class="remote-input"
-              autocomplete="off"
-              spellcheck="false"
-              :placeholder="t('settings.remoteChat.hostPh')"
-            />
-          </label>
-          <label class="remote-field remote-field-port">
-            <span class="remote-label">{{ t('settings.remoteChat.port') }}</span>
-            <input
-              v-model.number="remoteDraft.port"
-              type="number"
-              min="1"
-              max="65535"
-              class="remote-input"
-            />
-          </label>
-          <label class="remote-field">
-            <span class="remote-label">{{ t('settings.remoteChat.apiKey') }}</span>
-            <input
-              v-model="remoteDraft.apiKey"
-              type="password"
-              class="remote-input"
-              autocomplete="new-password"
-              spellcheck="false"
-              :placeholder="t('settings.remoteChat.apiKeyPh')"
-            />
-          </label>
-        </div>
-        <p v-if="remoteError" class="row-error">{{ remoteError }}</p>
-        <p v-else-if="remoteSaved" class="row-foot remote-saved">{{ t('settings.remoteChat.saved') }}</p>
-        <div class="remote-actions">
-          <button class="dir-btn" type="button" :disabled="remoteSaving" @click="saveRemoteDraft">
-            {{ remoteSaving ? t('settings.remoteChat.saving') : t('settings.remoteChat.save') }}
-          </button>
-        </div>
-        <p class="row-foot">{{ t('settings.remoteChat.hint') }}</p>
       </div>
     </section>
 
@@ -1880,6 +1885,43 @@ async function manualCheck() {
   margin: 0;
 }
 
+/* ─── LAN pairing role sections (share / connect) ───
+   Lightweight sub-section headers inside the merged pairing card: one level
+   below the card row title, indented to the card body's inset (50px = icon +
+   gap) so a role header sits flush with its content. Blocks separate by
+   whitespace only — no hairline between the two directions of one pairing. */
+.lan-role + .lan-role {
+  margin-top: 14px;
+}
+
+.lan-role-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 2px 0 8px 50px;
+}
+
+.lan-role-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.lan-role-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.35;
+}
+
+.lan-role-sub {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
 /* ─── Remote chat form (enabled switch + host / port / key fields) ─── */
 .remote-fields {
   display: flex;
@@ -1956,6 +1998,10 @@ async function manualCheck() {
   }
 
   .lan-pairing-body {
+    padding-left: 16px;
+  }
+
+  .lan-role-head {
     padding-left: 16px;
   }
 }
