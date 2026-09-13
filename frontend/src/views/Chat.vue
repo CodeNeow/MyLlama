@@ -31,11 +31,12 @@
            belongs to the conversation. -->
       <div class="chat-toolbar">
         <!-- Chat target switcher (LAN remote tier): "This PC" vs "Remote PC".
-             The remote option exists only while a PC address is configured in
-             Settings; without one a hint row next to the switcher points there
-             instead. Same ThemedSelect toolbar variant as the model chip so
-             both tiers narrow identically. -->
+             Rendered only while a PC address is configured in Settings — on a
+             plain local setup the switcher would carry a single option and
+             only add noise to the toolbar. Same ThemedSelect toolbar variant
+             as the model chip so both tiers narrow identically. -->
         <ThemedSelect
+          v-if="remoteConfigured"
           variant="toolbar"
           class="chat-target-select"
           :model-value="targetValue"
@@ -44,12 +45,6 @@
           :label="t('chat.target')"
           @update:model-value="pickTarget"
         />
-        <button
-          v-if="!remoteConfigured"
-          class="chat-remote-hint"
-          type="button"
-          @click="goSettings"
-        >{{ t('chat.remoteHint') }}</button>
         <!-- Model picker: themed dropdown (popup list is rendered in-app, so it
              follows the theme — a native select's popup is OS-rendered).
              Options come from the local model scan (local tier) or the remote
@@ -485,11 +480,6 @@ function pickTarget(value: string) {
   persistChatTarget()
   // The isRemoteTarget watcher below swaps the picker list and the bootstrap
   // state between the local-service flow and the remote-PC flow.
-}
-
-/** Settings hint jump (unconfigured host): the pairing form lives there. */
-function goSettings() {
-  router.push('/settings')
 }
 
 const serverRunning = ref(false)
@@ -1526,29 +1516,6 @@ html[data-os='ios'] .chat-model-select :deep(button.themed-select__trigger:activ
 
 .chat-target-select :deep(.themed-select__trigger) {
   min-height: 40px;
-}
-
-/* Unconfigured-host hint next to the switcher: a quiet text button jumping to
-   the Settings pairing form (chat.remoteHint). Takes the leftover space and
-   ellipsizes so the row never wraps. */
-.chat-remote-hint {
-  flex: 1 1 auto;
-  min-width: 0;
-  padding: 0;
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  font-size: 12px;
-  font-family: inherit;
-  text-align: left;
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.chat-remote-hint:hover {
-  color: var(--text-primary);
 }
 
 /* Round glass action buttons (design .chat-top .rnd): 40px circles, island

@@ -454,7 +454,6 @@ export const messages: Record<Locale, Record<string, string>> = {
     'chat.target': '对话目标',
     'chat.targetLocal': '本机服务',
     'chat.targetRemote': '远程 PC',
-    'chat.remoteHint': '在设置中配置电脑地址后可远程对话 →',
     'chat.remoteUnreachable': '无法连接远程电脑，请检查地址、端口与防火墙设置',
 
     // ─── Monitoring (embedded in Api.vue) ───
@@ -1263,7 +1262,6 @@ export const messages: Record<Locale, Record<string, string>> = {
     'chat.target': 'Chat target',
     'chat.targetLocal': 'This PC',
     'chat.targetRemote': 'Remote PC',
-    'chat.remoteHint': 'Configure the PC address in Settings to chat remotely →',
     'chat.remoteUnreachable': 'Cannot reach the remote PC — check its address, port and firewall',
 
     // ─── Monitor (embedded in Api.vue) ───

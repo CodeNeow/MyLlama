@@ -19,7 +19,7 @@ A vision model needs **two files**: the main weights `.gguf` and the `mmproj` vi
 
 ## LAN remote chat (phone to PC)
 
-The "Chat target" switcher at the top of the toolbar toggles between **This PC** and **Remote PC**. On the remote tier, chat requests go straight to a llama-server already running on another computer in the same network: the model list, unloading other models and streaming all act on that machine — no models or runtime are needed on this device.
+The "Chat target" switcher at the top of the toolbar toggles between **This PC** and **Remote PC**; it only appears once a remote PC is configured (Settings → LAN Pairing → Connect to another PC). On the remote tier, chat requests go straight to a llama-server already running on another computer in the same network: the model list, unloading other models and streaming all act on that machine — no models or runtime are needed on this device.
 
 **PC side (serving) — three steps** (see the "Preferences" section):
 
