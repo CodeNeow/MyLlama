@@ -478,12 +478,18 @@ export function chatRequestHeaders(apiKey?: string): Record<string, string> {
  * means resident models. Non-loaded router statuses pass through untouched
  * (modelsToUnload only acts on 'loaded'), and only a genuinely empty data
  * array yields an empty list (router mode with nothing loaded).
+ *
+ * The optional signal is forwarded to BOTH fetches (the /models probe and its
+ * 404 /v1/models fallback) so a caller-owned abort deadline — the remote probe
+ * timeout in Chat.vue — cuts through the whole lookup, including the silent
+ * TCP hang against a dropped-packet address. Omitting it keeps the previous
+ * no-timeout behavior.
  */
-export async function fetchRouterModels(endpoint: ChatEndpoint): Promise<RouterModel[]> {
+export async function fetchRouterModels(endpoint: ChatEndpoint, signal?: AbortSignal): Promise<RouterModel[]> {
   const base = chatBaseUrl(endpoint.host, endpoint.port)
-  const res = await fetch(`${base}/models`, { headers: chatRequestHeaders(endpoint.apiKey) })
+  const res = await fetch(`${base}/models`, { headers: chatRequestHeaders(endpoint.apiKey), signal })
   if (res.status === 404) {
-    return fetchOpenAIModels(base, endpoint.apiKey)
+    return fetchOpenAIModels(base, endpoint.apiKey, signal)
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
@@ -499,10 +505,10 @@ export async function fetchRouterModels(endpoint: ChatEndpoint): Promise<RouterM
 /**
  * Direct-mode fallback: map GET /v1/models data[].id entries to RouterModel
  * values with status 'loaded' (direct servers always have their model in
- * memory).
+ * memory). Receives the caller's signal untouched from fetchRouterModels.
  */
-async function fetchOpenAIModels(base: string, apiKey?: string): Promise<RouterModel[]> {
-  const res = await fetch(`${base}/v1/models`, { headers: chatRequestHeaders(apiKey) })
+async function fetchOpenAIModels(base: string, apiKey?: string, signal?: AbortSignal): Promise<RouterModel[]> {
+  const res = await fetch(`${base}/v1/models`, { headers: chatRequestHeaders(apiKey), signal })
   if (!res.ok) {
     throw new Error(`GET /v1/models failed: ${res.status}`)
   }

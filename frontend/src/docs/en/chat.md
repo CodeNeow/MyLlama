@@ -35,6 +35,8 @@ The "Chat target" switcher at the top of the toolbar toggles between **This PC**
 
 On the remote tier the PC manages its own service: the chat page never starts or stops it, and a failed connection surfaces a hint to check the address, port and firewall. Every behavior of the "This PC" tier stays unchanged.
 
+If the PC cannot be reached, an amber warning bar appears below the toolbar (listing the likely causes: a wrong address / port, the PC's service not running, or its firewall blocking the port) with a Retry button to re-probe at any time; if the PC answers but has no models loaded yet, a gray hint appears instead — pick a model on the PC's own chat page and send a message (the server lazy-loads it), and it will show up in this device's model list.
+
 > Security boundary: LAN traffic is **plaintext HTTP**. The API key keeps unrelated devices from freeloading the service but **does not prevent eavesdropping** within the same network — enable remote chat on trusted networks only.
 
 ## Tuning chat parameters

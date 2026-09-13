@@ -241,6 +241,34 @@
       </div>
     </div>
 
+    <!-- Remote probe status (remote tier only): one status line between the
+         toolbar and the conversation, separating the two empty-picker causes.
+         Probe failure (network layer — wrong address/port, the PC's service
+         not running, or its firewall blocking the port) raises the amber
+         warning with a retry button; the probe kept the previous picker list,
+         so without this line the outage would be silently masked as "no
+         models". A successful probe with an empty answer means the PC is
+         online but has nothing loaded yet — llama-server answers /models with
+         an empty list in router mode until a chat request on the PC
+         lazy-loads a model — explained by the gray hint instead. The local
+         tier renders neither line. -->
+    <div v-if="isRemoteTarget && remoteProbeFailed" class="remote-probe-bar" role="alert">
+      <span class="remote-probe-text">{{ t('chat.remoteProbeFail') }}</span>
+      <button
+        class="remote-probe-retry"
+        type="button"
+        :disabled="remoteProbing"
+        @click="refreshRemoteModels"
+      >{{ t('chat.remoteProbeRetry') }}</button>
+    </div>
+    <div
+      v-else-if="isRemoteTarget && !remoteProbing && remoteModels.length === 0"
+      class="remote-empty-hint"
+      role="status"
+    >
+      {{ t('chat.remoteEmptyHint') }}
+    </div>
+
     <!-- Conversation body: messages column. The wrapper is a pure flex
          pass-through (column, flex:1), so the desktop/phone layout chain
          (.chat-page → messages → input) is unchanged. -->
@@ -616,6 +644,24 @@ const modelOptions = computed<SelectOption[]>(() => {
 const remoteModels = ref<RouterModel[]>([])
 
 /**
+ * Health of the last remote /models probe (remote tier only): true after a
+ * network-layer failure (PC unreachable — wrong address/port, its service not
+ * running, or a firewall blocking the port), false after a successful probe.
+ * The picker keeps its previous list on failure, so without this flag the
+ * outage would be silently masked as "no models available"; the warning bar
+ * between the toolbar and the messages explains the real cause instead.
+ */
+const remoteProbeFailed = ref(false)
+
+/**
+ * A remote probe is in flight (target-switch bootstrap or a retry click):
+ * the retry button disables while true so a slow probe cannot double-fire,
+ * and the empty hint waits for the probe to land before claiming "reachable
+ * but nothing loaded".
+ */
+const remoteProbing = ref(false)
+
+/**
  * Model-chip placeholder (frame ⑦): with an empty directory the touch-tier
  * chip reads "暂无可用模型" instead of the bare "模型" label; desktop keeps the
  * original placeholder text.
@@ -812,19 +858,43 @@ async function refreshLocalModels(): Promise<void> {
  * Remote-tier model list: probe the PC's router (/models with the LAN
  * pairing's bearer key) and reconcile the persisted selection against the
  * remote ids — a different id set than the local scan is normal, the same
- * reconcileSelectedModel rule applies. Probe failure keeps the current list
- * (the send path reports "unreachable"); a remote list with no entries clears
- * the selection like an empty local directory would.
+ * reconcileSelectedModel rule applies. The probe carries a 5s abort deadline
+ * so an unreachable PC fails fast into the failure path instead of hanging
+ * on the browser's TCP timeout. Probe failure keeps the current list
+ * (the send path reports "unreachable") and raises remoteProbeFailed so the
+ * toolbar warning bar explains the outage; a successful probe clears it (a
+ * genuinely empty list then shows the "reachable but nothing loaded" hint),
+ * and a remote list with no entries clears the selection like an empty local
+ * directory would.
  */
 async function refreshRemoteModels(): Promise<void> {
   if (!isRemoteTarget.value) return
+  remoteProbing.value = true
+  // 5s probe deadline: a LAN peer answers within milliseconds, so 5s is
+  // already tens of multiples of headroom — without it, a silently-dropping
+  // address (firewall DROP, host down) hangs the fetch until the browser's
+  // default TCP timeout (1-3 min), leaving the picker empty with no
+  // explanation the whole time. AbortController + setTimeout instead of
+  // AbortSignal.timeout: the latter has no reliable support on older Android
+  // WebViews. The abort rejects through the same catch below, so the
+  // probe-failed warning bar covers both the timeout and plain unreachability.
+  const probe = new AbortController()
+  const timeoutId = setTimeout(() => probe.abort(), 5000)
   let list: RouterModel[] = []
   try {
-    list = await fetchRouterModels(effectiveTarget.value)
+    list = await fetchRouterModels(effectiveTarget.value, probe.signal)
   } catch {
-    // PC unreachable right now: keep whatever the picker already shows
+    // PC unreachable right now (network-layer failure OR the 5s timeout
+    // abort): keep whatever the picker already shows, but surface the
+    // failure through the probe-failed warning bar instead of silently
+    // masking it as "no models available"
+    remoteProbeFailed.value = true
     return
+  } finally {
+    clearTimeout(timeoutId)
+    remoteProbing.value = false
   }
+  remoteProbeFailed.value = false
   remoteModels.value = list
   const ids = list.map((m) => m.id)
   const reconciled = reconcileSelectedModel(selectedModel.value, ids)
@@ -1564,6 +1634,70 @@ html[data-os='ios'] .chat-model-select :deep(button.themed-select__trigger:activ
   min-height: 40px;
 }
 
+/* ─── Remote probe status (remote tier only, toolbar ↔ messages) ───
+   Amber warning: the PC is unreachable (the /models probe failed at the
+   network layer) — carries the Retry button that re-runs the probe. Gray
+   hint: the PC answered but has nothing loaded (router /models returns an
+   empty list until a chat request on the PC lazy-loads a model). Local tier
+   renders neither (both template branches gate on isRemoteTarget). */
+.remote-probe-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  /* Amber overlay skins follow the notice-stack error pattern (rgba wash +
+     text in --text-primary), readable on both themes without new tokens */
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.remote-probe-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.remote-probe-retry {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.remote-probe-retry:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.22);
+}
+
+.remote-probe-retry:disabled {
+  /* Probe in flight: dim instead of disappearing (no layout jump) */
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Reachable but nothing loaded: neutral gray hint, no action button */
+.remote-empty-hint {
+  flex-shrink: 0;
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
 /* Params panel (popover + sheet/modal) preset-summary rows moved to
    ChatParamsPanel.vue; only the value span is ALSO rendered by the preset
    manager dialog below, so its rule stays here (duplicated in the panel —
@@ -1874,9 +2008,14 @@ html[data-os='ios'] .chat-model-select :deep(button.themed-select__trigger:activ
     top: auto;
   }
 
-  /* Chip + two 44px round buttons on one row: the chip shrinks (ellipsis in
-     the value span) instead of wrapping; 44+44 buttons + two 8px gaps */
+  /* Phone band: two lines when the target switcher is present — the
+     single-row math (switcher + capsule + preset + 3 icon buttons) cannot
+     fit a 375px screen, so the switcher wraps onto its own full row via
+     flex-wrap + the switcher's flex-basis 100% below; without a switcher
+     nothing wraps (the remaining row fits). Wrap is a no-op for the
+     absolutely-positioned params popover / teleported dialog. */
   .chat-toolbar {
+    flex-wrap: wrap;
     gap: 8px;
     padding: 8px 0 12px;
   }
@@ -1884,20 +2023,28 @@ html[data-os='ios'] .chat-model-select :deep(button.themed-select__trigger:activ
   .chat-model-select {
     flex: 0 1 auto;
     min-width: 0;
-    /* Phone toolbar row: target switcher + model capsule + preset picker +
-       3 icon buttons — the capsule leaves room for the target switcher (min
-       56px) + preset picker (min 96px) + icons */
-    max-width: calc(100% - 280px);
+    /* Capsule row after the switcher moved to its own line: preset picker
+       (min-width 96px) + 3 icon buttons (44px each = 132px) + 4 gaps
+       (8px each = 32px) = 260px of guaranteed row occupants, so the capsule
+       gets calc(100% - 260px) — 83px at the 375px reference screen (343px
+       of toolbar content after the 16px page gutters), enough for the dot +
+       ellipsized model name. The capsule is the row's only shrinkable item
+       (icons flex-shrink 0, preset floored at 96px), so tighter screens
+       shrink it further instead of wrapping. */
+    max-width: calc(100% - 260px);
   }
 
   .chat-model-select :deep(.themed-select__trigger) {
     min-height: 44px;
   }
 
-  /* Target switcher on the phone band: 44px touch target, shrinkable to a
-     compact pill (the hint button ellipsizes beside it when unconfigured) */
+  /* Target switcher on the phone band: its own full-width row (flex-basis
+     100% + max-width none overrides the base min(150px, 26%) cap), so the
+     two target options read without ellipsis; the 44px touch-target
+     trigger below is unchanged. */
   .chat-target-select {
-    max-width: 32%;
+    flex: 1 1 100%;
+    max-width: none;
   }
 
   .chat-target-select :deep(.themed-select__trigger) {

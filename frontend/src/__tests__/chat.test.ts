@@ -463,6 +463,28 @@ describe('fetchRouterModels', () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(jsonResponse(404, {}))))
     await expect(fetchRouterModels({ port: 8080 })).rejects.toThrow('GET /v1/models failed: 404')
   })
+
+  it('forwards the caller signal to fetch, including the 404 /v1/models fallback', async () => {
+    // Probe timeout wiring (Chat.vue passes an AbortController's signal):
+    // BOTH fetches must receive it, so a caller abort deadline also cuts
+    // through the direct-mode fallback. init.signal must be the very signal
+    // object passed in.
+    const inits: Array<RequestInit | undefined> = []
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      inits.push(init)
+      if (url === 'http://127.0.0.1:8080/models') {
+        return Promise.resolve(jsonResponse(404, {}))
+      }
+      return Promise.resolve(jsonResponse(200, { data: [{ id: 'resident-a' }] }))
+    }))
+    const controller = new AbortController()
+    await expect(fetchRouterModels({ port: 8080 }, controller.signal)).resolves.toEqual([
+      { id: 'resident-a', status: 'loaded' },
+    ])
+    expect(inits.length).toBe(2)
+    expect(inits[0]?.signal).toBe(controller.signal)
+    expect(inits[1]?.signal).toBe(controller.signal)
+  })
 })
 
 // ─── Endpoint base URL (LAN remote tier) ─────────────────────────────────────

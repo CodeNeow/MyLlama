@@ -204,4 +204,21 @@ describe('lib/i18n', () => {
     setLocale('zh')
     expect(locale.value).toBe('zh')
   })
+
+  it('remote probe status keys render in both locales and carry the two empty-picker causes', () => {
+    // Chat.vue remote tier: the unreachable warning (with a retry action)
+    // vs the reachable-but-nothing-loaded hint explaining the lazy load
+    setLocale('zh')
+    expect(t('chat.remoteProbeFail')).toContain('无法连接远程电脑')
+    expect(t('chat.remoteProbeFail')).toContain('防火墙')
+    expect(t('chat.remoteProbeRetry')).toBe('重试')
+    expect(t('chat.remoteEmptyHint')).toContain('没有已加载的模型')
+    expect(t('chat.remoteEmptyHint')).toContain('懒加载')
+    setLocale('en')
+    expect(t('chat.remoteProbeFail')).toContain('Cannot reach the remote PC')
+    expect(t('chat.remoteProbeFail')).toContain('firewall')
+    expect(t('chat.remoteProbeRetry')).toBe('Retry')
+    expect(t('chat.remoteEmptyHint')).toContain('no loaded models')
+    expect(t('chat.remoteEmptyHint')).toContain('lazy-loads')
+  })
 })

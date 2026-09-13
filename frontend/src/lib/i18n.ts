@@ -455,6 +455,12 @@ export const messages: Record<Locale, Record<string, string>> = {
     'chat.targetLocal': '本机服务',
     'chat.targetRemote': '远程 PC',
     'chat.remoteUnreachable': '无法连接远程电脑，请检查地址、端口与防火墙设置',
+    // Remote probe status lines (Chat.vue, remote tier): unreachable warning
+    // vs reachable-but-nothing-loaded hint (router /models is empty until a
+    // chat request on the PC lazy-loads a model)
+    'chat.remoteProbeFail': '无法连接远程电脑——请检查地址与端口、对方电脑的服务是否运行、以及对方防火墙是否放行该端口',
+    'chat.remoteProbeRetry': '重试',
+    'chat.remoteEmptyHint': '对方电脑在线，但没有已加载的模型——在对方电脑的聊天页选一个模型发一条消息（服务端会懒加载），它就会出现在这里',
 
     // ─── Monitoring (embedded in Api.vue) ───
     'monitor.uptimeLabel': '运行时长',
@@ -1263,6 +1269,12 @@ export const messages: Record<Locale, Record<string, string>> = {
     'chat.targetLocal': 'This PC',
     'chat.targetRemote': 'Remote PC',
     'chat.remoteUnreachable': 'Cannot reach the remote PC — check its address, port and firewall',
+    // Remote probe status lines (Chat.vue, remote tier): unreachable warning
+    // vs reachable-but-nothing-loaded hint (router /models is empty until a
+    // chat request on the PC lazy-loads a model)
+    'chat.remoteProbeFail': 'Cannot reach the remote PC — check the address and port, whether its service is running, and whether its firewall allows this port',
+    'chat.remoteProbeRetry': 'Retry',
+    'chat.remoteEmptyHint': 'The PC is online but has no loaded models — on the PC, pick a model in its chat page and send a message (the server lazy-loads it); it will appear here',
 
     // ─── Monitor (embedded in Api.vue) ───
     'monitor.uptimeLabel': 'Uptime',
