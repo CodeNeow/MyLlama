@@ -220,9 +220,10 @@
       <!-- LAN pairing card (PC side of the phone-to-PC LAN chat): what a peer
            device needs to connect — this machine's LAN addresses, the service
            port and the API-key status — each row with a copy button for the
-           pairing. Rendered on every tier (symmetric capability, no platform
-           gate). Local mode shows guidance pointing at the access-scope row
-           above (the single switch for this setting, no second toggle here). -->
+           pairing, plus the pairing QR (desktop) in every access mode.
+           Local mode keeps the QR visible but shows an amber warning that
+           pairing connects only after switching the access scope, with an
+           inline switch to do exactly that. -->
       <div class="group-item">
         <div class="group-row">
           <span class="row-ic ic-sky" v-html="ICON_ACCESS"></span>
@@ -231,72 +232,88 @@
             <span class="row-sub">{{ t('settings.lanPairing.desc') }}</span>
           </div>
         </div>
-        <template v-if="appConfig.serverAccessMode === 'lan'">
-          <p v-if="lanAddresses.length === 0" class="row-foot lan-pairing-body">{{ t('settings.lanPairing.none') }}</p>
-          <div v-else class="lan-pairing-body">
-            <!-- Pairing status: green "ready" dot (this machine is addressable);
-                 a key-less service still pairs, but point at the API-key row -->
-            <div class="lan-status">
-              <span class="lan-status-dot" aria-hidden="true"></span>
-              <span class="lan-status-text">{{ t('settings.lanPairing.ready') }}</span>
-              <span v-if="!lanApiKey.trim()" class="lan-status-hint">{{ t('settings.lanPairing.suggestKey') }}</span>
-            </div>
-            <div v-for="addr in lanAddresses" :key="addr" class="lan-row">
-              <span class="lan-label">{{ t('settings.lanPairing.address') }}</span>
-              <span class="lan-value lan-mono">{{ addr }}</span>
-              <button class="lan-copy" type="button" @click="copyLanValue(addr)">
-                {{ lanCopied === addr ? t('settings.lanPairing.copied') : t('settings.lanPairing.copy') }}
-              </button>
-            </div>
+        <!-- Address-area state machine, driven by address availability FIRST
+             and the access mode SECOND, so the pairing QR stays discoverable
+             in every mode: no addresses → plain hint; local mode → amber
+             warning with an inline scope switch (the QR below is still
+             rendered — the phone side can see the full pairing, it just
+             cannot connect until the switch applies); LAN mode → the ready
+             status + address rows. The port / key rows and the QR block live
+             OUTSIDE the mode gate on purpose. -->
+        <p v-if="lanAddresses.length === 0" class="row-foot lan-pairing-body">{{ t('settings.lanPairing.none') }}</p>
+        <div v-else-if="appConfig.serverAccessMode !== 'lan'" class="lan-pairing-body">
+          <div class="lan-warn">
+            <span class="lan-warn-ic" aria-hidden="true" v-html="ICON_WARN"></span>
+            <span class="lan-warn-text">{{ t('settings.lanPairing.localWarn') }}</span>
+            <button class="lan-warn-btn" type="button" :disabled="accessSwitching" @click="setAccessScope('lan')">
+              {{ t('settings.lanPairing.localSwitch') }}
+            </button>
           </div>
-          <div class="lan-pairing-body">
-            <div class="lan-row">
-              <span class="lan-label">{{ t('settings.lanPairing.port') }}</span>
-              <span class="lan-value lan-mono">{{ lanPort }}</span>
-              <button class="lan-copy" type="button" @click="copyLanValue(String(lanPort))">
-                {{ lanCopied === String(lanPort) ? t('settings.lanPairing.copied') : t('settings.lanPairing.copy') }}
-              </button>
-            </div>
-            <div class="lan-row">
-              <span class="lan-label">{{ t('settings.lanPairing.apiKey') }}</span>
-              <span class="lan-value">{{ lanApiKey.trim() ? t('settings.apiKeySet') : t('settings.apiKeyNotSet') }}</span>
-              <button v-if="lanApiKey.trim()" class="lan-copy" type="button" @click="copyLanValue(lanApiKey)">
-                {{ lanCopied === lanApiKey ? t('settings.lanPairing.copied') : t('settings.lanPairing.copy') }}
-              </button>
-            </div>
+          <p v-if="accessError" class="row-error lan-warn-error">{{ accessError }}</p>
+        </div>
+        <div v-else class="lan-pairing-body">
+          <!-- Pairing status: green "ready" dot (this machine is addressable);
+               a key-less service still pairs, but point at the API-key row -->
+          <div class="lan-status">
+            <span class="lan-status-dot" aria-hidden="true"></span>
+            <span class="lan-status-text">{{ t('settings.lanPairing.ready') }}</span>
+            <span v-if="!lanApiKey.trim()" class="lan-status-hint">{{ t('settings.lanPairing.suggestKey') }}</span>
           </div>
-          <!-- Pairing QR code: the PC side SHOWS it, the phone side scans it
-               (the scanner lives in the Android app's remote-chat form), so the
-               canvas is desktop-only. Falls back to the raw payload text when
-               no 2D canvas is available. -->
-          <template v-if="!isAndroid && pairPayload">
-            <div class="lan-pairing-body lan-qr">
-              <div class="lan-qr-card">
-                <canvas v-show="!qrFailed" ref="qrCanvas" class="lan-qr-canvas" aria-hidden="true"></canvas>
-                <div v-if="qrFailed" class="lan-qr-text">{{ pairPayload }}</div>
-              </div>
-              <div v-if="lanAddresses.length > 1" class="lan-qr-select">
-                <ThemedSelect
-                  :model-value="pairAddr"
-                  :options="lanAddrOptions"
-                  :placeholder="t('settings.lanPairing.address')"
-                  variant="toolbar"
-                  :label="t('settings.lanPairing.address')"
-                  @update:model-value="setPairAddr"
-                />
-              </div>
-              <p class="lan-qr-caption">{{ t('settings.lanPairing.noScanHint') }}</p>
-              <div class="lan-qr-actions">
-                <button class="lan-copy" type="button" @click="refreshPairQr">{{ t('settings.lanPairing.qrRefresh') }}</button>
-                <button class="lan-copy" type="button" @click="copyPairLink">
-                  {{ lanCopied === pairPayload ? t('settings.lanPairing.copied') : t('settings.lanPairing.copyLink') }}
-                </button>
-              </div>
-              <p class="lan-qr-privacy">{{ t('settings.lanPairing.qrPrivacy') }}</p>
+          <div v-for="addr in lanAddresses" :key="addr" class="lan-row">
+            <span class="lan-label">{{ t('settings.lanPairing.address') }}</span>
+            <span class="lan-value lan-mono">{{ addr }}</span>
+            <button class="lan-copy" type="button" @click="copyLanValue(addr)">
+              {{ lanCopied === addr ? t('settings.lanPairing.copied') : t('settings.lanPairing.copy') }}
+            </button>
+          </div>
+        </div>
+        <div class="lan-pairing-body">
+          <div class="lan-row">
+            <span class="lan-label">{{ t('settings.lanPairing.port') }}</span>
+            <span class="lan-value lan-mono">{{ lanPort }}</span>
+            <button class="lan-copy" type="button" @click="copyLanValue(String(lanPort))">
+              {{ lanCopied === String(lanPort) ? t('settings.lanPairing.copied') : t('settings.lanPairing.copy') }}
+            </button>
+          </div>
+          <div class="lan-row">
+            <span class="lan-label">{{ t('settings.lanPairing.apiKey') }}</span>
+            <span class="lan-value">{{ lanApiKey.trim() ? t('settings.apiKeySet') : t('settings.apiKeyNotSet') }}</span>
+            <button v-if="lanApiKey.trim()" class="lan-copy" type="button" @click="copyLanValue(lanApiKey)">
+              {{ lanCopied === lanApiKey ? t('settings.lanPairing.copied') : t('settings.lanPairing.copy') }}
+            </button>
+          </div>
+        </div>
+        <!-- Pairing QR code: the PC side SHOWS it, the phone side scans it
+             (the scanner lives in the Android app's remote-chat form), so the
+             canvas is desktop-only. Rendered in every access mode — local mode
+             pairs only after the scope switch above. Falls back to the raw
+             payload text when no 2D canvas is available. -->
+        <template v-if="!isAndroid && pairPayload">
+          <div class="lan-pairing-body lan-qr">
+            <div class="lan-qr-card">
+              <canvas v-show="!qrFailed" ref="qrCanvas" class="lan-qr-canvas" aria-hidden="true"></canvas>
+              <div v-if="qrFailed" class="lan-qr-text">{{ pairPayload }}</div>
             </div>
-          </template>
+            <div v-if="lanAddresses.length > 1" class="lan-qr-select">
+              <ThemedSelect
+                :model-value="pairAddr"
+                :options="lanAddrOptions"
+                :placeholder="t('settings.lanPairing.address')"
+                variant="toolbar"
+                :label="t('settings.lanPairing.address')"
+                @update:model-value="setPairAddr"
+              />
+            </div>
+            <p class="lan-qr-caption">{{ t('settings.lanPairing.noScanHint') }}</p>
+            <div class="lan-qr-actions">
+              <button class="lan-copy" type="button" @click="refreshPairQr">{{ t('settings.lanPairing.qrRefresh') }}</button>
+              <button class="lan-copy" type="button" @click="copyPairLink">
+                {{ lanCopied === pairPayload ? t('settings.lanPairing.copied') : t('settings.lanPairing.copyLink') }}
+              </button>
+            </div>
+            <p class="lan-qr-privacy">{{ t('settings.lanPairing.qrPrivacy') }}</p>
+          </div>
         </template>
-        <p v-else class="row-foot lan-pairing-body">{{ t('settings.lanPairing.localHint') }}</p>
       </div>
 
       <!-- API key: always visible — it also protects the inference API in
@@ -684,6 +701,7 @@ const ICON_TRAY = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" s
 const ICON_SHARE = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>`
 const ICON_REFRESH = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>`
 const ICON_INFO = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`
+const ICON_WARN = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`
 
 // ─── Device island (frame ⑤) ─────────────────────────────────────────────────
 // OS + arch come from the shared platform state (App.vue wires it from the
@@ -1745,6 +1763,73 @@ async function manualCheck() {
   font-size: 11.5px;
   font-weight: 500;
   color: var(--text-dim);
+}
+
+/* ─── Local-mode warning bar ───
+   Amber bar in place of the former guidance footnote: the pairing QR below
+   stays rendered while local-only, so the bar says pairing connects only
+   after switching the access scope and offers that switch inline. The amber
+   tint follows the .ic-amber recipe (translucent hue reads on both themes). */
+.lan-warn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: var(--radius-sm);
+}
+
+.lan-warn-ic {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: rgba(245, 158, 11, 0.18);
+  color: var(--warning);
+  flex-shrink: 0;
+}
+
+.lan-warn-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--text-primary);
+}
+
+.lan-warn-btn {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  border-radius: 999px;
+  color: var(--warning);
+  font-size: 11.5px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.lan-warn-btn:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.18);
+}
+
+.lan-warn-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Inline scope-switch error: .row-error's 50px foot indent would double up
+   inside the already-indented .lan-pairing-body */
+.lan-warn-error {
+  padding-left: 0;
+  padding-bottom: 0;
 }
 
 .lan-qr-card {

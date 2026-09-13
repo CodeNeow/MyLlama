@@ -532,7 +532,6 @@ export const messages: Record<Locale, Record<string, string>> = {
     'settings.lanPairing.apiKey': 'API Key',
     'settings.lanPairing.copy': '复制',
     'settings.lanPairing.copied': '已复制',
-    'settings.lanPairing.localHint': '当前为本地访问：在上方「服务访问范围」中切换为局域网后，同一网络的设备即可连接本机服务。',
     'settings.lanPairing.none': '未检测到局域网地址',
     // QR pairing (PC side shows, phone side scans)
     'settings.lanPairing.ready': '已就绪',
@@ -541,6 +540,10 @@ export const messages: Record<Locale, Record<string, string>> = {
     'settings.lanPairing.copyLink': '复制链接',
     'settings.lanPairing.noScanHint': '无法扫码？复制链接后在手机端「远程聊天」从剪贴板导入',
     'settings.lanPairing.qrPrivacy': '二维码含本机服务地址与 API Key，请勿展示给不可信对象',
+    // Local-mode warning bar: the QR stays visible while local-only; pairing
+    // connects only after the inline switch flips the scope to LAN
+    'settings.lanPairing.localWarn': '当前为本地访问（仅本机可访问），手机扫码无法连接',
+    'settings.lanPairing.localSwitch': '切换为局域网',
     // ─── Remote chat form (client side of the phone-to-PC LAN chat) ───
     'settings.remoteChat.title': '远程聊天',
     'settings.remoteChat.desc': '将本应用（如手机）连接到同一局域网内另一台电脑的 llama-server 进行对话',
@@ -1336,7 +1339,6 @@ export const messages: Record<Locale, Record<string, string>> = {
     'settings.lanPairing.apiKey': 'API Key',
     'settings.lanPairing.copy': 'Copy',
     'settings.lanPairing.copied': 'Copied',
-    'settings.lanPairing.localHint': 'Currently local-only: switch "Server Access Scope" above to LAN so devices on the same network can connect to this service.',
     'settings.lanPairing.none': 'No LAN address detected',
     // QR pairing (PC side shows, phone side scans)
     'settings.lanPairing.ready': 'Ready',
@@ -1345,6 +1347,10 @@ export const messages: Record<Locale, Record<string, string>> = {
     'settings.lanPairing.copyLink': 'Copy link',
     'settings.lanPairing.noScanHint': "Can't scan? Copy the link and import it from the clipboard under Remote Chat on the phone",
     'settings.lanPairing.qrPrivacy': "The QR code carries this machine's service address and API key — never show it to untrusted parties",
+    // Local-mode warning bar: the QR stays visible while local-only; pairing
+    // connects only after the inline switch flips the scope to LAN
+    'settings.lanPairing.localWarn': 'Currently local-only (this machine only) — the phone cannot connect via the QR code',
+    'settings.lanPairing.localSwitch': 'Switch to LAN',
     // ─── Remote chat form (client side of the phone-to-PC LAN chat) ───
     'settings.remoteChat.title': 'Remote Chat',
     'settings.remoteChat.desc': 'Connect this app (e.g. a phone) to the llama-server of another computer on the same network',
