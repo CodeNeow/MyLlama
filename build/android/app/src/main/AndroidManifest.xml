@@ -63,6 +63,15 @@
             </intent-filter>
         </activity>
 
+        <!-- In-app QR scanner for the LAN pairing import (Phase 0.5): started
+             with startActivityForResult from MainActivity only, never
+             exported. Same configChanges set as MainActivity so rotation does
+             not recreate the activity mid-scan. -->
+        <activity
+            android:name="com.wails.app.QrScanActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden|uiMode" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

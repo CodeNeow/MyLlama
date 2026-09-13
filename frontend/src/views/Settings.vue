@@ -234,6 +234,13 @@
         <template v-if="appConfig.serverAccessMode === 'lan'">
           <p v-if="lanAddresses.length === 0" class="row-foot lan-pairing-body">{{ t('settings.lanPairing.none') }}</p>
           <div v-else class="lan-pairing-body">
+            <!-- Pairing status: green "ready" dot (this machine is addressable);
+                 a key-less service still pairs, but point at the API-key row -->
+            <div class="lan-status">
+              <span class="lan-status-dot" aria-hidden="true"></span>
+              <span class="lan-status-text">{{ t('settings.lanPairing.ready') }}</span>
+              <span v-if="!lanApiKey.trim()" class="lan-status-hint">{{ t('settings.lanPairing.suggestKey') }}</span>
+            </div>
             <div v-for="addr in lanAddresses" :key="addr" class="lan-row">
               <span class="lan-label">{{ t('settings.lanPairing.address') }}</span>
               <span class="lan-value lan-mono">{{ addr }}</span>
@@ -258,6 +265,36 @@
               </button>
             </div>
           </div>
+          <!-- Pairing QR code: the PC side SHOWS it, the phone side scans it
+               (the scanner lives in the Android app's remote-chat form), so the
+               canvas is desktop-only. Falls back to the raw payload text when
+               no 2D canvas is available. -->
+          <template v-if="!isAndroid && pairPayload">
+            <div class="lan-pairing-body lan-qr">
+              <div class="lan-qr-card">
+                <canvas v-show="!qrFailed" ref="qrCanvas" class="lan-qr-canvas" aria-hidden="true"></canvas>
+                <div v-if="qrFailed" class="lan-qr-text">{{ pairPayload }}</div>
+              </div>
+              <div v-if="lanAddresses.length > 1" class="lan-qr-select">
+                <ThemedSelect
+                  :model-value="pairAddr"
+                  :options="lanAddrOptions"
+                  :placeholder="t('settings.lanPairing.address')"
+                  variant="toolbar"
+                  :label="t('settings.lanPairing.address')"
+                  @update:model-value="setPairAddr"
+                />
+              </div>
+              <p class="lan-qr-caption">{{ t('settings.lanPairing.noScanHint') }}</p>
+              <div class="lan-qr-actions">
+                <button class="lan-copy" type="button" @click="refreshPairQr">{{ t('settings.lanPairing.qrRefresh') }}</button>
+                <button class="lan-copy" type="button" @click="copyPairLink">
+                  {{ lanCopied === pairPayload ? t('settings.lanPairing.copied') : t('settings.lanPairing.copyLink') }}
+                </button>
+              </div>
+              <p class="lan-qr-privacy">{{ t('settings.lanPairing.qrPrivacy') }}</p>
+            </div>
+          </template>
         </template>
         <p v-else class="row-foot lan-pairing-body">{{ t('settings.lanPairing.localHint') }}</p>
       </div>
@@ -460,6 +497,20 @@
             </div>
           </div>
         </div>
+        <!-- Pairing import: the Android build scans the PC's QR code through
+             the native scanner (the WebView has no camera path — no
+             WebChromeClient getUserMedia), every platform can paste a copied
+             myllama://pair link. Both fill the draft below for review; nothing
+             is saved until the user presses Save. -->
+        <div class="remote-fields remote-import-row">
+          <button v-if="isAndroid" class="dir-btn" type="button" :disabled="scanBusy" @click="startScanImport">
+            {{ t('settings.remoteChat.scan') }}
+          </button>
+          <button class="dir-btn" type="button" @click="importFromClipboard">
+            {{ t('settings.remoteChat.clipboard') }}
+          </button>
+        </div>
+        <p v-if="scanMsg" class="row-foot remote-scan-msg" :class="{ 'remote-scan-msg-err': scanMsgError }">{{ scanMsg }}</p>
         <div class="remote-fields">
           <label class="remote-field">
             <span class="remote-label">{{ t('settings.remoteChat.host') }}</span>
@@ -606,11 +657,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue'
+import { Events } from '@wailsio/runtime'
 import { appConfig, setTheme, loadConfig, setDownloadSource as applyDownloadSource, setLanguage as applyLanguage, setServerAccessMode as applyServerAccessMode, setApiKey as applyApiKey, setTrayEnabled as applyTrayEnabled, setRemoteChat as applyRemoteChat } from '../store'
-import { validateRemoteHost, type RemoteChatProfile } from '../lib/chatRemote'
+import { buildPairPayload, parsePairPayload, validateRemoteHost, type RemoteChatProfile } from '../lib/chatRemote'
 import { updateState, checkForUpdate } from '../lib/update'
-import { getAppVersion, getLlamaCpp, getSystemInfo, getServerConfig, getServerStatus, getLanAddresses, saveServerConfig, browseLlamaCppDownloadDir, browseModelDownloadDir, setApiRouteMode, getModels } from '../wails'
+import { getAppVersion, getLlamaCpp, getSystemInfo, getServerConfig, getServerStatus, getLanAddresses, saveServerConfig, browseLlamaCppDownloadDir, browseModelDownloadDir, setApiRouteMode, getModels, startQrScan } from '../wails'
 import { restartServer } from '../lib/serverControls'
 import { accelBuildKey, showTraySetting, showApiRouteSetting, showServingGpuSetting, updateSectionMode, showUpdateCheckActions, usePlatform } from '../lib/platform'
 import { handleLinkClick } from '../lib/linkHandler'
@@ -849,6 +901,96 @@ async function copyLanValue(value: string) {
   }
 }
 
+// ─── Pairing QR code (PC side shows, the phone side scans) ──────────────────
+// The canvas renders the myllama://pair payload for the selected LAN address;
+// the address choice persists in localStorage and cycles via the refresh
+// button when several addresses exist. qrcode is loaded lazily (Android
+// never renders the QR, it only scans). Rendering failures (no 2D canvas)
+// degrade to showing the raw payload text.
+const PAIR_ADDR_KEY = 'myllama-pair-addr'
+const qrCanvas = ref<HTMLCanvasElement | null>(null)
+const qrFailed = ref(false)
+const pairAddr = ref('')
+let qrRenderSeq = 0
+let qrUnmounted = false
+
+const pairPayload = computed(() =>
+  buildPairPayload({ host: pairAddr.value, port: lanPort.value, apiKey: lanApiKey.value }),
+)
+
+const lanAddrOptions = computed(() => lanAddresses.value.map((addr) => ({ value: addr, label: addr })))
+
+// Seed the persisted address choice once the LAN list arrives; a stale
+// saved value (address changed since) falls back to the first entry.
+function seedPairAddr() {
+  const list = lanAddresses.value
+  if (list.length === 0) {
+    pairAddr.value = ''
+    return
+  }
+  let saved = ''
+  try {
+    saved = localStorage.getItem(PAIR_ADDR_KEY) ?? ''
+  } catch {
+    // localStorage unavailable: default to the first address
+  }
+  pairAddr.value = saved && list.includes(saved) ? saved : list[0]
+}
+
+function setPairAddr(value: string) {
+  if (!value || value === pairAddr.value) return
+  pairAddr.value = value
+  try {
+    localStorage.setItem(PAIR_ADDR_KEY, value)
+  } catch {
+    // localStorage unavailable: the choice just does not persist
+  }
+}
+
+// Refresh button: cycle the displayed address when several exist, otherwise
+// only re-render the (single-address) code.
+function refreshPairQr() {
+  const list = lanAddresses.value
+  if (list.length > 1) {
+    const idx = list.indexOf(pairAddr.value)
+    setPairAddr(list[(idx + 1) % list.length])
+  }
+  void renderPairQr()
+}
+
+function copyPairLink() {
+  void copyLanValue(pairPayload.value)
+}
+
+// renderPairQr redraws the canvas for the current payload. The seq guard
+// makes overlapping async renders last-writer-wins: only the render started
+// for the newest payload may touch the canvas or the failure flag.
+async function renderPairQr() {
+  const canvas = qrCanvas.value
+  const seq = ++qrRenderSeq
+  if (!canvas || !pairPayload.value) return
+  try {
+    const mod = await import('qrcode')
+    if (qrUnmounted || seq !== qrRenderSeq || !pairPayload.value) return
+    await mod.toCanvas(canvas, pairPayload.value, { width: 224, margin: 2 })
+    if (seq === qrRenderSeq) qrFailed.value = false
+  } catch {
+    // No 2D canvas (exotic webview / cleared context): show the link text
+    if (seq === qrRenderSeq) qrFailed.value = true
+  }
+}
+
+// flush:'post' matters: the canvas element only exists once the payload-driven
+// v-if branch has rendered, and the default pre-flush would run this before
+// that DOM update — leaving the first-ever render a no-op.
+watch(pairPayload, () => {
+  void renderPairQr()
+}, { flush: 'post' })
+
+onBeforeUnmount(() => {
+  qrUnmounted = true
+})
+
 // ─── Remote chat form (client side of the LAN pairing) ──────────────────────
 // Draft copy of the persisted pairing: edited freely in the form, validated
 // inline with the same rules the backend SaveRemoteChat enforces, then
@@ -895,6 +1037,97 @@ async function saveRemoteDraft() {
   } finally {
     remoteSaving.value = false
   }
+}
+
+// ─── Pairing import (scan on Android / clipboard everywhere) ────────────────
+// The scan result arrives as the "common:qrscan" event (native QrScanActivity
+// → WailsBridge.emitEvent), carrying {"text": <payload>} on a hit and
+// {"error": "cancelled"} when the user backs out or denies the camera — the
+// cancelled case stays silent on purpose. Both import paths only FILL the
+// draft; nothing persists until the user presses Save.
+const QR_SCAN_EVENT = 'common:qrscan'
+const scanBusy = ref(false)
+const scanMsg = ref('')
+const scanMsgError = ref(false)
+let scanMsgTimer: ReturnType<typeof setTimeout> | null = null
+let unlistenQrScan: (() => void) | null = null
+
+// Transient import status line (toast-style: auto-clears after a few seconds;
+// green on success, red on failure).
+function showScanMsg(msg: string, isError: boolean) {
+  scanMsg.value = msg
+  scanMsgError.value = isError
+  if (scanMsgTimer) clearTimeout(scanMsgTimer)
+  scanMsgTimer = setTimeout(() => {
+    scanMsg.value = ''
+  }, 4000)
+}
+
+function applyPairToDraft(parsed: { host: string; port: number; apiKey: string }) {
+  remoteDraft.value.host = parsed.host
+  remoteDraft.value.port = parsed.port
+  remoteDraft.value.apiKey = parsed.apiKey
+  remoteSaved.value = false
+}
+
+function startScanImport() {
+  if (scanBusy.value) return
+  if (!startQrScan()) {
+    // Bridge unavailable (desktop / standalone vite): the button is
+    // Android-gated, so this is a defensive fallback rather than a real path
+    showScanMsg(t('settings.remoteChat.scanFail'), true)
+    return
+  }
+  // The native scanner page is up: block re-entry until the result (or its
+  // cancelled variant) lands on the event channel
+  scanBusy.value = true
+}
+
+async function importFromClipboard() {
+  let text = ''
+  try {
+    text = await navigator.clipboard.readText()
+  } catch {
+    showScanMsg(t('settings.remoteChat.clipErr'), true)
+    return
+  }
+  const parsed = parsePairPayload(text)
+  if (!parsed) {
+    showScanMsg(t('settings.remoteChat.scanBad'), true)
+    return
+  }
+  applyPairToDraft(parsed)
+  showScanMsg(t('settings.remoteChat.scanDone'), false)
+}
+
+// onQrScanEvent unwraps the WailsEvent wrapper ({name, data}) and the JSON
+// string payload — the same two-layer channel contract lib/safeArea.ts uses
+// for "common:safearea".
+function onQrScanEvent(raw: unknown): void {
+  scanBusy.value = false
+  let payload: unknown = raw
+  if (payload !== null && typeof payload === 'object' && 'data' in (payload as Record<string, unknown>)) {
+    payload = (payload as { data?: unknown }).data
+  }
+  if (typeof payload === 'string') {
+    try {
+      payload = JSON.parse(payload)
+    } catch {
+      return
+    }
+  }
+  if (payload === null || typeof payload !== 'object') return
+  const obj = payload as Record<string, unknown>
+  // {"error":"cancelled"} (user backed out / denied the camera): silent
+  if (typeof obj.error === 'string') return
+  if (typeof obj.text !== 'string') return
+  const parsed = parsePairPayload(obj.text)
+  if (!parsed) {
+    showScanMsg(t('settings.remoteChat.scanBad'), true)
+    return
+  }
+  applyPairToDraft(parsed)
+  showScanMsg(t('settings.remoteChat.scanDone'), false)
 }
 
 // Optional llama-server API key (bearer token; empty = no authentication): saved on
@@ -1104,9 +1337,12 @@ onMounted(async () => {
     lanApiKey.value = scfg.apiKey || ''
   }).catch(() => {})
   // LAN pairing card addresses (non-loopback IPv4; failures degrade to the
-  // "none detected" hint)
+  // "none detected" hint); the QR address preference seeds from the list
   getLanAddresses()
-    .then((list) => { lanAddresses.value = Array.isArray(list) ? list : [] })
+    .then((list) => {
+      lanAddresses.value = Array.isArray(list) ? list : []
+      seedPairAddr()
+    })
     .catch(() => { lanAddresses.value = [] })
   // GPU option list comes from the (cached) system info snapshot; failures
   // leave the selector disabled with the no-GPU hint.
@@ -1124,6 +1360,21 @@ onMounted(async () => {
   getModels()
     .then((list) => { scannedModels.value = list as ScannedModel[] })
     .catch(() => { scannedModels.value = null })
+  // Native QR-scan results ("common:qrscan", Android only): subscribe for the
+  // component's lifetime; the mock/runtime-less cases degrade to no events
+  try {
+    unlistenQrScan = Events.On(QR_SCAN_EVENT, onQrScanEvent) as unknown as () => void
+  } catch {
+    unlistenQrScan = null
+  }
+})
+
+onUnmounted(() => {
+  if (unlistenQrScan) {
+    unlistenQrScan()
+    unlistenQrScan = null
+  }
+  if (scanMsgTimer) clearTimeout(scanMsgTimer)
 })
 
 async function manualCheck() {
@@ -1467,6 +1718,83 @@ async function manualCheck() {
   border-color: var(--overlay-20);
 }
 
+/* ─── LAN pairing status + QR card ───
+   Green "ready" dot line, then the pairing QR in a WHITE rounded card — the
+   white background is deliberate in both themes: QR decoders need the light
+   quiet zone, so the card must not follow the dark-theme surface. */
+.lan-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.lan-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+  flex-shrink: 0;
+}
+
+.lan-status-hint {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-dim);
+}
+
+.lan-qr-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 240px;
+  max-width: 100%;
+  padding: 8px;
+  background: #ffffff;
+  border-radius: 14px;
+}
+
+.lan-qr-canvas {
+  display: block;
+  border-radius: 8px;
+}
+
+/* Fallback when no 2D canvas exists: the raw payload text on the white card */
+.lan-qr-text {
+  word-break: break-all;
+  padding: 8px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: #111827;
+}
+
+.lan-qr-select {
+  width: 240px;
+  max-width: 100%;
+}
+
+.lan-qr-caption {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  margin: 0;
+}
+
+.lan-qr-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lan-qr-privacy {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin: 0;
+}
+
 /* ─── Remote chat form (enabled switch + host / port / key fields) ─── */
 .remote-fields {
   display: flex;
@@ -1514,6 +1842,23 @@ async function manualCheck() {
   display: flex;
   justify-content: flex-end;
   padding: 0 0 9px;
+}
+
+/* Scan / clipboard import buttons above the remote-chat fields: same button
+   recipe as the directory rows (.dir-btn), stacked above the fields */
+.remote-import-row {
+  flex-direction: row;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Transient scan/import status line: green success, red failure */
+.remote-scan-msg {
+  color: #10b981;
+}
+
+.remote-scan-msg-err {
+  color: #ef4444;
 }
 
 .remote-saved {

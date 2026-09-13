@@ -92,8 +92,16 @@ public class MainActivity extends AppCompatActivity {
     private static final int PHOTO_CAPTURE_REQUEST = 7002;
     private static final int VIDEO_CAPTURE_REQUEST = 7003;
     private static final int CAMERA_PERMISSION_REQUEST = 7010;
+    // In-app QR scanner (QrScanActivity, LAN pairing import): its own request
+    // code, distinct from the capture requests so onActivityResult branches
+    // never collide.
+    private static final int QR_SCAN_REQUEST = 7020;
     private File pendingCaptureFile;
     private boolean pendingCaptureIsVideo;
+    // Set when launchQrScan had to ask for the CAMERA grant first; the
+    // permission callback then starts the actual scan (same pattern as
+    // pendingCaptureIsVideo above).
+    private boolean pendingQrScan;
 
     // System-event sources (battery/power, screen lock, network). Registered in
     // onCreate, torn down in onDestroy. Each forwards a "system:*" event to JS
@@ -442,12 +450,44 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * Launch the in-app QR scanner (QrScanActivity) for the LAN pairing
+     * import. Requests the CAMERA grant first when missing — the permission
+     * callback then starts the actual scan. The result is delivered to JS as
+     * a "common:qrscan" event: {"text":"<payload>"} on a hit,
+     * {"error":"cancelled"} on back-out / denial / failure.
+     */
+    public void launchQrScan() {
+        if (checkSelfPermission("android.permission.CAMERA") != PackageManager.PERMISSION_GRANTED) {
+            pendingQrScan = true;
+            requestPermissions(new String[]{"android.permission.CAMERA"}, CAMERA_PERMISSION_REQUEST);
+            return;
+        }
+        pendingQrScan = false;
+        try {
+            startActivityForResult(new Intent(this, QrScanActivity.class), QR_SCAN_REQUEST);
+        } catch (Exception e) {
+            Log.e(TAG, "launchQrScan failed", e);
+            bridge.emitEvent("common:qrscan", "{\"error\":\"cancelled\"}");
+        }
+    }
+
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == CAMERA_PERMISSION_REQUEST) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                launchCameraCapture(pendingCaptureIsVideo);
+                if (pendingQrScan) {
+                    pendingQrScan = false;
+                    launchQrScan();
+                } else {
+                    launchCameraCapture(pendingCaptureIsVideo);
+                }
+            } else if (pendingQrScan) {
+                pendingQrScan = false;
+                // Same cancelled envelope as a scanner back-out: the frontend
+                // stays silent on it by design
+                bridge.emitEvent("common:qrscan", "{\"error\":\"cancelled\"}");
             } else {
                 bridge.emitEvent("common:capture", "{\"error\":\"camera permission denied\"}");
             }
@@ -455,6 +495,28 @@ public class MainActivity extends AppCompatActivity {
         }
         if (bridge != null) {
             bridge.onRequestPermissionsResult(requestCode, grantResults);
+        }
+    }
+
+    /**
+     * Deliver the QR-scan outcome to JS: the decoded string wrapped as
+     * {"text": "..."} on RESULT_OK, {"error":"cancelled"} otherwise. The
+     * JSONObject building keeps arbitrary payload characters (quotes,
+     * non-ASCII) safe for the event channel.
+     */
+    private void handleQrScanResult(int resultCode, @Nullable Intent data) {
+        String text = resultCode == RESULT_OK && data != null ? data.getStringExtra(QrScanActivity.EXTRA_TEXT) : null;
+        if (text == null || text.isEmpty()) {
+            bridge.emitEvent("common:qrscan", "{\"error\":\"cancelled\"}");
+            return;
+        }
+        try {
+            JSONObject o = new JSONObject();
+            o.put("text", text);
+            bridge.emitEvent("common:qrscan", o.toString());
+        } catch (Exception e) {
+            Log.e(TAG, "handleQrScanResult failed", e);
+            bridge.emitEvent("common:qrscan", "{\"error\":\"cancelled\"}");
         }
     }
 
@@ -654,6 +716,10 @@ public class MainActivity extends AppCompatActivity {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == PHOTO_CAPTURE_REQUEST || requestCode == VIDEO_CAPTURE_REQUEST) {
             handleCaptureResult(resultCode, data);
+            return;
+        }
+        if (requestCode == QR_SCAN_REQUEST) {
+            handleQrScanResult(resultCode, data);
             return;
         }
         if (requestCode == WEB_FILE_CHOOSER_REQUEST) {

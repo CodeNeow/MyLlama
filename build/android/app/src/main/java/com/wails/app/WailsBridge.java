@@ -1238,6 +1238,22 @@ public class WailsBridge {
     }
 
     /**
+     * Open the in-app QR scanner (QrScanActivity) for the LAN pairing import.
+     * Result → "common:qrscan" event: {"text":"<payload>"} on a hit,
+     * {"error":"cancelled"} on back-out / denial / failure.
+     */
+    public void startQrScan() {
+        mainHandler.post(() -> {
+            if (activity instanceof MainActivity) {
+                ((MainActivity) activity).launchQrScan();
+            } else {
+                Log.e(TAG, "startQrScan: activity is not a MainActivity");
+                emitEvent("common:qrscan", "{\"error\":\"cancelled\"}");
+            }
+        });
+    }
+
+    /**
      * Start a foreground service that keeps the process alive for long-running
      * background work (with an ongoing notification). json: {"title","text"}.
      */

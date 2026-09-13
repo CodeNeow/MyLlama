@@ -139,6 +139,20 @@ public class WailsJSBridge {
     }
 
     /**
+     * Open the in-app QR scanner (QrScanActivity) for the LAN pairing import.
+     * Fire-and-forget like installUpdateApk's "call returns immediately, the
+     * outcome arrives separately" contract: the result is NOT returned here —
+     * it lands later as the "common:qrscan" event, carrying
+     * {"text":"<payload>"} on a hit or {"error":"cancelled"} on back-out,
+     * camera-permission denial or failure.
+     * Called from JavaScript: wails.startQrScan()
+     */
+    @JavascriptInterface
+    public void startQrScan() {
+        bridge.startQrScan();
+    }
+
+    /**
      * Get the platform name
      * Called from JavaScript: wails.platform()
      *

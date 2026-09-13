@@ -145,4 +145,13 @@ dependencies {
     implementation 'com.google.android.material:material:1.11.0'
     implementation 'androidx.biometric:biometric:1.1.0'
     implementation 'androidx.security:security-crypto:1.1.0-alpha06'
+    // In-app QR scanner (QrScanActivity, LAN pairing import): CameraX for the
+    // preview + analysis pipeline, ML Kit's bundled barcode model (offline,
+    // no Play Services dependency, QR-only via BarcodeScannerOptions).
+    // 1.2.3 fits the project's androidx line (appcompat 1.6.1 era) and needs
+    // compileSdk 33 — the project already builds with 35 — and minSdk 21.
+    implementation 'androidx.camera:camera-camera2:1.2.3'
+    implementation 'androidx.camera:camera-lifecycle:1.2.3'
+    implementation 'androidx.camera:camera-view:1.2.3'
+    implementation 'com.google.mlkit:barcode-scanning:16.1.1'
 }

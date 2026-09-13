@@ -526,7 +526,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     'settings.gpu.error': '保存推理显卡设置失败，请稍后重试',
     // ─── LAN pairing card (PC side of the phone-to-PC LAN chat) ───
     'settings.lanPairing.title': '局域网连接',
-    'settings.lanPairing.desc': '同一局域网内的设备（如手机 MyLlama）可通过以下地址连接本机推理服务',
+    'settings.lanPairing.desc': '同一局域网内的设备（如手机 MyLlama）可连接本机推理服务：手机扫描下方二维码即可导入，或复制地址手动填写',
     'settings.lanPairing.address': '本机地址',
     'settings.lanPairing.port': '服务端口',
     'settings.lanPairing.apiKey': 'API Key',
@@ -534,6 +534,13 @@ export const messages: Record<Locale, Record<string, string>> = {
     'settings.lanPairing.copied': '已复制',
     'settings.lanPairing.localHint': '当前为本地访问：在上方「服务访问范围」中切换为局域网后，同一网络的设备即可连接本机服务。',
     'settings.lanPairing.none': '未检测到局域网地址',
+    // QR pairing (PC side shows, phone side scans)
+    'settings.lanPairing.ready': '已就绪',
+    'settings.lanPairing.suggestKey': '建议设置 API Key，防止局域网内他人蹭用',
+    'settings.lanPairing.qrRefresh': '刷新二维码',
+    'settings.lanPairing.copyLink': '复制链接',
+    'settings.lanPairing.noScanHint': '无法扫码？复制链接后在手机端「远程聊天」从剪贴板导入',
+    'settings.lanPairing.qrPrivacy': '二维码含本机服务地址与 API Key，请勿展示给不可信对象',
     // ─── Remote chat form (client side of the phone-to-PC LAN chat) ───
     'settings.remoteChat.title': '远程聊天',
     'settings.remoteChat.desc': '将本应用（如手机）连接到同一局域网内另一台电脑的 llama-server 进行对话',
@@ -551,6 +558,13 @@ export const messages: Record<Locale, Record<string, string>> = {
     'settings.remoteChat.errPort': '端口范围应为 1-65535',
     'settings.remoteChat.errSave': '保存远程聊天设置失败，请稍后重试',
     'settings.remoteChat.hint': '局域网为明文传输：API Key 用于防止蹭网，不能防窃听',
+    // QR / clipboard pairing import (phone side)
+    'settings.remoteChat.scan': '扫码导入',
+    'settings.remoteChat.scanDone': '已导入配对信息，请核对后保存',
+    'settings.remoteChat.scanBad': '内容不是有效的配对信息',
+    'settings.remoteChat.scanFail': '无法打开扫码器',
+    'settings.remoteChat.clipboard': '从剪贴板导入',
+    'settings.remoteChat.clipErr': '读取剪贴板失败，请手动填写',
     'settings.update': '更新',
     'settings.checkUpdate': '检查更新',
     'settings.updateDesc': '当前版本 {version} · 自动检查每两天一次',
@@ -1316,7 +1330,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     'settings.gpu.error': 'Failed to save the inference GPU setting, please try again later',
     // ─── LAN pairing card (PC side of the phone-to-PC LAN chat) ───
     'settings.lanPairing.title': 'LAN Connection',
-    'settings.lanPairing.desc': 'Devices on the same network (e.g. MyLlama on a phone) can reach the inference service on this machine via the addresses below',
+    'settings.lanPairing.desc': "Devices on the same network (e.g. MyLlama on a phone) can reach this machine's inference service: scan the QR code below to import the pairing, or copy the addresses over manually",
     'settings.lanPairing.address': 'This machine',
     'settings.lanPairing.port': 'Service port',
     'settings.lanPairing.apiKey': 'API Key',
@@ -1324,6 +1338,13 @@ export const messages: Record<Locale, Record<string, string>> = {
     'settings.lanPairing.copied': 'Copied',
     'settings.lanPairing.localHint': 'Currently local-only: switch "Server Access Scope" above to LAN so devices on the same network can connect to this service.',
     'settings.lanPairing.none': 'No LAN address detected',
+    // QR pairing (PC side shows, phone side scans)
+    'settings.lanPairing.ready': 'Ready',
+    'settings.lanPairing.suggestKey': 'Set an API key to keep others on the network from freeloading',
+    'settings.lanPairing.qrRefresh': 'Refresh QR code',
+    'settings.lanPairing.copyLink': 'Copy link',
+    'settings.lanPairing.noScanHint': "Can't scan? Copy the link and import it from the clipboard under Remote Chat on the phone",
+    'settings.lanPairing.qrPrivacy': "The QR code carries this machine's service address and API key — never show it to untrusted parties",
     // ─── Remote chat form (client side of the phone-to-PC LAN chat) ───
     'settings.remoteChat.title': 'Remote Chat',
     'settings.remoteChat.desc': 'Connect this app (e.g. a phone) to the llama-server of another computer on the same network',
@@ -1341,6 +1362,13 @@ export const messages: Record<Locale, Record<string, string>> = {
     'settings.remoteChat.errPort': 'Port must be in range 1-65535',
     'settings.remoteChat.errSave': 'Failed to save the remote chat settings, please try again later',
     'settings.remoteChat.hint': 'LAN traffic is plaintext: the API key keeps freeloaders out but does not prevent eavesdropping',
+    // QR / clipboard pairing import (phone side)
+    'settings.remoteChat.scan': 'Scan to import',
+    'settings.remoteChat.scanDone': 'Pairing imported — review it and save',
+    'settings.remoteChat.scanBad': 'The content is not a valid pairing payload',
+    'settings.remoteChat.scanFail': 'Could not open the scanner',
+    'settings.remoteChat.clipboard': 'Import from clipboard',
+    'settings.remoteChat.clipErr': 'Could not read the clipboard — fill the fields in manually',
     'settings.update': 'Updates',
     'settings.checkUpdate': 'Check for Updates',
     'settings.updateDesc': 'Current version {version} · auto-checks every two days',

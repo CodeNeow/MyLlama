@@ -332,6 +332,7 @@ interface WailsAndroidBridge {
   installUpdateApk?: (path: string) => string
   openInstallPermissionSettings?: () => string
   getAppInfo?: () => string
+  startQrScan?: () => void
 }
 
 function androidBridge(): WailsAndroidBridge | undefined {
@@ -393,6 +394,21 @@ export async function androidAppInfo(): Promise<AndroidAppInfo | null> {
   } catch {
     return null
   }
+}
+
+// Open the Android in-app QR scanner (QrScanActivity) so the phone can scan
+// the PC's myllama://pair pairing QR. Fire-and-forget like the other
+// WailsJSBridge entry points (installUpdateApk's "call returns immediately,
+// result delivered separately" contract): the outcome arrives later as the
+// "common:qrscan" event — {"text": "<payload>"} on a hit, {"error":
+// "cancelled"} on back-out / permission denial — subscribe through the
+// @wailsio/runtime Events channel. Returns true when the scanner page was
+// launched, false when the bridge is unavailable (desktop / standalone vite).
+export function startQrScan(): boolean {
+  const bridge = androidBridge()
+  if (!bridge?.startQrScan) return false
+  bridge.startQrScan()
+  return true
 }
 
 // ─── Downloads (HF Mirror) ───────────────────────────────────────
