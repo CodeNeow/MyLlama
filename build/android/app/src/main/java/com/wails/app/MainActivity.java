@@ -165,7 +165,14 @@ public class MainActivity extends AppCompatActivity {
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);
         settings.setMediaPlaybackRequiresUserGesture(false);
-        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        // Always allow mixed content: the app assets are served from the
+        // secure https://wails.localhost origin, but the chat transport talks
+        // to llama-server over cleartext http on purpose — loopback works
+        // without this (Chromium treats 127.0.0.1 as potentially trustworthy)
+        // while LAN addresses like http://192.168.1.5:8080 are hard-blocked as
+        // mixed content (verified via WebView console in logcat). The
+        // plaintext-LAN tradeoff is already surfaced in the pairing UI.
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         // Wide viewport + overview mode make the WebView HONOR the viewport
         // meta width: with the default setUseWideViewPort(false) the layout
         // viewport is pinned to device-width and a meta like width=430 is
