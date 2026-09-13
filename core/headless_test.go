@@ -521,7 +521,7 @@ func TestControlPlaneDegradedStart(t *testing.T) {
 	}
 	t.Cleanup(func() { controlPlaneListen = orig })
 
-	if _, err := startControlPlane(); err == nil {
+	if _, err := startControlPlane(false); err == nil {
 		t.Fatal("an occupied port must surface an error from startControlPlane")
 	}
 

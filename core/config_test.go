@@ -485,6 +485,46 @@ func TestLoadConfigAccessModeLAN(t *testing.T) {
 	}
 }
 
+// TestLoadConfigRemoteStartDefaultFalse verifies backward compatibility: an
+// old config JSON without the remoteStart key loads the server config with
+// RemoteStart=false (LAN-exposed control plane off by default), and an
+// explicit true survives the round trip through SaveServerConfig.
+func TestLoadConfigRemoteStartDefaultFalse(t *testing.T) {
+	withTempCwd(t)
+	saveConfigState(t)
+
+	// Old config: no remoteStart field → disabled (zero value)
+	if err := os.WriteFile(configFile, []byte(`{"serverConfig":{"accessMode":"local","port":8080,"maxModels":1}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	loadConfig()
+	serverConfigMu.Lock()
+	scfg := cachedServerConfig
+	serverConfigMu.Unlock()
+	if scfg.RemoteStart {
+		t.Errorf("missing remoteStart must load as false (off by default), got %+v", scfg)
+	}
+
+	// Save round trip: enabled=true persists and reloads unchanged
+	app := &App{}
+	if err := app.SaveServerConfig(ServerConfig{AccessMode: accessLocal, Port: 8080, MaxModels: 1, RemoteStart: true}); err != nil {
+		t.Fatalf("SaveServerConfig with RemoteStart=true should succeed: %v", err)
+	}
+	serverConfigMu.Lock()
+	scfg = cachedServerConfig
+	serverConfigMu.Unlock()
+	if !scfg.RemoteStart {
+		t.Fatalf("SaveServerConfig must persist RemoteStart=true, got %+v", scfg)
+	}
+	loadConfig()
+	serverConfigMu.Lock()
+	scfg = cachedServerConfig
+	serverConfigMu.Unlock()
+	if !scfg.RemoteStart {
+		t.Errorf("remoteStart=true must survive a load round trip, got %+v", scfg)
+	}
+}
+
 // TestLoadConfigLanguageFallback verifies the language preference whitelist fallback:
 // missing fields and illegal values both fall back to auto; only zh/en/auto are kept
 // (same policy as downloadSource).

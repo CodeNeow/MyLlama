@@ -260,6 +260,16 @@
         :disabled="remoteProbing"
         @click="refreshRemoteModels"
       >{{ t('chat.remoteProbeRetry') }}</button>
+      <!-- Remote service start (Phase R): one tap asks the PC's MyLlama app
+           (control plane, fixed port 1900) to bring llama-server up; the
+           outcome surfaces as a notice line and a successful start schedules
+           an automatic re-probe. -->
+      <button
+        class="remote-probe-retry remote-start-btn"
+        type="button"
+        :disabled="remoteStartBusy"
+        @click="remoteStart"
+      >{{ t('chat.remoteStartBtn') }}</button>
     </div>
     <div
       v-else-if="isRemoteTarget && !remoteProbing && remoteModels.length === 0"
@@ -370,6 +380,7 @@ import {
   type RouterModel,
 } from '../lib/chat'
 import { remoteEndpoint } from '../lib/chatRemote'
+import { remoteStartService, type RemoteStartResult } from '../lib/remoteStart'
 import {
   GEN_PRESET_DEFAULT_ID,
   clampPresetSamplingField,
@@ -660,6 +671,50 @@ const remoteProbeFailed = ref(false)
  * but nothing loaded".
  */
 const remoteProbing = ref(false)
+
+/**
+ * Remote service start (Phase R): a POST /start to the PC's control plane is
+ * in flight — the warning bar's secondary button disables while true. The
+ * delayed auto-refresh after a successful start is cleared on unmount so a
+ * leaving page never probes a dead target.
+ */
+const remoteStartBusy = ref(false)
+let remoteStartTimer: ReturnType<typeof setTimeout> | null = null
+
+/**
+ * Fire the remote start against the paired PC's control plane (fixed port
+ * 1900, pairing API key as the bearer) and surface the outcome as a transient
+ * notice line: started/already-running → schedule a delayed re-probe so the
+ * picker refills and the warning bar resolves itself; not-allowed → point at
+ * the PC-side switch/key; unreachable → the PC app is not running. The result
+ * taxonomy mirrors lib/remoteStart's RemoteStartResult.
+ */
+async function remoteStart(): Promise<void> {
+  if (!isRemoteTarget.value || remoteStartBusy.value) return
+  remoteStartBusy.value = true
+  let result: RemoteStartResult
+  try {
+    result = await remoteStartService(effectiveTarget.value.host ?? '', effectiveTarget.value.apiKey ?? '')
+  } finally {
+    remoteStartBusy.value = false
+  }
+  if (result === 'started' || result === 'already-running') {
+    showModelNotice(t('chat.remoteStartOk'))
+    if (remoteStartTimer) clearTimeout(remoteStartTimer)
+    // Give the PC's bring-up a beat (preset generation + spawn) before the
+    // probe resumes; refreshRemoteModels re-raises remoteProbeFailed if the
+    // service is still not answering, so a failed start stays visible.
+    remoteStartTimer = setTimeout(() => {
+      void refreshRemoteModels()
+    }, 2000)
+  } else if (result === 'not-allowed') {
+    showModelNotice(t('chat.remoteStartNotAllowed'))
+  } else if (result === 'unreachable' || result === 'not-running') {
+    showModelNotice(t('chat.remoteStartUnreachable'))
+  } else {
+    showModelNotice(t('chat.remoteStartFail'))
+  }
+}
 
 /**
  * Model-chip placeholder (frame ⑦): with an empty directory the touch-tier
@@ -1412,6 +1467,8 @@ onMounted(async () => {
 onUnmounted(() => {
   document.removeEventListener('click', onDocClick)
   if (modelNoticeTimer) clearTimeout(modelNoticeTimer)
+  // A scheduled post-start re-probe must not fire against a dead target.
+  if (remoteStartTimer) clearTimeout(remoteStartTimer)
 })
 </script>
 
@@ -1683,6 +1740,18 @@ html[data-os='ios'] .chat-model-select :deep(button.themed-select__trigger:activ
   /* Probe in flight: dim instead of disappearing (no layout jump) */
   opacity: 0.5;
   cursor: default;
+}
+
+/* Remote service start (Phase R): secondary to Retry — neutral glass surface
+   instead of the amber accent, same shape and touch behavior. */
+.remote-start-btn {
+  background: var(--bg-secondary);
+  border-color: var(--border);
+}
+
+.remote-start-btn:hover:not(:disabled) {
+  background: var(--hover-bg, var(--bg-secondary));
+  border-color: var(--overlay-20);
 }
 
 /* Reachable but nothing loaded: neutral gray hint, no action button */

@@ -470,6 +470,32 @@
               </button>
             </div>
           </div>
+          <!-- Remote service start (Phase R): expose the control plane's
+               POST /start on the LAN so the phone pairing can pull up this
+               machine's llama-server when its probe fails. Optimistic toggle
+               (same save pattern as the access scope); the bind happens at
+               app start, so changes need a restart to take effect. -->
+          <div class="lan-pairing-body lan-remote-start">
+            <div class="lan-row">
+              <span class="lan-label">{{ t('settings.lanPairing.remoteStart') }}</span>
+              <div
+                class="switch"
+                :class="{ on: remoteStartOn, disabled: remoteStartBusy }"
+                role="switch"
+                :aria-checked="remoteStartOn"
+                :aria-label="t('settings.lanPairing.remoteStart')"
+                tabindex="0"
+                @click="toggleRemoteStart"
+                @keydown.enter="toggleRemoteStart"
+              >
+              </div>
+            </div>
+            <p class="row-foot lan-remote-start-desc">{{ t('settings.lanPairing.remoteStartDesc') }}</p>
+            <p v-if="remoteStartOn && !lanApiKey.trim()" class="row-foot lan-remote-start-desc lan-remote-start-warn">
+              {{ t('settings.lanPairing.remoteStartHintKey') }}
+            </p>
+            <p v-if="remoteStartError" class="row-error lan-remote-start-desc">{{ remoteStartError }}</p>
+          </div>
           <!-- Pairing QR code: the PC side SHOWS it, the phone side scans it
                (the scanner lives in this card's connect section on Android),
                so the canvas is desktop-only. Rendered in every access mode —
@@ -929,6 +955,34 @@ const lanPort = ref(0)
 const lanApiKey = ref('')
 const lanCopied = ref('')
 
+// ─── Remote service start toggle (Phase R, share role) ──────────────────────
+// Mirrors ServerConfig.RemoteStart: seeded with the config fetch, toggled via
+// the whole-config saveServerConfig round trip (same optimistic pattern as
+// the access scope: fetch latest → change one field → save whole → rollback
+// the local flag on failure). The control plane binds at app start, so the
+// toggle only persists the preference — the backend shows "restart the app
+// to take effect" in the description.
+const remoteStartOn = ref(false)
+const remoteStartBusy = ref(false)
+const remoteStartError = ref('')
+
+async function toggleRemoteStart() {
+  if (remoteStartBusy.value) return
+  const next = !remoteStartOn.value
+  remoteStartBusy.value = true
+  remoteStartError.value = ''
+  try {
+    const scfg = await getServerConfig()
+    scfg.remoteStart = next
+    await saveServerConfig(scfg)
+    remoteStartOn.value = next
+  } catch {
+    remoteStartError.value = t('settings.lanPairing.remoteStartError')
+  } finally {
+    remoteStartBusy.value = false
+  }
+}
+
 let lanCopiedTimer: ReturnType<typeof setTimeout> | null = null
 
 async function copyLanValue(value: string) {
@@ -1379,6 +1433,8 @@ onMounted(async () => {
     // seed the LAN pairing card: service port + API-key status
     lanPort.value = scfg.port
     lanApiKey.value = scfg.apiKey || ''
+    // seed the remote-start toggle (Phase R share-role switch)
+    remoteStartOn.value = scfg.remoteStart === true
   }).catch(() => {})
   // LAN pairing card addresses (non-loopback IPv4; failures degrade to the
   // "none detected" hint); the QR address preference seeds from the list.
@@ -1730,6 +1786,24 @@ async function manualCheck() {
   font-size: 11.5px;
   line-height: 1.5;
   color: var(--text-dim);
+}
+
+/* Remote service start toggle row (Phase R): the switch rides the row's
+   right edge (row-tail alignment) instead of hugging its label. */
+.lan-remote-start .switch {
+  margin-left: auto;
+}
+
+.lan-remote-start-desc {
+  margin: 0;
+  padding: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.lan-remote-start-warn {
+  color: var(--warning);
 }
 
 .lan-row {

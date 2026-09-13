@@ -164,6 +164,12 @@ type ServerConfig struct {
 	// GPU probe list in SaveServerConfig; old configs missing the field load
 	// as "" (auto) naturally.
 	DeviceID string `json:"deviceId"`
+	// RemoteStart exposes the control plane's POST /start on the LAN (control
+	// plane binds 0.0.0.0:1900 instead of loopback) so a phone pairing can
+	// start this machine's llama-server when its probe fails. Token-gated
+	// (env token or APIKey). Default false — old configs missing the field
+	// load as disabled; takes effect on the next app start (bind timing).
+	RemoteStart bool `json:"remoteStart"`
 }
 
 type ModelConfig struct {
@@ -532,6 +538,10 @@ func loadConfig() {
 	// DeviceID (serving-GPU UUID): Go zero value "" (auto / default device)
 	// already covers old configs missing the field, no fallback needed.
 	scfg.DeviceID = cfg.ServerConfig.DeviceID
+	// RemoteStart (LAN-exposed control plane /start): Go zero value false
+	// (disabled) already covers old configs missing the field, no fallback
+	// needed.
+	scfg.RemoteStart = cfg.ServerConfig.RemoteStart
 	if cfg.ServerConfig.Port != 0 {
 		scfg.Port = cfg.ServerConfig.Port
 	}

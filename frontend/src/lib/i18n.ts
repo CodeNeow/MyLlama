@@ -461,6 +461,13 @@ export const messages: Record<Locale, Record<string, string>> = {
     'chat.remoteProbeFail': '无法连接远程电脑——请检查地址与端口、对方电脑的服务是否运行、以及对方防火墙是否放行该端口',
     'chat.remoteProbeRetry': '重试',
     'chat.remoteEmptyHint': '对方电脑在线，但没有已加载的模型——在对方电脑的聊天页选一个模型发一条消息（服务端会懒加载），它就会出现在这里',
+    // Remote service start (Phase R): the warning bar's secondary button +
+    // the transient outcome lines (chat notice stack)
+    'chat.remoteStartBtn': '远程启动服务',
+    'chat.remoteStartOk': '已远程启动，正在连接…',
+    'chat.remoteStartNotAllowed': '对方电脑未开启远程启动或未设置 API Key',
+    'chat.remoteStartUnreachable': '电脑端应用未运行，无法远程启动',
+    'chat.remoteStartFail': '远程启动失败',
 
     // ─── Monitoring (embedded in Api.vue) ───
     'monitor.uptimeLabel': '运行时长',
@@ -557,6 +564,12 @@ export const messages: Record<Locale, Record<string, string>> = {
     // serve other devices (product decision; backend effectiveHost refuses
     // the lan bind)
     'settings.lanPairing.shareLocalOnly': '手机端仅在本机运行模型，不对外提供服务',
+    // Remote service start (Phase R): exposes the control plane's POST /start
+    // on the LAN so the phone pairing can pull up this machine's llama-server
+    'settings.lanPairing.remoteStart': '允许手机远程启动服务',
+    'settings.lanPairing.remoteStartDesc': '手机在聊天页连接失败时可一键拉起本机 llama-server（控制面端口固定 1900）；需设置 API Key，重启应用后生效',
+    'settings.lanPairing.remoteStartHintKey': '尚未设置 API Key：远程启动只有在设置 API Key 后才会放行',
+    'settings.lanPairing.remoteStartError': '远程启动开关保存失败，请稍后重试',
     // ─── Remote chat form (connect side of the LAN pairing card) ───
     'settings.remoteChat.enabled': '启用远程聊天',
     'settings.remoteChat.host': '电脑地址',
@@ -1279,6 +1292,13 @@ export const messages: Record<Locale, Record<string, string>> = {
     'chat.remoteProbeFail': 'Cannot reach the remote PC — check the address and port, whether its service is running, and whether its firewall allows this port',
     'chat.remoteProbeRetry': 'Retry',
     'chat.remoteEmptyHint': 'The PC is online but has no loaded models — on the PC, pick a model in its chat page and send a message (the server lazy-loads it); it will appear here',
+    // Remote service start (Phase R): the warning bar's secondary button +
+    // the transient outcome lines (chat notice stack)
+    'chat.remoteStartBtn': 'Start service remotely',
+    'chat.remoteStartOk': 'Started remotely, connecting…',
+    'chat.remoteStartNotAllowed': "The PC has not enabled remote start or has no API key set",
+    'chat.remoteStartUnreachable': "The PC's MyLlama app is not running — cannot start the service remotely",
+    'chat.remoteStartFail': 'Remote start failed',
 
     // ─── Monitor (embedded in Api.vue) ───
     'monitor.uptimeLabel': 'Uptime',
@@ -1375,6 +1395,12 @@ export const messages: Record<Locale, Record<string, string>> = {
     // serve other devices (product decision; backend effectiveHost refuses
     // the lan bind)
     'settings.lanPairing.shareLocalOnly': 'The phone runs models locally only — it does not serve other devices',
+    // Remote service start (Phase R): exposes the control plane's POST /start
+    // on the LAN so the phone pairing can pull up this machine's llama-server
+    'settings.lanPairing.remoteStart': 'Allow phone to start the service remotely',
+    'settings.lanPairing.remoteStartDesc': "When the phone cannot connect, it can pull up this machine's llama-server from its chat page (control-plane port fixed at 1900); requires the API key and an app restart to take effect",
+    'settings.lanPairing.remoteStartHintKey': 'No API key set: remote start is refused until an API key is configured above',
+    'settings.lanPairing.remoteStartError': 'Failed to save the remote-start switch, try again later',
     // ─── Remote chat form (connect side of the LAN pairing card) ───
     'settings.remoteChat.enabled': 'Enable remote chat',
     'settings.remoteChat.host': 'PC address',

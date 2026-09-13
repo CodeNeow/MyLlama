@@ -179,7 +179,9 @@ export async function benchmarkModel(modelID: string): Promise<ModelBenchResult>
 // ServerConfig mirrors the backend core.ServerConfig: accessMode is the service access
 // scope ("local" | "lan"), host is the actual listen address derived from accessMode,
 // apiKey is the optional llama-server bearer token (empty = no authentication),
-// deviceId is the serving-GPU selection (stable nvidia-smi UUID; empty = auto, default CUDA device).
+// deviceId is the serving-GPU selection (stable nvidia-smi UUID; empty = auto, default CUDA device),
+// remoteStart exposes the control plane's POST /start on the LAN (default false;
+// old configs load disabled, takes effect on the next app start).
 export interface ServerConfig {
   accessMode: string
   host: string
@@ -188,6 +190,7 @@ export interface ServerConfig {
   cacheRam: number
   apiKey: string
   deviceId: string
+  remoteStart?: boolean
 }
 
 export async function getServerConfig(): Promise<ServerConfig> {

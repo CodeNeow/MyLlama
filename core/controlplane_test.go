@@ -364,3 +364,243 @@ func TestControlPlaneOriginCheck(t *testing.T) {
 		t.Errorf("origin-less stop with token env = %d, want 401 (origin gate must not bypass token)", rec.Code)
 	}
 }
+
+// ─── POST /start (Phase R: phone-initiated remote service start) ────────────
+
+// withControlLAN pins the control plane's exposure mode for the duration of
+// the test (the direct-mux tests never bind a real listener, so the mode is
+// set by hand the same way startControlPlane records it).
+func withControlLAN(t *testing.T, lanExposed bool) {
+	t.Helper()
+	controlPlaneMu.Lock()
+	origPort, origLAN := controlPlanePort, controlPlaneLAN
+	controlPlanePort, controlPlaneLAN = "1900", lanExposed
+	controlPlaneMu.Unlock()
+	t.Cleanup(func() {
+		controlPlaneMu.Lock()
+		controlPlanePort, controlPlaneLAN = origPort, origLAN
+		controlPlaneMu.Unlock()
+	})
+}
+
+// withControlAPIKey pins the cached server config's APIKey (the second LAN
+// token source) for the duration of the test.
+func withControlAPIKey(t *testing.T, key string) {
+	t.Helper()
+	serverConfigMu.Lock()
+	orig := cachedServerConfig
+	cachedServerConfig.APIKey = key
+	serverConfigMu.Unlock()
+	t.Cleanup(func() {
+		serverConfigMu.Lock()
+		cachedServerConfig = orig
+		serverConfigMu.Unlock()
+	})
+}
+
+// controlStartState carries the stubbed /start bring-up result.
+type controlStartState struct{ err error }
+
+// withControlStartStub replaces the /start seam's bring-up function (no test
+// ever really scans model dirs or spawns llama-server) and returns the state
+// pointer the test flips to inject outcomes.
+func withControlStartStub(t *testing.T) *controlStartState {
+	t.Helper()
+	state := &controlStartState{}
+	orig := controlPlaneStartServer
+	controlPlaneStartServer = func() error { return state.err }
+	t.Cleanup(func() { controlPlaneStartServer = orig })
+	return state
+}
+
+// TestControlPlaneStartLoopback verifies /start under the historical loopback
+// bind: POST-only, non-loopback callers rejected, token semantics unchanged
+// (env unset → the loopback bind is the only gate; env set → 401 missing /
+// 403 wrong), and the response bodies carry the started flag / failure reason.
+func TestControlPlaneStartLoopback(t *testing.T) {
+	saveAdoptedState(t)
+	withControlLAN(t, false)
+	stub := withControlStartStub(t)
+
+	serverMu.Lock()
+	serverRunning = false
+	serverCmd = nil
+	adoptedPid = 0
+	serverMu.Unlock()
+
+	mux := controlPlaneMux()
+	loopback := "127.0.0.1:12345"
+	remote := "192.168.1.5:12345"
+
+	// non-POST → 405
+	if rec := controlRequest(mux, http.MethodGet, "/start", loopback, nil); rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("GET /start = %d, want 405", rec.Code)
+	}
+
+	// non-loopback remote → 403 on the loopback bind
+	if rec := controlRequest(mux, http.MethodPost, "/start", remote, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("remote /start on loopback bind = %d, want 403", rec.Code)
+	}
+
+	// happy path: 200 {"started":true}
+	var body struct {
+		Started bool   `json:"started"`
+		Reason  string `json:"reason"`
+	}
+	decodeControlJSON(t, controlRequest(mux, http.MethodPost, "/start", loopback, nil), http.StatusOK, &body)
+	if !body.Started {
+		t.Errorf("start body = %+v, want started:true", body)
+	}
+
+	// start failure: 500 with the error text as reason
+	stub.err = fmt.Errorf("no models found in the LLM-Models directory")
+	rec := controlRequest(mux, http.MethodPost, "/start", loopback, nil)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("failing /start = %d, want 500", rec.Code)
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil || body.Started || body.Reason == "" {
+		t.Errorf("failure body = %s, want {started:false, reason:<err>}", rec.Body.String())
+	}
+
+	// token env set: loopback callers need the header (401 missing / 403 wrong)
+	t.Setenv(controlPlaneTokenEnv, "secret")
+	if rec := controlRequest(mux, http.MethodPost, "/start", loopback, nil); rec.Code != http.StatusUnauthorized {
+		t.Errorf("missing token /start = %d, want 401", rec.Code)
+	}
+	if rec := controlRequest(mux, http.MethodPost, "/start", loopback, map[string]string{"X-Control-Token": "wrong"}); rec.Code != http.StatusForbidden {
+		t.Errorf("wrong token /start = %d, want 403", rec.Code)
+	}
+	stub.err = nil
+	decodeControlJSON(t, controlRequest(mux, http.MethodPost, "/start", loopback, map[string]string{"X-Control-Token": "secret"}), http.StatusOK, &body)
+	if !body.Started {
+		t.Errorf("start body with env token = %+v, want started:true", body)
+	}
+}
+
+// TestControlPlaneStartAlreadyRunning verifies the idempotence branch: a
+// running llama-server answers 409 {"started":false,"reason":"already running"}
+// without invoking the bring-up seam (a phone re-pressing the button against
+// a live server is a no-op, not an error surface).
+func TestControlPlaneStartAlreadyRunning(t *testing.T) {
+	saveAdoptedState(t)
+	withControlLAN(t, false)
+	withControlStartStub(t)
+
+	serverMu.Lock()
+	serverRunning = true
+	serverCmd = nil
+	adoptedPid = 4321
+	serverMu.Unlock()
+
+	mux := controlPlaneMux()
+	var body struct {
+		Started bool   `json:"started"`
+		Reason  string `json:"reason"`
+	}
+	decodeControlJSON(t, controlRequest(mux, http.MethodPost, "/start", "127.0.0.1:12345", nil), http.StatusConflict, &body)
+	if body.Started || body.Reason != "already running" {
+		t.Errorf("already-running body = %+v, want {started:false, reason:\"already running\"}", body)
+	}
+}
+
+// TestControlPlaneStartLANAuth is the LAN-exposure auth matrix: on the
+// wildcard bind /start is reachable from a LAN remote address, requires a
+// token (env token OR the persisted APIKey, constant-time compared), refuses
+// a key-less plane outright (403), keeps the Origin whitelist (phone app
+// origin allowed, browser attacker origins and "null" rejected), and the
+// LAN-exposed /status /logs gates follow the same mandatory-token policy so a
+// key-less wildcard bind leaks nothing.
+func TestControlPlaneStartLANAuth(t *testing.T) {
+	saveAdoptedState(t)
+	withControlLAN(t, true)
+	stub := withControlStartStub(t)
+	stub.err = nil
+
+	serverMu.Lock()
+	serverRunning = false
+	serverCmd = nil
+	adoptedPid = 0
+	serverMu.Unlock()
+
+	mux := controlPlaneMux()
+	phone := "192.168.1.8:51000"
+
+	cases := []struct {
+		name    string
+		envSet  bool
+		apiKey  string
+		headers map[string]string
+		want    int
+	}{
+		// token sources
+		{name: "correct APIKey 200", apiKey: "pair-key", headers: map[string]string{"X-Control-Token": "pair-key"}, want: http.StatusOK},
+		{name: "correct env token 200", envSet: true, headers: map[string]string{"X-Control-Token": "env-secret"}, want: http.StatusOK},
+		{name: "wrong token 401", apiKey: "pair-key", headers: map[string]string{"X-Control-Token": "wrong"}, want: http.StatusUnauthorized},
+		{name: "missing token 401", apiKey: "pair-key", want: http.StatusUnauthorized},
+		{name: "no token source 403", want: http.StatusForbidden},
+		{name: "empty APIKey with header 403", headers: map[string]string{"X-Control-Token": "anything"}, want: http.StatusForbidden},
+		// origin gate (APIKey configured, correct token)
+		{name: "phone app origin allowed", apiKey: "pair-key", headers: map[string]string{"X-Control-Token": "pair-key", "Origin": "https://wails.localhost"}, want: http.StatusOK},
+		{name: "attacker origin 403", apiKey: "pair-key", headers: map[string]string{"X-Control-Token": "pair-key", "Origin": "http://evil.example"}, want: http.StatusForbidden},
+		{name: "null origin 403", apiKey: "pair-key", headers: map[string]string{"X-Control-Token": "pair-key", "Origin": "null"}, want: http.StatusForbidden},
+		{name: "own loopback origin allowed", apiKey: "pair-key", headers: map[string]string{"X-Control-Token": "pair-key", "Origin": "http://127.0.0.1:1900"}, want: http.StatusOK},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.envSet {
+				t.Setenv(controlPlaneTokenEnv, "env-secret")
+			}
+			withControlAPIKey(t, tc.apiKey)
+			var body struct {
+				Started bool   `json:"started"`
+				Reason  string `json:"reason"`
+			}
+			rec := controlRequest(mux, http.MethodPost, "/start", phone, tc.headers)
+			if rec.Code != tc.want {
+				t.Fatalf("POST /start = %d, want %d (body: %s)", rec.Code, tc.want, rec.Body.String())
+			}
+			if tc.want == http.StatusOK {
+				if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil || !body.Started {
+					t.Errorf("start body = %s, want {started:true}", rec.Body.String())
+				}
+			}
+		})
+	}
+
+	// LAN-mode Host relaxation: the phone addresses the plane by the pairing
+	// host (any hostname on the bound port passes the 421 host gate), while
+	// a bare host or a wrong port still fails addressing.
+	hostCases := []struct {
+		name string
+		host string
+		want int
+	}{
+		{"pairing host", "192.168.1.5:1900", http.StatusOK},
+		{"arbitrary hostname on port", "my-pc.local:1900", http.StatusOK},
+		{"bare host no port", "192.168.1.5", http.StatusMisdirectedRequest},
+		{"wrong port", "192.168.1.5:8080", http.StatusMisdirectedRequest},
+	}
+	for _, tc := range hostCases {
+		withControlAPIKey(t, "pair-key")
+		headers := map[string]string{"X-Control-Token": "pair-key", "Host": tc.host}
+		if rec := controlRequest(mux, http.MethodPost, "/start", phone, headers); rec.Code != tc.want {
+			t.Errorf("%s: host %q = %d, want %d", tc.name, tc.host, rec.Code, tc.want)
+		}
+	}
+
+	// /status and /logs on the LAN bind follow the same mandatory-token rule:
+	// key-less plane refuses outright, configured key unlocks.
+	withControlAPIKey(t, "")
+	if rec := controlRequest(mux, http.MethodGet, "/status", phone, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("LAN key-less /status = %d, want 403", rec.Code)
+	}
+	withControlAPIKey(t, "pair-key")
+	if rec := controlRequest(mux, http.MethodGet, "/status", phone, nil); rec.Code != http.StatusUnauthorized {
+		t.Errorf("LAN /status without header = %d, want 401", rec.Code)
+	}
+	var statusBody controlStatusBody
+	decodeControlJSON(t, controlRequest(mux, http.MethodGet, "/status", phone, map[string]string{"X-Control-Token": "pair-key"}), http.StatusOK, &statusBody)
+	if rec := controlRequest(mux, http.MethodGet, "/logs", phone, map[string]string{"X-Control-Token": "wrong"}); rec.Code != http.StatusUnauthorized {
+		t.Errorf("LAN /logs wrong token = %d, want 401", rec.Code)
+	}
+}

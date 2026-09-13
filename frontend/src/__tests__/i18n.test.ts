@@ -221,4 +221,39 @@ describe('lib/i18n', () => {
     expect(t('chat.remoteEmptyHint')).toContain('no loaded models')
     expect(t('chat.remoteEmptyHint')).toContain('lazy-loads')
   })
+
+  it('remote start keys render in both locales with distinct outcome lines (Phase R)', () => {
+    // Chat.vue remote-start button + the transient outcome notices: the
+    // started / not-allowed / unreachable / failed lines must all be distinct
+    // so each result state reads differently.
+    setLocale('zh')
+    expect(t('chat.remoteStartBtn')).toBe('远程启动服务')
+    expect(t('chat.remoteStartOk')).toContain('已远程启动')
+    expect(t('chat.remoteStartNotAllowed')).toContain('API Key')
+    expect(t('chat.remoteStartUnreachable')).toContain('未运行')
+    expect(t('chat.remoteStartFail')).toContain('失败')
+    const zhLines = [t('chat.remoteStartOk'), t('chat.remoteStartNotAllowed'), t('chat.remoteStartUnreachable'), t('chat.remoteStartFail')]
+    expect(new Set(zhLines).size).toBe(4)
+    setLocale('en')
+    expect(t('chat.remoteStartBtn')).toBe('Start service remotely')
+    expect(t('chat.remoteStartOk')).toContain('Started remotely')
+    expect(t('chat.remoteStartNotAllowed')).toContain('API key')
+    expect(t('chat.remoteStartUnreachable')).toContain('not running')
+    expect(t('chat.remoteStartFail')).toContain('failed')
+    const enLines = [t('chat.remoteStartOk'), t('chat.remoteStartNotAllowed'), t('chat.remoteStartUnreachable'), t('chat.remoteStartFail')]
+    expect(new Set(enLines).size).toBe(4)
+  })
+
+  it('lan pairing remote-start toggle keys render in both locales (Phase R)', () => {
+    setLocale('zh')
+    expect(t('settings.lanPairing.remoteStart')).toContain('远程启动')
+    expect(t('settings.lanPairing.remoteStartDesc')).toContain('API Key')
+    expect(t('settings.lanPairing.remoteStartDesc')).toContain('重启')
+    expect(t('settings.lanPairing.remoteStartHintKey')).toContain('API Key')
+    setLocale('en')
+    expect(t('settings.lanPairing.remoteStart')).toContain('remotely')
+    expect(t('settings.lanPairing.remoteStartDesc')).toContain('API key')
+    expect(t('settings.lanPairing.remoteStartDesc')).toContain('restart')
+    expect(t('settings.lanPairing.remoteStartHintKey')).toContain('API key')
+  })
 })

@@ -182,6 +182,8 @@ const serverConfig: Record<string, any> = {
   cacheRam: 8192,
   apiKey: '',
   deviceId: '',
+  // Phase R: LAN-exposed control plane POST /start (Settings share-role toggle)
+  remoteStart: false,
 }
 
 let serverRunning = true

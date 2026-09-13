@@ -99,6 +99,21 @@ func (a *App) Startup(ctx context.Context) {
 	// Load persisted config on startup
 	loadConfig()
 
+	// LAN-exposed control plane (POST /start for the phone pairing): GUI
+	// mode only runs it when the persisted RemoteStart flag is on (off by
+	// default), and never on Android (phones never serve other devices). The
+	// flag is read at bind time — changing it takes effect on the next app
+	// start. A bind failure (port 1900 occupied) only logs a warning; the
+	// app continues degraded (same rule as the headless plane).
+	if platformGOOS != "android" {
+		serverConfigMu.Lock()
+		remoteStart := cachedServerConfig.RemoteStart
+		serverConfigMu.Unlock()
+		if remoteStart {
+			launchControlPlane(true)
+		}
+	}
+
 	// Adopt a healthy llama-server handed over by a headless predecessor
 	// (serverRunning=true, serverCmd=nil, adoptedPid set); a stale handover
 	// record is deleted. GUI never auto-starts the service.
