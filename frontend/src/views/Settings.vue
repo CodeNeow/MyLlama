@@ -193,7 +193,7 @@
           <!-- Desktop / tablet: compact ThemedSelect in the row tail (design draft F5) -->
           <div v-if="!isPhone" class="row-tail row-tail-select">
             <ThemedSelect
-              :model-value="appConfig.serverAccessMode"
+              :model-value="displayAccessMode"
               :options="accessOptions"
               :placeholder="t('settings.accessScope')"
               variant="toolbar"
@@ -204,7 +204,7 @@
           <!-- Phone tail (frame ⑯): compact select showing current access scope -->
           <div v-else class="row-tail row-tail-select">
             <ThemedSelect
-              :model-value="appConfig.serverAccessMode"
+              :model-value="displayAccessMode"
               :options="accessOptions"
               :placeholder="t('settings.accessScope')"
               variant="field"
@@ -413,7 +413,11 @@
              still rendered — the phone side can see the full pairing, it just
              cannot connect until the switch applies); LAN mode → the ready
              status + address rows. The port / key rows and the QR block live
-             OUTSIDE the mode gate on purpose. -->
+             OUTSIDE the mode gate on purpose.
+             Android: the whole body collapses to one gray line — a phone
+             runs models locally only and never serves other devices, so the
+             share role has nothing to offer (the backend also refuses the
+             lan bind via effectiveHost). -->
         <div role="group" class="lan-role" :aria-label="t('settings.lanPairing.shareTitle')">
           <div class="lan-role-head">
             <div class="lan-role-text">
@@ -421,6 +425,8 @@
               <span class="lan-role-sub">{{ t('settings.lanPairing.shareSub') }}</span>
             </div>
           </div>
+          <p v-if="isAndroid" class="row-foot lan-share-local-only">{{ t('settings.lanPairing.shareLocalOnly') }}</p>
+          <template v-else>
           <p v-if="lanAddresses.length === 0" class="row-foot lan-pairing-body">{{ t('settings.lanPairing.none') }}</p>
           <div v-else-if="appConfig.serverAccessMode !== 'lan'" class="lan-pairing-body">
             <div class="lan-warn">
@@ -494,6 +500,7 @@
               </div>
               <p class="lan-qr-privacy">{{ t('settings.lanPairing.qrPrivacy') }}</p>
             </div>
+          </template>
           </template>
         </div>
 
@@ -877,10 +884,24 @@ const modelDirSub = computed(() => {
 // (listen address, see backend SaveServerConfig): refreshed from backend on
 // mount to stay in sync with persisted values from the API page and other
 // sources. Compact segment labels; full names on the sub-line.
-const accessOptions = computed(() => [
-  { value: 'local', label: t('settings.accessLocalShort') },
-  { value: 'lan', label: t('settings.accessLanShort') },
-])
+// Android: local-only product decision — the phone never serves other
+// devices, so the LAN option is not offered (the backend's effectiveHost
+// degrades a stale persisted 'lan' to 127.0.0.1 regardless).
+const accessOptions = computed(() => {
+  const opts = [{ value: 'local', label: t('settings.accessLocalShort') }]
+  if (!isAndroid.value) {
+    opts.push({ value: 'lan', label: t('settings.accessLanShort') })
+  }
+  return opts
+})
+
+// Display normalization for the stale-config case: an Android device whose
+// persisted access mode is still 'lan' shows 'local' in the selector (the
+// backend listen address already IS 127.0.0.1 via effectiveHost). The
+// persisted value is NOT rewritten — read-only display mapping.
+const displayAccessMode = computed(() =>
+  isAndroid.value && appConfig.serverAccessMode === 'lan' ? 'local' : appConfig.serverAccessMode
+)
 
 const accessError = ref('')
 const accessSwitching = ref(false)
@@ -1360,13 +1381,18 @@ onMounted(async () => {
     lanApiKey.value = scfg.apiKey || ''
   }).catch(() => {})
   // LAN pairing card addresses (non-loopback IPv4; failures degrade to the
-  // "none detected" hint); the QR address preference seeds from the list
-  getLanAddresses()
-    .then((list) => {
-      lanAddresses.value = Array.isArray(list) ? list : []
-      seedPairAddr()
-    })
-    .catch(() => { lanAddresses.value = [] })
+  // "none detected" hint); the QR address preference seeds from the list.
+  // Android skips the call entirely: the share role is collapsed to the
+  // local-only line (the phone never serves), so the address list would be
+  // dead weight — seedPairAddr already no-ops on an empty list.
+  if (!isAndroid.value) {
+    getLanAddresses()
+      .then((list) => {
+        lanAddresses.value = Array.isArray(list) ? list : []
+        seedPairAddr()
+      })
+      .catch(() => { lanAddresses.value = [] })
+  }
   // GPU option list comes from the (cached) system info snapshot; failures
   // leave the selector disabled with the no-GPU hint.
   getSystemInfo()
@@ -1692,6 +1718,18 @@ async function manualCheck() {
   flex-direction: column;
   gap: 8px;
   padding: 2px 0 9px 50px;
+}
+
+/* Android share-role replacement line: the phone runs models locally only
+   and never serves other devices — the whole share body (addresses, port /
+   key rows, QR) collapses to this muted line. Same inset + voice as
+   .lan-pairing-body hints so the card keeps its rhythm. */
+.lan-share-local-only {
+  margin: 0;
+  padding: 2px 0 9px 50px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
 }
 
 .lan-row {

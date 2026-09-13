@@ -6,6 +6,7 @@ import "testing"
 // all other values (including empty and invalid) → 127.0.0.1.
 // Shared by SaveServerConfig / loadConfig / buildServerCommand for consistent host derivation.
 func TestEffectiveHost(t *testing.T) {
+	withPlatformGOOS(t, "windows")
 	cases := []struct {
 		mode string
 		want string
@@ -21,5 +22,20 @@ func TestEffectiveHost(t *testing.T) {
 		if got := effectiveHost(c.mode); got != c.want {
 			t.Errorf("effectiveHost(%q) = %q, want %q", c.mode, got, c.want)
 		}
+	}
+}
+
+// TestEffectiveHostAndroidLocalOnly pins the product decision: a phone never
+// serves other devices, so even a stale persisted "lan" access mode (left by
+// an older version) derives the loopback listen address on Android — the
+// lan bind is refused at the single derivation point shared by
+// SaveServerConfig, loadConfig and buildServerCommand.
+func TestEffectiveHostAndroidLocalOnly(t *testing.T) {
+	withPlatformGOOS(t, "android")
+	if got := effectiveHost(accessLAN); got != "127.0.0.1" {
+		t.Errorf("effectiveHost(lan) on android = %q, want 127.0.0.1 (phones never bind the LAN)", got)
+	}
+	if got := effectiveHost(accessLocal); got != "127.0.0.1" {
+		t.Errorf("effectiveHost(local) on android = %q, want 127.0.0.1", got)
 	}
 }

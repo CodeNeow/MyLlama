@@ -333,10 +333,16 @@ func (t *serverLogTailer) appendPiece(piece logPiece, force bool) {
 
 // effectiveHost derives the actual listen address from the access scope:
 // lan → "0.0.0.0", any other value (including empty and invalid) →
-// "127.0.0.1". Pure function shared by SaveServerConfig normalization,
-// loadConfig compatibility, and buildServerCommand, keeping Host consistent
-// everywhere.
+// "127.0.0.1". Android always returns "127.0.0.1": a phone runs inference
+// for itself only and never serves other devices (confirmed product
+// decision), so a stale "lan" access mode persisted by an older version
+// safely degrades to loopback here. Pure function shared by SaveServerConfig
+// normalization, loadConfig compatibility, and buildServerCommand, keeping
+// Host consistent everywhere.
 func effectiveHost(mode string) string {
+	if platformGOOS == "android" {
+		return "127.0.0.1"
+	}
 	if mode == accessLAN {
 		return "0.0.0.0"
 	}

@@ -553,6 +553,10 @@ export const messages: Record<Locale, Record<string, string>> = {
     // connects only after the inline switch flips the scope to LAN
     'settings.lanPairing.localWarn': '当前为本地访问（仅本机可访问），手机扫码无法连接',
     'settings.lanPairing.localSwitch': '切换为局域网',
+    // Android share-role collapse: phones run models locally only and never
+    // serve other devices (product decision; backend effectiveHost refuses
+    // the lan bind)
+    'settings.lanPairing.shareLocalOnly': '手机端仅在本机运行模型，不对外提供服务',
     // ─── Remote chat form (connect side of the LAN pairing card) ───
     'settings.remoteChat.enabled': '启用远程聊天',
     'settings.remoteChat.host': '电脑地址',
@@ -1367,6 +1371,10 @@ export const messages: Record<Locale, Record<string, string>> = {
     // connects only after the inline switch flips the scope to LAN
     'settings.lanPairing.localWarn': 'Currently local-only (this machine only) — the phone cannot connect via the QR code',
     'settings.lanPairing.localSwitch': 'Switch to LAN',
+    // Android share-role collapse: phones run models locally only and never
+    // serve other devices (product decision; backend effectiveHost refuses
+    // the lan bind)
+    'settings.lanPairing.shareLocalOnly': 'The phone runs models locally only — it does not serve other devices',
     // ─── Remote chat form (connect side of the LAN pairing card) ───
     'settings.remoteChat.enabled': 'Enable remote chat',
     'settings.remoteChat.host': 'PC address',
