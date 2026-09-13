@@ -1,5 +1,6 @@
 import { reactive } from 'vue'
-import { getConfig, setTheme as setThemeBackend, setSidebarCollapsed as setSidebarCollapsedBackend, setOnboardingDismissed as setOnboardingDismissedBackend, setDownloadSource as setDownloadSourceBackend, setLanguage as setLanguageBackend, setTrayEnabled as setTrayEnabledBackend, getServerConfig, saveServerConfig as saveServerConfigBackend } from './wails'
+import { getConfig, setTheme as setThemeBackend, setSidebarCollapsed as setSidebarCollapsedBackend, setOnboardingDismissed as setOnboardingDismissedBackend, setDownloadSource as setDownloadSourceBackend, setLanguage as setLanguageBackend, setTrayEnabled as setTrayEnabledBackend, getServerConfig, saveServerConfig as saveServerConfigBackend, saveRemoteChat as saveRemoteChatBackend, type RemoteChatConfig } from './wails'
+import type { RemoteChatProfile } from './lib/chatRemote'
 import { setLocale } from './lib/i18n'
 
 // Theme localStorage key: after the llama-gui → llama-desktop rename the legacy key is read-only fallback
@@ -56,6 +57,11 @@ export const appConfig = reactive({
   // backend config reports an explicit true (user closed it or completed all
   // steps); same missing-field fallback pattern as apiRouteMode.
   onboardingDismissed: false,
+  // LAN remote-chat pairing (phone → PC llama-server): defaults match the
+  // backend loadConfig fallback for a config without the remoteChat key
+  // (disabled pairing against the llama-server default port 8080); only
+  // overridden once loadConfig fetches the persisted backend value.
+  remoteChat: { enabled: false, host: '', port: 8080, apiKey: '' } as RemoteChatProfile,
   loaded: false,
 })
 
@@ -82,6 +88,15 @@ export async function loadConfig() {
     // Checklist dismissal: default false when the backend omits the field
     // (legacy backend / fresh install); only an explicit true hides it.
     appConfig.onboardingDismissed = config.onboardingDismissed === true
+    // Remote-chat pairing: field-by-field defaults when the backend omits the
+    // key (legacy config) — disabled, no host, llama-server default port, no key.
+    const rc = config.remoteChat
+    appConfig.remoteChat = {
+      enabled: rc?.enabled === true,
+      host: typeof rc?.host === 'string' ? rc.host : '',
+      port: typeof rc?.port === 'number' && rc.port > 0 ? rc.port : 8080,
+      apiKey: typeof rc?.apiKey === 'string' ? rc.apiKey : '',
+    }
     setLocale(appConfig.resolvedLanguage)
     localStorage.setItem(THEME_KEY, appConfig.theme)
     localStorage.setItem(SIDEBAR_KEY, appConfig.sidebarCollapsed ? '1' : '0')
@@ -168,6 +183,36 @@ export async function setApiKey(value: string) {
     await saveServerConfigBackend(scfg)
   } catch (e) {
     appConfig.serverApiKey = previous
+    throw e
+  }
+}
+
+/** Save the LAN remote-chat pairing (phone → PC llama-server): optimistically
+ * update local state, persist through the backend's validating saveRemoteChat
+ * binding; on backend failure roll back local state and rethrow for inline UI
+ * feedback (same pattern as setServerAccessMode). The backend trims host/apiKey
+ * and validates the shape, so a rejected profile never reaches appConfig. */
+export async function setRemoteChat(profile: RemoteChatProfile) {
+  const previous = appConfig.remoteChat
+  appConfig.remoteChat = { ...profile }
+  try {
+    const saved: RemoteChatConfig = {
+      enabled: profile.enabled,
+      host: profile.host,
+      port: profile.port,
+      apiKey: profile.apiKey,
+    }
+    await saveRemoteChatBackend(saved)
+    // Mirror the backend normalization (TrimSpace on host/apiKey) so the
+    // optimistic UI shows the exact values that were persisted.
+    appConfig.remoteChat = {
+      enabled: saved.enabled,
+      host: saved.host.trim(),
+      port: saved.port,
+      apiKey: saved.apiKey.trim(),
+    }
+  } catch (e) {
+    appConfig.remoteChat = previous
     throw e
   }
 }

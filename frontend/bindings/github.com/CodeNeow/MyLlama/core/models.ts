@@ -933,6 +933,56 @@ export class MonitorStatus {
 }
 
 /**
+ * RemoteChatConfig holds the phone-to-PC LAN chat pairing used by the chat
+ * page when Enabled is true: the LAN address of the peer machine running
+ * llama-server and the optional API key configured there.
+ */
+export class RemoteChatConfig {
+    "enabled": boolean;
+
+    /**
+     * LAN host or IP, e.g. 192.168.1.5 (no scheme, no path)
+     */
+    "host": string;
+
+    /**
+     * llama-server port on the peer, default 8080
+     */
+    "port": number;
+
+    /**
+     * optional bearer token of the peer server
+     */
+    "apiKey": string;
+
+    /** Creates a new RemoteChatConfig instance. */
+    constructor($$source: Partial<RemoteChatConfig> = {}) {
+        if (!("enabled" in $$source)) {
+            this["enabled"] = false;
+        }
+        if (!("host" in $$source)) {
+            this["host"] = "";
+        }
+        if (!("port" in $$source)) {
+            this["port"] = 0;
+        }
+        if (!("apiKey" in $$source)) {
+            this["apiKey"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RemoteChatConfig instance from a string or object.
+     */
+    static createFrom($$source: any = {}): RemoteChatConfig {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new RemoteChatConfig($$parsedSource as Partial<RemoteChatConfig>);
+    }
+}
+
+/**
  * RemoteDocResult is one docs section fetch outcome: the markdown body (empty
  * when Source is "none"), which tier produced it, and the RFC3339 timestamp of
  * the fetch that produced Text ("" when none — the frontend only shows it for

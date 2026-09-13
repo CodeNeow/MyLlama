@@ -217,6 +217,51 @@
         <p v-if="accessError" class="row-error">{{ accessError }}</p>
       </div>
 
+      <!-- LAN pairing card (PC side of the phone-to-PC LAN chat): what a peer
+           device needs to connect — this machine's LAN addresses, the service
+           port and the API-key status — each row with a copy button for the
+           pairing. Rendered on every tier (symmetric capability, no platform
+           gate). Local mode shows guidance pointing at the access-scope row
+           above (the single switch for this setting, no second toggle here). -->
+      <div class="group-item">
+        <div class="group-row">
+          <span class="row-ic ic-sky" v-html="ICON_ACCESS"></span>
+          <div class="row-text">
+            <span class="row-title">{{ t('settings.lanPairing.title') }}</span>
+            <span class="row-sub">{{ t('settings.lanPairing.desc') }}</span>
+          </div>
+        </div>
+        <template v-if="appConfig.serverAccessMode === 'lan'">
+          <p v-if="lanAddresses.length === 0" class="row-foot lan-pairing-body">{{ t('settings.lanPairing.none') }}</p>
+          <div v-else class="lan-pairing-body">
+            <div v-for="addr in lanAddresses" :key="addr" class="lan-row">
+              <span class="lan-label">{{ t('settings.lanPairing.address') }}</span>
+              <span class="lan-value lan-mono">{{ addr }}</span>
+              <button class="lan-copy" type="button" @click="copyLanValue(addr)">
+                {{ lanCopied === addr ? t('settings.lanPairing.copied') : t('settings.lanPairing.copy') }}
+              </button>
+            </div>
+          </div>
+          <div class="lan-pairing-body">
+            <div class="lan-row">
+              <span class="lan-label">{{ t('settings.lanPairing.port') }}</span>
+              <span class="lan-value lan-mono">{{ lanPort }}</span>
+              <button class="lan-copy" type="button" @click="copyLanValue(String(lanPort))">
+                {{ lanCopied === String(lanPort) ? t('settings.lanPairing.copied') : t('settings.lanPairing.copy') }}
+              </button>
+            </div>
+            <div class="lan-row">
+              <span class="lan-label">{{ t('settings.lanPairing.apiKey') }}</span>
+              <span class="lan-value">{{ lanApiKey.trim() ? t('settings.apiKeySet') : t('settings.apiKeyNotSet') }}</span>
+              <button v-if="lanApiKey.trim()" class="lan-copy" type="button" @click="copyLanValue(lanApiKey)">
+                {{ lanCopied === lanApiKey ? t('settings.lanPairing.copied') : t('settings.lanPairing.copy') }}
+              </button>
+            </div>
+          </div>
+        </template>
+        <p v-else class="row-foot lan-pairing-body">{{ t('settings.lanPairing.localHint') }}</p>
+      </div>
+
       <!-- API key: always visible — it also protects the inference API in
            local mode, not only when the service is exposed to the LAN -->
       <div class="group-item">
@@ -386,6 +431,80 @@
       </template>
     </section>
 
+    <!-- ─── Group: remote chat (client side of the LAN pairing) ───
+         Connect this app (e.g. a phone) to another computer's llama-server on
+         the same network: the chat page's "Remote PC" tier then streams
+         directly to that address. The draft is validated inline (same rules
+         the backend enforces) and submitted as a whole through
+         store.setRemoteChat. Rendered on every platform and tier — the
+         pairing is symmetric. -->
+    <section class="settings-group group-remote" :aria-label="t('settings.remoteChat.title')">
+      <div class="group-item">
+        <div class="group-row">
+          <span class="row-ic ic-indigo" v-html="ICON_SHARE"></span>
+          <div class="row-text">
+            <span class="row-title">{{ t('settings.remoteChat.title') }}</span>
+            <span class="row-sub">{{ t('settings.remoteChat.desc') }}</span>
+          </div>
+          <div class="row-tail row-tail-switch">
+            <div
+              class="switch"
+              :class="{ on: remoteDraft.enabled }"
+              role="switch"
+              :aria-checked="remoteDraft.enabled"
+              :aria-label="t('settings.remoteChat.enabled')"
+              tabindex="0"
+              @click="toggleRemoteEnabled"
+              @keydown.enter="toggleRemoteEnabled"
+            >
+            </div>
+          </div>
+        </div>
+        <div class="remote-fields">
+          <label class="remote-field">
+            <span class="remote-label">{{ t('settings.remoteChat.host') }}</span>
+            <input
+              v-model="remoteDraft.host"
+              type="text"
+              class="remote-input"
+              autocomplete="off"
+              spellcheck="false"
+              :placeholder="t('settings.remoteChat.hostPh')"
+            />
+          </label>
+          <label class="remote-field remote-field-port">
+            <span class="remote-label">{{ t('settings.remoteChat.port') }}</span>
+            <input
+              v-model.number="remoteDraft.port"
+              type="number"
+              min="1"
+              max="65535"
+              class="remote-input"
+            />
+          </label>
+          <label class="remote-field">
+            <span class="remote-label">{{ t('settings.remoteChat.apiKey') }}</span>
+            <input
+              v-model="remoteDraft.apiKey"
+              type="password"
+              class="remote-input"
+              autocomplete="new-password"
+              spellcheck="false"
+              :placeholder="t('settings.remoteChat.apiKeyPh')"
+            />
+          </label>
+        </div>
+        <p v-if="remoteError" class="row-error">{{ remoteError }}</p>
+        <p v-else-if="remoteSaved" class="row-foot remote-saved">{{ t('settings.remoteChat.saved') }}</p>
+        <div class="remote-actions">
+          <button class="dir-btn" type="button" :disabled="remoteSaving" @click="saveRemoteDraft">
+            {{ remoteSaving ? t('settings.remoteChat.saving') : t('settings.remoteChat.save') }}
+          </button>
+        </div>
+        <p class="row-foot">{{ t('settings.remoteChat.hint') }}</p>
+      </div>
+    </section>
+
     <!-- ─── Group: about (frame ⑤ group 3) ───
          Updates: visible on every platform. Windows and Android both render
          the in-app check-for-updates action cluster (Windows self-updates via
@@ -488,9 +607,10 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { appConfig, setTheme, loadConfig, setDownloadSource as applyDownloadSource, setLanguage as applyLanguage, setServerAccessMode as applyServerAccessMode, setApiKey as applyApiKey, setTrayEnabled as applyTrayEnabled } from '../store'
+import { appConfig, setTheme, loadConfig, setDownloadSource as applyDownloadSource, setLanguage as applyLanguage, setServerAccessMode as applyServerAccessMode, setApiKey as applyApiKey, setTrayEnabled as applyTrayEnabled, setRemoteChat as applyRemoteChat } from '../store'
+import { validateRemoteHost, type RemoteChatProfile } from '../lib/chatRemote'
 import { updateState, checkForUpdate } from '../lib/update'
-import { getAppVersion, getLlamaCpp, getSystemInfo, getServerConfig, getServerStatus, saveServerConfig, browseLlamaCppDownloadDir, browseModelDownloadDir, setApiRouteMode, getModels } from '../wails'
+import { getAppVersion, getLlamaCpp, getSystemInfo, getServerConfig, getServerStatus, getLanAddresses, saveServerConfig, browseLlamaCppDownloadDir, browseModelDownloadDir, setApiRouteMode, getModels } from '../wails'
 import { restartServer } from '../lib/serverControls'
 import { accelBuildKey, showTraySetting, showApiRouteSetting, showServingGpuSetting, updateSectionMode, showUpdateCheckActions, usePlatform } from '../lib/platform'
 import { handleLinkClick } from '../lib/linkHandler'
@@ -703,6 +823,80 @@ async function setAccessScope(mode: string) {
   }
 }
 
+// ─── LAN pairing card (PC side of the phone-to-PC LAN chat) ─────────────────
+// What a peer device needs to reach this machine's llama-server: the LAN
+// addresses (GetLanAddresses binding), the service port and the API-key
+// status. Seeded from the backend on mount; each row copies its value to the
+// clipboard with a transient "copied" hint on the button itself.
+const lanAddresses = ref<string[]>([])
+const lanPort = ref(0)
+const lanApiKey = ref('')
+const lanCopied = ref('')
+
+let lanCopiedTimer: ReturnType<typeof setTimeout> | null = null
+
+async function copyLanValue(value: string) {
+  try {
+    await navigator.clipboard.writeText(value)
+    lanCopied.value = value
+    if (lanCopiedTimer) clearTimeout(lanCopiedTimer)
+    lanCopiedTimer = setTimeout(() => {
+      lanCopied.value = ''
+    }, 2000)
+  } catch {
+    // Clipboard unavailable (permission denied / non-secure context): the
+    // value stays selectable on screen, no error surface needed
+  }
+}
+
+// ─── Remote chat form (client side of the LAN pairing) ──────────────────────
+// Draft copy of the persisted pairing: edited freely in the form, validated
+// inline with the same rules the backend SaveRemoteChat enforces, then
+// submitted as a whole through store.setRemoteChat (optimistic update with
+// rollback; a backend rejection lands in the inline error line).
+const remoteDraft = ref<RemoteChatProfile>({ ...appConfig.remoteChat })
+const remoteError = ref('')
+const remoteSaved = ref(false)
+const remoteSaving = ref(false)
+
+function toggleRemoteEnabled() {
+  remoteDraft.value.enabled = !remoteDraft.value.enabled
+  remoteSaved.value = false
+}
+
+async function saveRemoteDraft() {
+  if (remoteSaving.value) return
+  remoteError.value = ''
+  remoteSaved.value = false
+  // Inline host validation first (chatRemote.validateRemoteHost returns the
+  // i18n key to render), then the port range — both mirror the backend rules
+  // so a draft rejected here never makes the round-trip.
+  const hostErr = validateRemoteHost(remoteDraft.value.host)
+  if (hostErr) {
+    remoteError.value = t(hostErr)
+    return
+  }
+  const port = Number(remoteDraft.value.port)
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    remoteError.value = t('settings.remoteChat.errPort')
+    return
+  }
+  remoteSaving.value = true
+  try {
+    await applyRemoteChat({
+      enabled: remoteDraft.value.enabled,
+      host: remoteDraft.value.host.trim(),
+      port,
+      apiKey: remoteDraft.value.apiKey,
+    })
+    remoteSaved.value = true
+  } catch {
+    remoteError.value = t('settings.remoteChat.errSave')
+  } finally {
+    remoteSaving.value = false
+  }
+}
+
 // Optional llama-server API key (bearer token; empty = no authentication): saved on
 // change through setApiKey (whole serverConfig round-trip, same as the access scope).
 // The input keeps the user's text on failure so they can fix and retry.
@@ -893,6 +1087,9 @@ const updateSub = computed(() =>
 
 onMounted(async () => {
   if (!appConfig.loaded) await loadConfig()
+  // Seed the remote-chat draft from the loaded config (defaults match the
+  // backend's legacy-config fallback when the key is missing)
+  remoteDraft.value = { ...appConfig.remoteChat }
   // Read the current service access scope from the backend (default local) so the page selection matches the persisted value
   getServerConfig().then((scfg) => {
     if (scfg.accessMode === 'local' || scfg.accessMode === 'lan') {
@@ -902,7 +1099,15 @@ onMounted(async () => {
     apiKeyInput.value = scfg.apiKey || ''
     // seed the serving-GPU selection from the persisted server config (empty = auto)
     gpuValue.value = scfg.deviceId || ''
+    // seed the LAN pairing card: service port + API-key status
+    lanPort.value = scfg.port
+    lanApiKey.value = scfg.apiKey || ''
   }).catch(() => {})
+  // LAN pairing card addresses (non-loopback IPv4; failures degrade to the
+  // "none detected" hint)
+  getLanAddresses()
+    .then((list) => { lanAddresses.value = Array.isArray(list) ? list : [] })
+    .catch(() => { lanAddresses.value = [] })
   // GPU option list comes from the (cached) system info snapshot; failures
   // leave the selector disabled with the no-GPU hint.
   getSystemInfo()
@@ -1203,6 +1408,126 @@ async function manualCheck() {
   padding: 0 0 9px 50px;
   font-size: 12px;
   color: #ef4444;
+}
+
+/* ─── LAN pairing card rows (address / port / key status + copy) ───
+   Indented to align with the row text (icon 18px + gap), matching the
+   .row-foot 50px inset. */
+.lan-pairing-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 0 9px 50px;
+}
+
+.lan-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.lan-label {
+  flex-shrink: 0;
+  width: 74px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.lan-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lan-mono {
+  font-family: var(--font-mono);
+}
+
+.lan-copy {
+  flex-shrink: 0;
+  padding: 3px 12px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.lan-copy:hover {
+  color: var(--text-primary);
+  border-color: var(--overlay-20);
+}
+
+/* ─── Remote chat form (enabled switch + host / port / key fields) ─── */
+.remote-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 0 9px 50px;
+}
+
+.remote-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* Port gets a compact column so host and port can sit side by side when the
+   width allows (desktop); stacked layout stays the fallback below 480px. */
+.remote-field-port {
+  max-width: 180px;
+}
+
+.remote-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.remote-input {
+  width: 100%;
+  padding: 9px 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+}
+
+.remote-input:focus {
+  border-color: var(--accent);
+}
+
+.remote-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 0 9px;
+}
+
+.remote-saved {
+  color: #10b981;
+}
+
+@media (max-width: 480px) {
+  .remote-fields {
+    padding-left: 16px;
+  }
+
+  .lan-pairing-body {
+    padding-left: 16px;
+  }
 }
 
 /* ─── Gradient capsule switch (frame ⑤ .sw): gradient = on ─── */

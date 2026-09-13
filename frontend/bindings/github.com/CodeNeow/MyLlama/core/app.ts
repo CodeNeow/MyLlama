@@ -142,15 +142,34 @@ export function GetGPU(): $CancellablePromise<$models.GPUInfo[]> {
     });
 }
 
+/**
+ * GetLanAddresses lists non-loopback IPv4 addresses of this machine
+ * (e.g. "192.168.1.5") for the Settings pairing card. Returns an empty
+ * slice (never nil semantics contract: JSON []) when none are found;
+ * enumeration errors degrade to an empty list, not an error.
+ */
+export function GetLanAddresses(): $CancellablePromise<string[]> {
+    return $Call.ByID(1151704184).then(($result: any) => {
+        return $$createType14($result);
+    });
+}
+
+/**
+ * GetLlamaCpp returns the llama.cpp detection snapshot. The slow path
+ * double-checks llamaCacheValid under llamaMu (concurrent first callers used
+ * to write the multi-field cachedLlamaCpp struct unsynchronized); the cached
+ * struct is copied out under the lock so a later invalidate + rescan never
+ * rewrites a snapshot a caller still holds. Mirrors GetModels.
+ */
 export function GetLlamaCpp(): $CancellablePromise<$models.LlamaCppInfo | null> {
     return $Call.ByID(1087173235).then(($result: any) => {
-        return $$createType15($result);
+        return $$createType16($result);
     });
 }
 
 export function GetLlamaCppDownloadStatus(): $CancellablePromise<$models.DownloadState | null> {
     return $Call.ByID(1325253841).then(($result: any) => {
-        return $$createType17($result);
+        return $$createType18($result);
     });
 }
 
@@ -163,19 +182,19 @@ export function GetLlamaCppDownloadStatus(): $CancellablePromise<$models.Downloa
  */
 export function GetLoadedModels(): $CancellablePromise<$models.LoadedModel[]> {
     return $Call.ByID(467291630).then(($result: any) => {
-        return $$createType19($result);
+        return $$createType20($result);
     });
 }
 
 export function GetMemory(): $CancellablePromise<$models.MemoryInfo | null> {
     return $Call.ByID(1825090130).then(($result: any) => {
-        return $$createType21($result);
+        return $$createType22($result);
     });
 }
 
 export function GetModelConfig(modelID: string): $CancellablePromise<$models.ModelConfig> {
     return $Call.ByID(1343528888, modelID).then(($result: any) => {
-        return $$createType22($result);
+        return $$createType23($result);
     });
 }
 
@@ -194,7 +213,7 @@ export function GetModelDescription(modelID: string): $CancellablePromise<string
  */
 export function GetModelFiles(modelID: string): $CancellablePromise<$models.HFFileOut[]> {
     return $Call.ByID(3827624353, modelID).then(($result: any) => {
-        return $$createType24($result);
+        return $$createType25($result);
     });
 }
 
@@ -209,7 +228,7 @@ export function GetModelMaxFileSize(modelID: string): $CancellablePromise<number
 
 export function GetModels(): $CancellablePromise<$models.ModelInfo[]> {
     return $Call.ByID(68250215).then(($result: any) => {
-        return $$createType26($result);
+        return $$createType27($result);
     });
 }
 
@@ -220,13 +239,13 @@ export function GetModels(): $CancellablePromise<$models.ModelInfo[]> {
  */
 export function GetMonitorStatus(): $CancellablePromise<$models.MonitorStatus | null> {
     return $Call.ByID(1410600887).then(($result: any) => {
-        return $$createType28($result);
+        return $$createType29($result);
     });
 }
 
 export function GetOS(): $CancellablePromise<{ [_ in string]?: string }> {
     return $Call.ByID(1742051203).then(($result: any) => {
-        return $$createType29($result);
+        return $$createType30($result);
     });
 }
 
@@ -239,7 +258,7 @@ export function GetOS(): $CancellablePromise<{ [_ in string]?: string }> {
  */
 export function GetRemoteDoc(lang: string, sectionID: string, force: boolean): $CancellablePromise<$models.RemoteDocResult> {
     return $Call.ByID(3167960667, lang, sectionID, force).then(($result: any) => {
-        return $$createType30($result);
+        return $$createType31($result);
     });
 }
 
@@ -252,13 +271,13 @@ export function GetRemoteDoc(lang: string, sectionID: string, force: boolean): $
  */
 export function GetSafeArea(): $CancellablePromise<$models.SafeArea> {
     return $Call.ByID(2134401773).then(($result: any) => {
-        return $$createType31($result);
+        return $$createType32($result);
     });
 }
 
 export function GetServerConfig(): $CancellablePromise<$models.ServerConfig> {
     return $Call.ByID(923718408).then(($result: any) => {
-        return $$createType32($result);
+        return $$createType33($result);
     });
 }
 
@@ -271,7 +290,7 @@ export function GetServerConfig(): $CancellablePromise<$models.ServerConfig> {
  */
 export function GetServerLogsSince(since: number): $CancellablePromise<$models.ServerLogsPage> {
     return $Call.ByID(795529405, since).then(($result: any) => {
-        return $$createType33($result);
+        return $$createType34($result);
     });
 }
 
@@ -283,7 +302,7 @@ export function GetServerStatus(): $CancellablePromise<{ [_ in string]?: any }> 
 
 export function GetSystemInfo(): $CancellablePromise<$models.SystemInfo | null> {
     return $Call.ByID(3756917252).then(($result: any) => {
-        return $$createType35($result);
+        return $$createType36($result);
     });
 }
 
@@ -293,7 +312,7 @@ export function GetSystemInfo(): $CancellablePromise<$models.SystemInfo | null> 
  */
 export function GetUpdateDownloadStatus(): $CancellablePromise<$models.UpdateDownloadState | null> {
     return $Call.ByID(3051828874).then(($result: any) => {
-        return $$createType37($result);
+        return $$createType38($result);
     });
 }
 
@@ -317,10 +336,21 @@ export function PauseLlamaCppDownload(): $CancellablePromise<void> {
 
 export function RefreshModels(): $CancellablePromise<$models.ModelInfo[]> {
     return $Call.ByID(1283513860).then(($result: any) => {
-        return $$createType26($result);
+        return $$createType27($result);
     });
 }
 
+/**
+ * ResumeDownloadTask resumes a paused download task. Two paused flavors are
+ * told apart by the runtime running flag: a task paused in this process has a
+ * live goroutine parked in waitForTaskResume — flip the status and signal it
+ * to continue. A task restored from the persisted queue after a restart has
+ * NO goroutine (loadConfig never spawns one; signaling its fresh resumeCh
+ * would reach nobody and leave the task stuck on "downloading" at its old
+ * progress forever — a zombie only cancellable by the user), so it takes the
+ * same rebuild-ctx + respawn path as RetryDownloadTask; downloadTask resumes
+ * from the .part size already on disk.
+ */
 export function ResumeDownloadTask(id: string): $CancellablePromise<void> {
     return $Call.ByID(1998385817, id);
 }
@@ -333,10 +363,12 @@ export function ResumeLlamaCppDownload(): $CancellablePromise<void> {
  * RetryDownloadTask retries a download task: for finished tasks
  * (error/cancelled/done) or queued tasks, it rebuilds the ctx and restarts
  * the download goroutine; downloadTask checks .part file size as the resume
- * offset, naturally reusing resume capability. Tasks that are still
- * downloading or paused have an active goroutine, so retrying is disallowed
- * to prevent concurrent writes to the same .part file; when the id is not
- * found, returns nil silently, matching CancelDownloadTask semantics.
+ * offset, naturally reusing resume capability. Downloading tasks have an
+ * active goroutine, so retrying them is disallowed to prevent concurrent
+ * writes to the same .part file; paused tasks are refused here too — a
+ * running one is owned by ResumeDownloadTask's signal path and a
+ * goroutine-less (restart-restored) one by its respawn path. When the id is
+ * not found, returns nil silently, matching CancelDownloadTask semantics.
  */
 export function RetryDownloadTask(id: string): $CancellablePromise<void> {
     return $Call.ByID(2795962746, id);
@@ -344,6 +376,19 @@ export function RetryDownloadTask(id: string): $CancellablePromise<void> {
 
 export function SaveModelConfig(modelID: string, config: $models.ModelConfig): $CancellablePromise<void> {
     return $Call.ByID(4225909797, modelID, config);
+}
+
+/**
+ * SaveRemoteChat validates and persists the LAN remote-chat pairing (phone →
+ * PC llama-server, see RemoteChatConfig). Normalization: Host and APIKey are
+ * trimmed; a host carrying a scheme ("://") or path ("/") is rejected because
+ * the frontend only ever sends the bare host part of host[:port]; the port
+ * must be within 1..65535; enabling requires a non-empty host. The validated
+ * value is written to the in-memory state and persisted following the existing
+ * configMu locking pattern; a rejected input never mutates state.
+ */
+export function SaveRemoteChat(cfg: $models.RemoteChatConfig): $CancellablePromise<void> {
+    return $Call.ByID(220417558, cfg);
 }
 
 export function SaveServerConfig(cfg: $models.ServerConfig): $CancellablePromise<void> {
@@ -356,7 +401,7 @@ export function SaveServerConfig(cfg: $models.ServerConfig): $CancellablePromise
  */
 export function SearchDownloads(query: string, filter: string): $CancellablePromise<$models.HFSearchResult[]> {
     return $Call.ByID(3530747576, query, filter).then(($result: any) => {
-        return $$createType39($result);
+        return $$createType40($result);
     });
 }
 
@@ -529,7 +574,7 @@ export function StopUpdateDownload(): $CancellablePromise<void> {
  */
 export function TuneModelConfig(modelID: string): $CancellablePromise<$models.ModelConfig> {
     return $Call.ByID(899609304, modelID).then(($result: any) => {
-        return $$createType22($result);
+        return $$createType23($result);
     });
 }
 
@@ -557,29 +602,30 @@ const $$createType10 = $models.DlTask.createFrom;
 const $$createType11 = $Create.Array($$createType10);
 const $$createType12 = $models.GPUInfo.createFrom;
 const $$createType13 = $Create.Array($$createType12);
-const $$createType14 = $models.LlamaCppInfo.createFrom;
-const $$createType15 = $Create.Nullable($$createType14);
-const $$createType16 = $models.DownloadState.createFrom;
-const $$createType17 = $Create.Nullable($$createType16);
-const $$createType18 = $models.LoadedModel.createFrom;
-const $$createType19 = $Create.Array($$createType18);
-const $$createType20 = $models.MemoryInfo.createFrom;
-const $$createType21 = $Create.Nullable($$createType20);
-const $$createType22 = $models.ModelConfig.createFrom;
-const $$createType23 = $models.HFFileOut.createFrom;
-const $$createType24 = $Create.Array($$createType23);
-const $$createType25 = $models.ModelInfo.createFrom;
-const $$createType26 = $Create.Array($$createType25);
-const $$createType27 = $models.MonitorStatus.createFrom;
-const $$createType28 = $Create.Nullable($$createType27);
-const $$createType29 = $Create.Map($Create.Any, $Create.Any);
-const $$createType30 = $models.RemoteDocResult.createFrom;
-const $$createType31 = $models.SafeArea.createFrom;
-const $$createType32 = $models.ServerConfig.createFrom;
-const $$createType33 = $models.ServerLogsPage.createFrom;
-const $$createType34 = $models.SystemInfo.createFrom;
-const $$createType35 = $Create.Nullable($$createType34);
-const $$createType36 = $models.UpdateDownloadState.createFrom;
-const $$createType37 = $Create.Nullable($$createType36);
-const $$createType38 = $models.HFSearchResult.createFrom;
-const $$createType39 = $Create.Array($$createType38);
+const $$createType14 = $Create.Array($Create.Any);
+const $$createType15 = $models.LlamaCppInfo.createFrom;
+const $$createType16 = $Create.Nullable($$createType15);
+const $$createType17 = $models.DownloadState.createFrom;
+const $$createType18 = $Create.Nullable($$createType17);
+const $$createType19 = $models.LoadedModel.createFrom;
+const $$createType20 = $Create.Array($$createType19);
+const $$createType21 = $models.MemoryInfo.createFrom;
+const $$createType22 = $Create.Nullable($$createType21);
+const $$createType23 = $models.ModelConfig.createFrom;
+const $$createType24 = $models.HFFileOut.createFrom;
+const $$createType25 = $Create.Array($$createType24);
+const $$createType26 = $models.ModelInfo.createFrom;
+const $$createType27 = $Create.Array($$createType26);
+const $$createType28 = $models.MonitorStatus.createFrom;
+const $$createType29 = $Create.Nullable($$createType28);
+const $$createType30 = $Create.Map($Create.Any, $Create.Any);
+const $$createType31 = $models.RemoteDocResult.createFrom;
+const $$createType32 = $models.SafeArea.createFrom;
+const $$createType33 = $models.ServerConfig.createFrom;
+const $$createType34 = $models.ServerLogsPage.createFrom;
+const $$createType35 = $models.SystemInfo.createFrom;
+const $$createType36 = $Create.Nullable($$createType35);
+const $$createType37 = $models.UpdateDownloadState.createFrom;
+const $$createType38 = $Create.Nullable($$createType37);
+const $$createType39 = $models.HFSearchResult.createFrom;
+const $$createType40 = $Create.Array($$createType39);

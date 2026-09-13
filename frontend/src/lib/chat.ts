@@ -3,15 +3,39 @@
  *
  * Conventions:
  * - Pure functions (parseSSEChunks, buildChatBody, tokenRates) are unit-test friendly, no network/IO;
- * - The fetch wrapper talks to the local llama-server directly instead of going through
+ * - The fetch wrapper talks to the llama-server directly instead of going through
  *   Wails bindings, because streaming reads are required;
- * - Port and running state are obtained by the caller (Chat.vue) via getServerConfig / getServerStatus.
+ * - The target endpoint (host/port/key) is supplied by the caller (Chat.vue):
+ *   the local service via getServerConfig, or the LAN remote pairing
+ *   (lib/chatRemote) when the chat page's remote tier is active.
  */
 
 /** Router model entry (only the fields the frontend cares about) */
 export interface RouterModel {
   id: string
   status: string
+}
+
+/**
+ * Target llama-server endpoint for the direct chat transport: the local
+ * service passes host undefined (loopback), the LAN remote tier passes the
+ * peer host and its optional bearer key. Empty host normalizes to 127.0.0.1.
+ */
+export interface ChatEndpoint {
+  host?: string
+  port: number
+  apiKey?: string
+}
+
+/**
+ * Base URL of a llama-server endpoint: host empty/undefined targets the
+ * loopback service (`http://127.0.0.1:${port}`), otherwise the given LAN host.
+ * The host never carries a scheme or path (backend SaveRemoteChat validates
+ * that); this is a pure string join with no second-guessing.
+ */
+export function chatBaseUrl(host: string | undefined, port: number): string {
+  const h = host ? host : '127.0.0.1'
+  return `http://${h}:${port}`
 }
 
 /** Chat sampling parameters (kept in sync with chatState.ChatParams to avoid a hard dependency of this lib on chatState) */
@@ -433,16 +457,6 @@ export function buildMessageContent(text: string, images?: string[]): string | A
   return parts
 }
 
-/**
- * Transport-level options for direct llama-server HTTP requests: when the
- * server was started with an API key, every request must carry the bearer
- * token or it answers 401 (issue #29).
- */
-export interface ChatAuthOptions {
-  /** Configured llama-server API key; empty/undefined sends no auth header. */
-  apiKey?: string
-}
-
 /** Build the request headers for a direct llama-server call: adds the Authorization bearer header only for a non-empty key. */
 export function chatRequestHeaders(apiKey?: string): Record<string, string> {
   const headers: Record<string, string> = {}
@@ -465,10 +479,11 @@ export function chatRequestHeaders(apiKey?: string): Record<string, string> {
  * (modelsToUnload only acts on 'loaded'), and only a genuinely empty data
  * array yields an empty list (router mode with nothing loaded).
  */
-export async function fetchRouterModels(port: number, auth?: ChatAuthOptions): Promise<RouterModel[]> {
-  const res = await fetch(`http://127.0.0.1:${port}/models`, { headers: chatRequestHeaders(auth?.apiKey) })
+export async function fetchRouterModels(endpoint: ChatEndpoint): Promise<RouterModel[]> {
+  const base = chatBaseUrl(endpoint.host, endpoint.port)
+  const res = await fetch(`${base}/models`, { headers: chatRequestHeaders(endpoint.apiKey) })
   if (res.status === 404) {
-    return fetchOpenAIModels(port, auth)
+    return fetchOpenAIModels(base, endpoint.apiKey)
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
@@ -486,8 +501,8 @@ export async function fetchRouterModels(port: number, auth?: ChatAuthOptions): P
  * values with status 'loaded' (direct servers always have their model in
  * memory).
  */
-async function fetchOpenAIModels(port: number, auth?: ChatAuthOptions): Promise<RouterModel[]> {
-  const res = await fetch(`http://127.0.0.1:${port}/v1/models`, { headers: chatRequestHeaders(auth?.apiKey) })
+async function fetchOpenAIModels(base: string, apiKey?: string): Promise<RouterModel[]> {
+  const res = await fetch(`${base}/v1/models`, { headers: chatRequestHeaders(apiKey) })
   if (!res.ok) {
     throw new Error(`GET /v1/models failed: ${res.status}`)
   }
@@ -497,28 +512,52 @@ async function fetchOpenAIModels(port: number, auth?: ChatAuthOptions): Promise<
 }
 
 /**
+ * Unload one model on the target llama-server router: POST /models/unload with
+ * {"model": id}, mirroring core/router.go's request shape. Resolves true only
+ * on a 2xx response whose body carries success=true; every other outcome
+ * (non-2xx, success=false, network failure) resolves false without throwing —
+ * callers treat a single unload failure as non-blocking (chat continues).
+ */
+export async function unloadRouterModel(endpoint: ChatEndpoint, id: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${chatBaseUrl(endpoint.host, endpoint.port)}/models/unload`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...chatRequestHeaders(endpoint.apiKey) },
+      body: JSON.stringify({ model: id }),
+    })
+    if (!res.ok) {
+      return false
+    }
+    const json = await res.json().catch(() => null)
+    return json?.success === true
+  } catch {
+    // Network-level failure: same non-blocking semantics as a failed request
+    return false
+  }
+}
+
+/**
  * Streaming chat completion: POST /v1/chat/completions, invoking onDelta per
  * answer token and onReasoningDelta per thinking token (reasoning_content).
  *
- * @param auth When the server runs with an API key, pass it here so the
- *        request carries the Authorization bearer header (issue #29);
- *        empty/undefined keeps the header set unchanged.
+ * @param endpoint Target llama-server (host empty/undefined = local loopback
+ *        service); endpoint.apiKey is carried as the Authorization bearer
+ *        header when non-empty (issue #29).
  * @throws On non-2xx, reads error.message from the body and throws it.
  */
 export async function streamChatCompletion(
-  port: number,
+  endpoint: ChatEndpoint,
   model: string,
   messages: { role: string; content: string }[],
   onDelta: (text: string) => void,
   onReasoningDelta: (text: string) => void,
   signal: AbortSignal,
   params?: ChatParams,
-  bodyOptions?: BuildChatBodyOptions,
-  auth?: ChatAuthOptions
+  bodyOptions?: BuildChatBodyOptions
 ): Promise<void> {
-  const res = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
+  const res = await fetch(`${chatBaseUrl(endpoint.host, endpoint.port)}/v1/chat/completions`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...chatRequestHeaders(auth?.apiKey) },
+    headers: { 'Content-Type': 'application/json', ...chatRequestHeaders(endpoint.apiKey) },
     body: JSON.stringify(buildChatBody(model, messages, params, bodyOptions)),
     signal,
   })

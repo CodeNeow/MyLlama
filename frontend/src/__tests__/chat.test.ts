@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   buildChatBody,
   buildMessageContent,
+  chatBaseUrl,
   chatContextRows,
   chatContextSummary,
   chatErrorKind,
@@ -19,6 +20,7 @@ import {
   parseSSEChunks,
   streamChatCompletion,
   tokenRates,
+  unloadRouterModel,
   visionConfigKey,
   type ChatParams,
 } from '../lib/chat'
@@ -372,8 +374,22 @@ describe('fetchRouterModels', () => {
       }))
     })
     vi.stubGlobal('fetch', fetchMock)
-    await expect(fetchRouterModels(8080)).resolves.toEqual([
+    await expect(fetchRouterModels({ port: 8080 })).resolves.toEqual([
       { id: 'm1', status: 'loaded' },
+    ])
+  })
+
+  it('targets the configured LAN host instead of the loopback default', async () => {
+    // Remote tier: the endpoint's host replaces 127.0.0.1; port and mapping
+    // behavior are unchanged.
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      expect(url).toBe('http://192.168.1.5:9000/models')
+      return Promise.resolve(jsonResponse(200, {
+        data: [{ id: 'pc-model', status: { value: 'loaded' } }],
+      }))
+    }))
+    await expect(fetchRouterModels({ host: '192.168.1.5', port: 9000 })).resolves.toEqual([
+      { id: 'pc-model', status: 'loaded' },
     ])
   })
 
@@ -391,7 +407,7 @@ describe('fetchRouterModels', () => {
       }))
     })
     vi.stubGlobal('fetch', fetchMock)
-    await expect(fetchRouterModels(8080)).resolves.toEqual([
+    await expect(fetchRouterModels({ port: 8080 })).resolves.toEqual([
       { id: 'resident-a', status: 'loaded' },
       { id: 'resident-b', status: 'loaded' },
     ])
@@ -410,7 +426,7 @@ describe('fetchRouterModels', () => {
       }))
     })
     vi.stubGlobal('fetch', fetchMock)
-    await expect(fetchRouterModels(8080)).resolves.toEqual([
+    await expect(fetchRouterModels({ port: 8080 })).resolves.toEqual([
       { id: 'stories260K', status: 'loaded' },
     ])
     expect(fetchMock).toHaveBeenCalledTimes(1)
@@ -423,7 +439,7 @@ describe('fetchRouterModels', () => {
       expect(url).toBe('http://127.0.0.1:8080/models')
       return Promise.resolve(jsonResponse(200, { object: 'list', data: [] }))
     }))
-    await expect(fetchRouterModels(8080)).resolves.toEqual([])
+    await expect(fetchRouterModels({ port: 8080 })).resolves.toEqual([])
   })
 
   it('keeps non-loaded router statuses as-is instead of remapping them to loaded', async () => {
@@ -438,14 +454,28 @@ describe('fetchRouterModels', () => {
         ],
       }))
     }))
-    await expect(fetchRouterModels(8080)).resolves.toEqual([
+    await expect(fetchRouterModels({ port: 8080 })).resolves.toEqual([
       { id: 'm1', status: 'unloaded' },
     ])
   })
 
   it('propagates an error when both /models and /v1/models fail', async () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(jsonResponse(404, {}))))
-    await expect(fetchRouterModels(8080)).rejects.toThrow('GET /v1/models failed: 404')
+    await expect(fetchRouterModels({ port: 8080 })).rejects.toThrow('GET /v1/models failed: 404')
+  })
+})
+
+// ─── Endpoint base URL (LAN remote tier) ─────────────────────────────────────
+
+describe('chatBaseUrl', () => {
+  it('defaults an empty or undefined host to the loopback service', () => {
+    expect(chatBaseUrl(undefined, 8080)).toBe('http://127.0.0.1:8080')
+    expect(chatBaseUrl('', 8080)).toBe('http://127.0.0.1:8080')
+  })
+
+  it('joins the configured LAN host and port without a scheme or path', () => {
+    expect(chatBaseUrl('192.168.1.5', 9000)).toBe('http://192.168.1.5:9000')
+    expect(chatBaseUrl('my-pc.local', 8081)).toBe('http://my-pc.local:8081')
   })
 })
 
@@ -478,7 +508,7 @@ describe('fetchRouterModels auth', () => {
       captured = init
       return Promise.resolve(jsonResponse(200, { data: [{ id: 'm1', status: { value: 'loaded' } }] }))
     }))
-    await fetchRouterModels(8080, { apiKey: 'test-key-fixture' })
+    await fetchRouterModels({ port: 8080, apiKey: 'test-key-fixture' })
     expect(captured?.headers).toEqual({ Authorization: 'Bearer test-key-fixture' })
   })
 
@@ -488,7 +518,7 @@ describe('fetchRouterModels auth', () => {
       captured = init
       return Promise.resolve(jsonResponse(200, { data: [{ id: 'm1', status: { value: 'loaded' } }] }))
     }))
-    await fetchRouterModels(8080)
+    await fetchRouterModels({ port: 8080 })
     expect(captured?.headers).toEqual({})
   })
 })
@@ -521,15 +551,12 @@ describe('streamChatCompletion auth', () => {
     const noop = () => {}
     const controller = new AbortController()
     await streamChatCompletion(
-      8080,
+      { port: 8080, apiKey: 'test-key-fixture' },
       'm1',
       [{ role: 'user', content: 'hi' }],
       noop,
       noop,
-      controller.signal,
-      undefined,
-      undefined,
-      { apiKey: 'test-key-fixture' }
+      controller.signal
     )
     expect(captured?.headers).toEqual({
       'Content-Type': 'application/json',
@@ -545,8 +572,82 @@ describe('streamChatCompletion auth', () => {
     }))
     const noop = () => {}
     const controller = new AbortController()
-    await streamChatCompletion(8080, 'm1', [{ role: 'user', content: 'hi' }], noop, noop, controller.signal)
+    await streamChatCompletion({ port: 8080 }, 'm1', [{ role: 'user', content: 'hi' }], noop, noop, controller.signal)
     expect(captured?.headers).toEqual({ 'Content-Type': 'application/json' })
+  })
+
+  it('targets the endpoint host for the streaming request', async () => {
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      expect(url).toBe('http://192.168.1.5:9000/v1/chat/completions')
+      return Promise.resolve(sseResponse())
+    }))
+    const noop = () => {}
+    const controller = new AbortController()
+    await streamChatCompletion(
+      { host: '192.168.1.5', port: 9000 },
+      'm1',
+      [{ role: 'user', content: 'hi' }],
+      noop,
+      noop,
+      controller.signal
+    )
+  })
+})
+
+// ─── unloadRouterModel (single unload failure must not block the chat) ──────
+
+describe('unloadRouterModel', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  function jsonResponse(status: number, body: unknown): Response {
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      json: () => Promise.resolve(body),
+    } as unknown as Response
+  }
+
+  it('posts {"model": id} to /models/unload and resolves true on success:true', async () => {
+    let capturedUrl = ''
+    let capturedInit: RequestInit | undefined
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      capturedUrl = url
+      capturedInit = init
+      return jsonResponse(200, { success: true })
+    }))
+    await expect(unloadRouterModel({ host: '192.168.1.5', port: 9000 }, 'other-model')).resolves.toBe(true)
+    expect(capturedUrl).toBe('http://192.168.1.5:9000/models/unload')
+    expect(capturedInit?.method).toBe('POST')
+    expect(capturedInit?.body).toBe('{"model":"other-model"}')
+    expect((capturedInit?.headers as Record<string, string>)['Content-Type']).toBe('application/json')
+  })
+
+  it('resolves false on a non-2xx response', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(400, { error: { message: 'model is not running' } })))
+    await expect(unloadRouterModel({ port: 8080 }, 'gone-model')).resolves.toBe(false)
+  })
+
+  it('resolves false when the 2xx body reports success=false', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(200, { success: false })))
+    await expect(unloadRouterModel({ port: 8080 }, 'm1')).resolves.toBe(false)
+  })
+
+  it('resolves false on a network-level failure instead of throwing', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw new TypeError('Failed to fetch')
+    }))
+    await expect(unloadRouterModel({ port: 8080 }, 'm1')).resolves.toBe(false)
+  })
+
+  it('resolves false when the 2xx body is not JSON', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: () => Promise.reject(new Error('bad json')),
+    } as unknown as Response)))
+    await expect(unloadRouterModel({ port: 8080 }, 'm1')).resolves.toBe(false)
   })
 })
 

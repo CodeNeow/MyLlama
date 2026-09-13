@@ -24,6 +24,7 @@ export {
     ModelInfo,
     MonitorGPU,
     MonitorStatus,
+    RemoteChatConfig,
     RemoteDocResult,
     SafeArea,
     ServerConfig,

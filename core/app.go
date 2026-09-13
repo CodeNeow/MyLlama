@@ -232,6 +232,7 @@ func (a *App) GetConfig() map[string]interface{} {
 	apiRoute := apiRouteMode
 	sidebarCollapsed := currentSidebarCollapsed
 	onboardingDismissed := currentOnboardingDismissed
+	remoteChat := cachedRemoteChat
 	configMu.Unlock()
 
 	downloadSourceMu.Lock()
@@ -258,6 +259,9 @@ func (a *App) GetConfig() map[string]interface{} {
 		"apiRouteMode":        apiRoute,            // API-route (headless) mode toggle
 		"sidebarCollapsed":    sidebarCollapsed,    // sidebar collapsed state (default true = collapsed)
 		"onboardingDismissed": onboardingDismissed, // quick-start checklist dismissed / auto-completed (default false = visible)
+		// LAN remote-chat pairing (phone → PC llama-server); the chat page
+		// consumes it through lib/chatRemote's remoteEndpoint.
+		"remoteChat": remoteChat,
 	}
 }
 
@@ -542,6 +546,32 @@ func (a *App) BrowseLlamaCppDownloadDir() (string, error) {
 		return "", err
 	}
 	return dir, nil
+}
+
+// SaveRemoteChat validates and persists the LAN remote-chat pairing (phone →
+// PC llama-server, see RemoteChatConfig). Normalization: Host and APIKey are
+// trimmed; a host carrying a scheme ("://") or path ("/") is rejected because
+// the frontend only ever sends the bare host part of host[:port]; the port
+// must be within 1..65535; enabling requires a non-empty host. The validated
+// value is written to the in-memory state and persisted following the existing
+// configMu locking pattern; a rejected input never mutates state.
+func (a *App) SaveRemoteChat(cfg RemoteChatConfig) error {
+	cfg.Host = strings.TrimSpace(cfg.Host)
+	cfg.APIKey = strings.TrimSpace(cfg.APIKey)
+	if strings.Contains(cfg.Host, "://") || strings.Contains(cfg.Host, "/") {
+		return fmt.Errorf(tr("非法远程主机 %q：只需填写主机名或 IP，不含协议或路径", "invalid remote host %q: enter the host or IP only, without scheme or path"), cfg.Host)
+	}
+	if cfg.Port < 1 || cfg.Port > 65535 {
+		return fmt.Errorf(tr("非法远程端口 %d：端口范围应为 1-65535", "invalid remote port %d: port must be in range 1-65535"), cfg.Port)
+	}
+	if cfg.Enabled && cfg.Host == "" {
+		return errors.New(tr("启用远程聊天前需先填写远程主机地址", "set the remote host before enabling remote chat"))
+	}
+	configMu.Lock()
+	cachedRemoteChat = cfg
+	configMu.Unlock()
+	saveConfig()
+	return nil
 }
 
 // ─── System Info ─────────────────────────────────────────────────

@@ -76,6 +76,7 @@ func saveConfigState(t *testing.T) (origModels map[string]ModelConfig, origServe
 	origSidebarCollapsed := currentSidebarCollapsed
 	origOnboardingDismissed := currentOnboardingDismissed
 	origApiRouteMode := apiRouteMode
+	origRemoteChat := cachedRemoteChat
 	configMu.Unlock()
 	customLlamaCppMu.Lock()
 	origDir = customLlamaCppDir
@@ -105,6 +106,7 @@ func saveConfigState(t *testing.T) (origModels map[string]ModelConfig, origServe
 		currentSidebarCollapsed = origSidebarCollapsed
 		currentOnboardingDismissed = origOnboardingDismissed
 		apiRouteMode = origApiRouteMode
+		cachedRemoteChat = origRemoteChat
 		configMu.Unlock()
 		customLlamaCppMu.Lock()
 		customLlamaCppDir = origDir
@@ -1316,5 +1318,132 @@ func TestSaveServerConfigDeviceIDValidation(t *testing.T) {
 	serverConfigMu.Unlock()
 	if got.DeviceID != known.DeviceID {
 		t.Errorf("rejected save must not overwrite stored DeviceID, got %q, want %q", got.DeviceID, known.DeviceID)
+	}
+}
+
+// ─── remoteChat (LAN remote chat pairing) ──────────────────────────────
+
+// TestLoadConfigRemoteChatDefault verifies old configs without the remoteChat
+// key load the documented defaults (disabled pairing against the llama-server
+// default port 8080), and that a non-default pairing survives the
+// saveConfig / loadConfig round-trip losslessly.
+func TestLoadConfigRemoteChatDefault(t *testing.T) {
+	withTempCwd(t)
+	saveConfigState(t)
+
+	if err := os.WriteFile(configFile, []byte(`{"theme":"light"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	loadConfig()
+	configMu.Lock()
+	got := cachedRemoteChat
+	configMu.Unlock()
+	if got.Enabled || got.Host != "" || got.APIKey != "" || got.Port != 8080 {
+		t.Errorf("old config without remoteChat should load defaults (enabled=false host=\"\" port=8080 apiKey=\"\"), got %+v", got)
+	}
+
+	// non-default pairing round-trips through persistence
+	want := RemoteChatConfig{Enabled: true, Host: "192.168.1.5", Port: 8081, APIKey: "sk-lan"}
+	configMu.Lock()
+	cachedRemoteChat = want
+	configMu.Unlock()
+	saveConfig()
+	// clear to the zero value, simulate a fresh start
+	configMu.Lock()
+	cachedRemoteChat = RemoteChatConfig{}
+	configMu.Unlock()
+	loadConfig()
+	configMu.Lock()
+	got = cachedRemoteChat
+	configMu.Unlock()
+	if got != want {
+		t.Errorf("remoteChat round-trip failed: got %+v, want %+v", got, want)
+	}
+}
+
+// TestSaveRemoteChatValidation verifies SaveRemoteChat's normalization rules:
+// scheme/path-bearing hosts, out-of-range ports and enabled-with-empty-host
+// are rejected without mutating the stored pairing; valid input is trimmed
+// (host and key), written to the in-memory state and persisted so a reload
+// restores the trimmed values.
+func TestSaveRemoteChatValidation(t *testing.T) {
+	withTempCwd(t)
+	saveConfigState(t)
+
+	app := &App{}
+
+	// rejection table: each case starts from the pristine default state and
+	// must leave it untouched
+	rejects := []struct {
+		name string
+		cfg  RemoteChatConfig
+	}{
+		{"scheme host", RemoteChatConfig{Enabled: true, Host: "http://192.168.1.5", Port: 8080}},
+		{"path host", RemoteChatConfig{Enabled: true, Host: "192.168.1.5/models", Port: 8080}},
+		{"port zero", RemoteChatConfig{Enabled: true, Host: "192.168.1.5", Port: 0}},
+		{"port too large", RemoteChatConfig{Enabled: true, Host: "192.168.1.5", Port: 70000}},
+		{"negative port", RemoteChatConfig{Enabled: true, Host: "192.168.1.5", Port: -1}},
+		{"enabled empty host", RemoteChatConfig{Enabled: true, Host: "   ", Port: 8080}},
+	}
+	for _, c := range rejects {
+		t.Run(c.name, func(t *testing.T) {
+			configMu.Lock()
+			cachedRemoteChat = RemoteChatConfig{}
+			configMu.Unlock()
+			if err := app.SaveRemoteChat(c.cfg); err == nil {
+				t.Errorf("SaveRemoteChat(%+v) should return error", c.cfg)
+			}
+			configMu.Lock()
+			got := cachedRemoteChat
+			configMu.Unlock()
+			if got != (RemoteChatConfig{}) {
+				t.Errorf("rejected save must not mutate state, got %+v", got)
+			}
+		})
+	}
+
+	// valid table: hosts (IP / hostname) pass; disabled-with-empty-host passes
+	valids := []struct {
+		name string
+		cfg  RemoteChatConfig
+		want RemoteChatConfig
+	}{
+		{"ipv4 host", RemoteChatConfig{Enabled: true, Host: "192.168.1.5", Port: 8080}, RemoteChatConfig{Enabled: true, Host: "192.168.1.5", Port: 8080}},
+		{"hostname", RemoteChatConfig{Enabled: true, Host: "my-pc.local", Port: 8081, APIKey: "sk-lan"}, RemoteChatConfig{Enabled: true, Host: "my-pc.local", Port: 8081, APIKey: "sk-lan"}},
+		{"disabled empty host", RemoteChatConfig{Enabled: false, Host: "", Port: 8080}, RemoteChatConfig{Enabled: false, Host: "", Port: 8080}},
+	}
+	for _, c := range valids {
+		t.Run(c.name, func(t *testing.T) {
+			if err := app.SaveRemoteChat(c.cfg); err != nil {
+				t.Errorf("SaveRemoteChat(%+v) should succeed: %v", c.cfg, err)
+			}
+			configMu.Lock()
+			got := cachedRemoteChat
+			configMu.Unlock()
+			if got != c.want {
+				t.Errorf("stored pairing = %+v, want %+v", got, c.want)
+			}
+		})
+	}
+
+	// whitespace trimming: leading/trailing blanks on host and key are stripped
+	want := RemoteChatConfig{Enabled: true, Host: "192.168.1.9", Port: 8082, APIKey: "sk-lan-2"}
+	if err := app.SaveRemoteChat(RemoteChatConfig{Enabled: true, Host: "  192.168.1.9  ", Port: 8082, APIKey: "  sk-lan-2  "}); err != nil {
+		t.Fatalf("trimmed save should succeed: %v", err)
+	}
+	configMu.Lock()
+	got := cachedRemoteChat
+	configMu.Unlock()
+	if got != want {
+		t.Errorf("trimmed pairing = %+v, want %+v", got, want)
+	}
+
+	// the trimmed values survive a persist/reload round-trip
+	loadConfig()
+	configMu.Lock()
+	got = cachedRemoteChat
+	configMu.Unlock()
+	if got != want {
+		t.Errorf("after reload remoteChat = %+v, want %+v", got, want)
 	}
 }

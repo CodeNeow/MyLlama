@@ -27,6 +27,10 @@ These two paths decide where **new** content lands; to reuse model files already
 
 **API Key**: an optional Bearer token. When set, every inference request must carry it; leave empty for no authentication. Even for purely local use, a key stops other local programs from calling the service freely. The key applies the **next time the service starts** — saving while the service is running asks whether to restart immediately.
 
+**LAN Connection**: while the access scope is "LAN", this card lists this machine's LAN addresses, the service port and the API-key status, each with one-tap copy for pairing from another device (e.g. "Settings → Remote Chat" in MyLlama on a phone). While the scope is "Local", the card shows guidance pointing at the "Server Access Scope" switch above (the single toggle for this setting).
+
+**Remote Chat**: the reverse pairing — connect this app (e.g. a phone) to the llama-server of another computer on the same network: enter the PC address (the host or IP only), the port and the API key set there, turn the switch on and save, then switch the chat page's "Chat target" to "Remote PC". LAN traffic is plaintext; the API key keeps freeloaders out but does not prevent eavesdropping. See "LAN remote chat" in the Local Chat section for the full steps.
+
 **Inference GPU**: on multi-GPU machines, choose which NVIDIA card llama-server runs on (stored as a stable UUID and passed to the service process via `CUDA_VISIBLE_DEVICES`). With no NVIDIA GPU the selector is disabled and the service uses the default device. One-click auto-tune budgets VRAM against the card chosen here. Windows only.
 
 **System tray (Windows / macOS)**: when enabled, clicking the close button minimizes the window to the system tray while llama-server keeps running in the background; the tray icon menu reopens the main window or quits the app. The row shows only where the capability is reliable (Linux desktop-environment tray support is incomplete, so it is not offered there). Note: re-enabling the tray after disabling it requires an app restart.

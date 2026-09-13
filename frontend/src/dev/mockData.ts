@@ -42,6 +42,9 @@ const config: Record<string, any> = {
   apiRouteMode: false,
   sidebarCollapsed: false,
   onboardingDismissed: true,
+  // LAN remote-chat pairing (phone → PC llama-server), mirrors the backend
+  // defaults for a config without the remoteChat key (SaveRemoteChat writes it).
+  remoteChat: { enabled: false, host: '', port: 8080, apiKey: '' },
 }
 
 // Theme persistence mirror: the real backend keeps the theme in its config
@@ -703,6 +706,26 @@ export const handlers: Record<string, (...args: any[]) => any> = {
   SaveServerConfig: (cfg: any) => {
     Object.assign(serverConfig, cfg)
   },
+  // LAN remote-chat pairing: mirrors the backend SaveRemoteChat validation
+  // (core/app.go) so the mock preview rejects the same malformed input.
+  SaveRemoteChat: (cfg: any) => {
+    const host = String(cfg?.host ?? '').trim()
+    const apiKey = String(cfg?.apiKey ?? '').trim()
+    const port = Number(cfg?.port)
+    if (host.includes('://') || host.includes('/')) {
+      throw new Error('invalid remote host: ' + host)
+    }
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      throw new Error('invalid remote port: ' + String(cfg?.port))
+    }
+    if (cfg?.enabled && !host) {
+      throw new Error('remote host required when enabled')
+    }
+    config.remoteChat = { enabled: !!cfg?.enabled, host, port, apiKey }
+  },
+  // Non-loopback IPv4 addresses for the Settings LAN pairing card; the mock
+  // reports two sample addresses like the real sorted list would.
+  GetLanAddresses: () => ['192.168.1.10', '192.168.1.5'],
   GetServerStatus: () => ({ running: serverRunning, log: serverLogRing.map((e) => e.text) }),
   GetServerLogsSince: (since: number) => ({
     entries: serverLogRing.filter((e) => e.seq >= since).map((e) => ({ ...e })),

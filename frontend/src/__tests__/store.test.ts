@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { appConfig, loadConfig, setTheme, setDownloadSource, setLanguage, setServerAccessMode, setApiKey, setTrayEnabled, setSidebarCollapsed, readStoredTheme, readStoredSidebarCollapsed } from '../store'
-import { getConfig, setTheme as setThemeBackend, setDownloadSource as setDownloadSourceBackend, setLanguage as setLanguageBackend, setTrayEnabled as setTrayEnabledBackend, setSidebarCollapsed as setSidebarCollapsedBackend, getServerConfig, saveServerConfig as saveServerConfigBackend } from '../wails'
+import { appConfig, loadConfig, setTheme, setDownloadSource, setLanguage, setServerAccessMode, setApiKey, setTrayEnabled, setSidebarCollapsed, setRemoteChat, readStoredTheme, readStoredSidebarCollapsed } from '../store'
+import { getConfig, setTheme as setThemeBackend, setDownloadSource as setDownloadSourceBackend, setLanguage as setLanguageBackend, setTrayEnabled as setTrayEnabledBackend, setSidebarCollapsed as setSidebarCollapsedBackend, getServerConfig, saveServerConfig as saveServerConfigBackend, saveRemoteChat as saveRemoteChatBackend } from '../wails'
 import { locale } from '../lib/i18n'
 
 // mock Wails bridge: window.go is injected by Wails runtime only, unavailable in test env
@@ -13,6 +13,7 @@ vi.mock('../wails', () => ({
   setSidebarCollapsed: vi.fn(),
   getServerConfig: vi.fn(),
   saveServerConfig: vi.fn(),
+  saveRemoteChat: vi.fn(),
 }))
 
 const mockGetConfig = vi.mocked(getConfig)
@@ -23,6 +24,7 @@ const mockSetTrayEnabled = vi.mocked(setTrayEnabledBackend)
 const mockSetSidebarCollapsed = vi.mocked(setSidebarCollapsedBackend)
 const mockGetServerConfig = vi.mocked(getServerConfig)
 const mockSaveServerConfig = vi.mocked(saveServerConfigBackend)
+const mockSaveRemoteChat = vi.mocked(saveRemoteChatBackend)
 
 describe('store', () => {
   beforeEach(() => {
@@ -38,6 +40,9 @@ describe('store', () => {
     appConfig.resolvedLanguage = 'zh'
     appConfig.trayEnabled = true
     appConfig.apiRouteMode = false
+    // reset remote-chat pairing to the documented defaults (backend loadConfig
+    // fallback for a config without the remoteChat key) to avoid cross-test pollution
+    appConfig.remoteChat = { enabled: false, host: '', port: 8080, apiKey: '' }
     // reset sidebar collapsed state to avoid cross-test pollution (readStoredSidebarCollapsed runs at module
     // load time; explicitly reset to default collapsed state so each test starts collapsed)
     appConfig.sidebarCollapsed = true
@@ -360,5 +365,66 @@ describe('store', () => {
     // explicitly write '0' to expand (matches setSidebarCollapsed write-back format)
     localStorage.setItem('llama-desktop-sidebar-collapsed', '0')
     expect(readStoredSidebarCollapsed()).toBe(false)
+  })
+})
+
+// ─── remoteChat (LAN remote chat pairing) ────────────────────────────────────
+
+describe('store remoteChat', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+    localStorage.clear()
+    appConfig.remoteChat = { enabled: false, host: '', port: 8080, apiKey: '' }
+  })
+
+  it('loadConfig reads the persisted remoteChat pairing from the backend', async () => {
+    mockGetConfig.mockResolvedValue({
+      theme: 'light', llamaCppDir: '', modelsDir: '', downloadSource: 'hf',
+      language: 'auto', resolvedLanguage: 'zh', trayEnabled: true,
+      remoteChat: { enabled: true, host: '192.168.1.5', port: 9000, apiKey: 'sk-lan' },
+    })
+
+    await loadConfig()
+
+    expect(appConfig.remoteChat).toEqual({ enabled: true, host: '192.168.1.5', port: 9000, apiKey: 'sk-lan' })
+  })
+
+  it('loadConfig falls back to documented defaults when backend omits remoteChat (legacy config)', async () => {
+    mockGetConfig.mockResolvedValue({
+      theme: 'dark', llamaCppDir: '', modelsDir: '', downloadSource: 'hf',
+      language: 'auto', resolvedLanguage: 'zh', trayEnabled: true,
+    } as any)
+
+    await loadConfig()
+
+    expect(appConfig.remoteChat).toEqual({ enabled: false, host: '', port: 8080, apiKey: '' })
+  })
+
+  it('setRemoteChat success updates local state and persists through the backend', async () => {
+    mockSaveRemoteChat.mockResolvedValue(undefined)
+
+    const profile = { enabled: true, host: '192.168.1.9', port: 8081, apiKey: 'sk-lan' }
+    await setRemoteChat(profile)
+
+    expect(mockSaveRemoteChat).toHaveBeenCalledWith(profile)
+    expect(appConfig.remoteChat).toEqual(profile)
+  })
+
+  it('setRemoteChat mirrors backend trimming (host/apiKey) into local state on success', async () => {
+    mockSaveRemoteChat.mockResolvedValue(undefined)
+
+    await setRemoteChat({ enabled: true, host: '  192.168.1.9  ', port: 8081, apiKey: '  sk-lan  ' })
+
+    expect(appConfig.remoteChat).toEqual({ enabled: true, host: '192.168.1.9', port: 8081, apiKey: 'sk-lan' })
+  })
+
+  it('setRemoteChat backend failure rolls back local state and rethrows', async () => {
+    const kept = { enabled: true, host: '192.168.1.5', port: 8080, apiKey: 'sk-kept' }
+    appConfig.remoteChat = { ...kept }
+    mockSaveRemoteChat.mockRejectedValue(new Error('invalid remote port'))
+
+    await expect(setRemoteChat({ enabled: true, host: '192.168.1.9', port: 0, apiKey: '' }))
+      .rejects.toThrow('invalid remote port')
+    expect(appConfig.remoteChat).toEqual(kept)
   })
 })

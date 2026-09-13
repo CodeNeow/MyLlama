@@ -119,8 +119,23 @@ type appConfig struct {
 	// when true, the next app start skips the GUI and runs as tray +
 	// llama-server only (Windows; see core/headless.go). False is the Go zero
 	// value, so old configs missing the field fall back to false naturally.
-	ApiRouteMode  bool              `json:"apiRouteMode"`
+	ApiRouteMode bool `json:"apiRouteMode"`
+	// RemoteChat is the LAN remote-chat pairing (phone → PC llama-server).
+	// Old configs missing the remoteChat key load as the zero value; loadConfig
+	// normalizes the port back to 8080 (the llama-server default) while
+	// enabled/host/apiKey keep their zero values (disabled pairing).
+	RemoteChat    RemoteChatConfig  `json:"remoteChat"`
 	DownloadTasks []PersistedDlTask `json:"downloadTasks,omitempty"`
+}
+
+// RemoteChatConfig holds the phone-to-PC LAN chat pairing used by the chat
+// page when Enabled is true: the LAN address of the peer machine running
+// llama-server and the optional API key configured there.
+type RemoteChatConfig struct {
+	Enabled bool   `json:"enabled"`
+	Host    string `json:"host"`   // LAN host or IP, e.g. 192.168.1.5 (no scheme, no path)
+	Port    int    `json:"port"`   // llama-server port on the peer, default 8080
+	APIKey  string `json:"apiKey"` // optional bearer token of the peer server
 }
 
 // Service access scope values: local means reachable only from this machine
@@ -570,6 +585,15 @@ func loadConfig() {
 	// default for configs missing the field (checklist visible until the user
 	// dismisses it or completes all steps), no pre-population needed.
 	currentOnboardingDismissed = cfg.OnboardingDismissed
+	// Remote-chat pairing: old configs missing the remoteChat key load as the
+	// zero value — Enabled=false (chat targets the local service), Host="",
+	// APIKey="" and the port normalized to the llama-server default 8080.
+	// An explicit port 0 (corrupt / never validated) normalizes the same way;
+	// SaveRemoteChat is the only writer of valid ports (1..65535).
+	if cfg.RemoteChat.Port == 0 {
+		cfg.RemoteChat.Port = 8080
+	}
+	cachedRemoteChat = cfg.RemoteChat
 	configMu.Unlock()
 
 	// Restore the download task queue (after a process restart there are no
@@ -682,10 +706,16 @@ func ApiRouteMode() bool {
 var currentSidebarCollapsed = true
 
 // currentOnboardingDismissed indicates whether the Home page quick-start
-// checklist has been dismissed (manually closed or auto-completed); guarded
-// by configMu and persisted to the config file's onboardingDismissed field.
+// checklist has been dismissed (manually closed or auto-completed); guarded by
+// configMu and persisted to the config file's onboardingDismissed field.
 // Default false: old configs lacking the field show the checklist.
 var currentOnboardingDismissed = false
+
+// cachedRemoteChat is the persisted LAN remote-chat pairing (phone → PC
+// llama-server, see RemoteChatConfig); guarded by configMu like the other
+// app-state config entries. Default: disabled pairing against the llama-server
+// default port; SaveRemoteChat is the only writer after loadConfig.
+var cachedRemoteChat = RemoteChatConfig{Enabled: false, Host: "", Port: 8080, APIKey: ""}
 
 // TrayEnabled returns the current tray preference (concurrency-safe, guarded
 // by configMu). Used by main.go's OnStartup to decide whether to start the
@@ -744,6 +774,7 @@ func saveConfig() {
 	sidebarCollapsed := currentSidebarCollapsed
 	apiRoute := apiRouteMode
 	onboardingDismissed := currentOnboardingDismissed
+	remoteChat := cachedRemoteChat
 	configMu.Unlock()
 
 	// Lock-ordering iron rule: inside saveConfig, dlTasksMu must be the last
@@ -785,6 +816,7 @@ func saveConfig() {
 		SidebarCollapsed:    sidebarCollapsed,
 		OnboardingDismissed: onboardingDismissed,
 		ApiRouteMode:        apiRoute,
+		RemoteChat:          remoteChat,
 		DownloadTasks:       persistedTasks,
 	}
 	data, err := json.MarshalIndent(cfg, "", "  ")

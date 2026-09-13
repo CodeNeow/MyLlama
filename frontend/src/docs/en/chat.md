@@ -17,6 +17,26 @@ Multimodal models (with an mmproj file) can also take images: use the paperclip 
 
 A vision model needs **two files**: the main weights `.gguf` and the `mmproj` vision projector `.gguf`. If the selected model has no projector (no mmproj file next to the weights and no explicit projector path in the model settings), the chat page disables the attach button; pasting or picking an image is dropped with a hint; sending with images attached is blocked with guidance — re-open the model's detail page under Models → Download and grab the mmproj file carrying the 👁️ multimodal badge, or set the projector path in the model settings.
 
+## LAN remote chat (phone to PC)
+
+The "Chat target" switcher at the top of the toolbar toggles between **This PC** and **Remote PC**. On the remote tier, chat requests go straight to a llama-server already running on another computer in the same network: the model list, unloading other models and streaming all act on that machine — no models or runtime are needed on this device.
+
+**PC side (serving) — three steps** (see the "Preferences" section):
+
+1. Under "Settings → Server Access Scope", switch the service to **LAN (0.0.0.0)** (applies the next time the service starts);
+2. Set a key under "Settings → API Key" (strongly recommended: any device on the network can find the service port);
+3. Open the "LAN Connection" card under Settings to see this machine's addresses, the service port and the key status, and copy each item over to the chat device.
+
+**Phone side (chatting) — three steps**:
+
+1. Under "Settings → Remote Chat", enter the PC address (the host or IP only, e.g. `192.168.1.5`), the port and the API key set on the PC;
+2. Turn on **Enable remote chat** and save;
+3. Back on the chat page, switch "Chat target" to **Remote PC** — the model list becomes the PC's models; just type and stream.
+
+On the remote tier the PC manages its own service: the chat page never starts or stops it, and a failed connection surfaces a hint to check the address, port and firewall. Every behavior of the "This PC" tier stays unchanged.
+
+> Security boundary: LAN traffic is **plaintext HTTP**. The API key keeps unrelated devices from freeloading the service but **does not prevent eavesdropping** within the same network — enable remote chat on trusted networks only.
+
 ## Tuning chat parameters
 
 Sampling parameters are owned by the **sampling preset** picker next to the model capsule in the top toolbar, borrowed from unsloth's generation presets: **Default** (no override — the per-model sampling parameters saved in the model settings apply), **Precise** (temperature 0.3 / top_p 0.8 / top_k 20 / repeat_penalty 1.1), **Balanced** (0.7 / 0.9 / 40 / 1.1), **Creative** (1.0 / 0.95 / 60 / 1.05) and **Random** (1.2 / 1.0 / 80 / 1.0). With any non-default preset selected, the sent request body carries those four sampling override fields; with "Default" none are attached and the server-side parameters decide. The selection is remembered across sessions.

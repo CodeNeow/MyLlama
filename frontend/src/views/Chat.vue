@@ -30,9 +30,30 @@
            / bottom nav already carry the page identity and the phone viewport
            belongs to the conversation. -->
       <div class="chat-toolbar">
+        <!-- Chat target switcher (LAN remote tier): "This PC" vs "Remote PC".
+             The remote option exists only while a PC address is configured in
+             Settings; without one a hint row next to the switcher points there
+             instead. Same ThemedSelect toolbar variant as the model chip so
+             both tiers narrow identically. -->
+        <ThemedSelect
+          variant="toolbar"
+          class="chat-target-select"
+          :model-value="targetValue"
+          :options="targetOptions"
+          :disabled="serviceStarting || streaming"
+          :label="t('chat.target')"
+          @update:model-value="pickTarget"
+        />
+        <button
+          v-if="!remoteConfigured"
+          class="chat-remote-hint"
+          type="button"
+          @click="goSettings"
+        >{{ t('chat.remoteHint') }}</button>
         <!-- Model picker: themed dropdown (popup list is rendered in-app, so it
              follows the theme — a native select's popup is OS-rendered).
-             Options come from the local model scan, so picking works with the
+             Options come from the local model scan (local tier) or the remote
+             PC's router listing (remote tier), so picking works with the
              service stopped; sending then auto-starts it. The chip look is a
              scoped :deep() reskin of the toolbar variant; the trigger stays a
              real button with the full WAI-ARIA select-only combobox wiring. -->
@@ -318,10 +339,14 @@ import {
   modelsToUnload,
   streamChatCompletion,
   tokenRates,
+  unloadRouterModel,
   visionConfigKey,
   type BuildChatBodyOptions,
+  type ChatEndpoint,
   type ChatReadiness,
+  type RouterModel,
 } from '../lib/chat'
+import { remoteEndpoint } from '../lib/chatRemote'
 import {
   GEN_PRESET_DEFAULT_ID,
   clampPresetSamplingField,
@@ -341,6 +366,7 @@ import { messages, selectedModel, streaming, chatAbortController, persistChat, r
 import { nudgeDock } from '../lib/dockNudge'
 import { dockLane, dockWidth } from '../lib/dockSpace'
 import { t } from '../lib/i18n'
+import { appConfig } from '../store'
 import { usePlatform } from '../lib/platform'
 import ThemedSelect, { type SelectOption } from '../components/ThemedSelect.vue'
 import ChatMessageList from '../components/ChatMessageList.vue'
@@ -375,6 +401,96 @@ const laneLeftActive = computed(
 const laneRightActive = computed(
   () => !isMobileTier.value && dockLane.value === 'right' && dockWidth.value > 0
 )
+
+// ─── Chat target (local service vs LAN remote PC, Phase 0) ──────────────────
+// The header switcher picks where the chat transport talks: the local
+// llama-server (every existing flow unchanged) or the PC's llama-server over
+// the LAN pairing (Settings → Remote Chat). The remote option exists only
+// while a host is configured; the selection persists in localStorage for the
+// first frame.
+
+/** localStorage key for the persisted chat target ('local' | 'remote'). */
+const CHAT_TARGET_KEY = 'myllama-chat-target'
+
+type ChatTarget = 'local' | 'remote'
+
+/** First-frame read of the persisted target; anything but 'remote' means local. */
+function readStoredChatTarget(): ChatTarget {
+  try {
+    return localStorage.getItem(CHAT_TARGET_KEY) === 'remote' ? 'remote' : 'local'
+  } catch {
+    return 'local'
+  }
+}
+
+const chatTarget = ref<ChatTarget>(readStoredChatTarget())
+
+function persistChatTarget(): void {
+  try {
+    localStorage.setItem(CHAT_TARGET_KEY, chatTarget.value)
+  } catch {
+    // localStorage unavailable: the choice just does not survive a reload
+  }
+}
+
+/** Whether a PC address is configured (the remote option exists only then). */
+const remoteConfigured = computed(() => appConfig.remoteChat.host !== '')
+
+/**
+ * Local-service endpoint snapshot for the transport functions (host always
+ * undefined = loopback; port/key from the backend server config). Refreshed on
+ * the local bootstrap, after each auto-start and before every local send, so a
+ * port/key change made on the API page is picked up without a remount.
+ */
+const localEndpoint = ref<ChatEndpoint>({ host: undefined, port: 8080, apiKey: '' })
+
+/**
+ * Remote endpoint when the remote tier is actually usable (enabled + host
+ * configured), else null. remoteEndpoint is the pure mapper from lib/chatRemote.
+ */
+const remoteTarget = computed<ChatEndpoint | null>(() => remoteEndpoint(appConfig.remoteChat))
+
+/**
+ * Endpoint the transport functions talk to: the LAN pairing when the remote
+ * tier is selected and usable, otherwise the local loopback service (host
+ * undefined, port/key from the backend server config snapshot below).
+ */
+const effectiveTarget = computed<ChatEndpoint>(() =>
+  chatTarget.value === 'remote' && remoteTarget.value !== null
+    ? remoteTarget.value
+    : { host: undefined, port: localEndpoint.value.port, apiKey: localEndpoint.value.apiKey }
+)
+
+/** Whether the remote tier is actually active (selected AND usable). */
+const isRemoteTarget = computed(() => chatTarget.value === 'remote' && remoteTarget.value !== null)
+
+/** Switcher value shown on the trigger: normalized so a stale 'remote' choice
+ * (pairing cleared in Settings) never renders as an unknown option. */
+const targetValue = computed<ChatTarget>(() => (isRemoteTarget.value ? 'remote' : 'local'))
+
+/** Switcher options: the local service always; Remote PC only while a host
+ * is configured. */
+const targetOptions = computed<SelectOption[]>(() => {
+  const opts: SelectOption[] = [{ value: 'local', label: t('chat.targetLocal') }]
+  if (remoteConfigured.value) {
+    opts.push({ value: 'remote', label: t('chat.targetRemote') })
+  }
+  return opts
+})
+
+function pickTarget(value: string) {
+  if (value === chatTarget.value) return
+  if (value === 'remote' && !remoteConfigured.value) return
+  chatTarget.value = value === 'remote' ? 'remote' : 'local'
+  persistChatTarget()
+  // The isRemoteTarget watcher below swaps the picker list and the bootstrap
+  // state between the local-service flow and the remote-PC flow.
+}
+
+/** Settings hint jump (unconfigured host): the pairing form lives there. */
+function goSettings() {
+  router.push('/settings')
+}
 
 const serverRunning = ref(false)
 
@@ -474,8 +590,12 @@ const selectedModelHasVision = computed(() => {
  * Attachment-entry gate: blocked only when a model IS picked and it cannot see
  * images. With no selection attachments stay ungated (no nagging before a
  * model is even chosen) — the send-time fallback covers that case instead.
+ * Remote tier: never blocked here (the verdict reads the LOCAL scan, which
+ * says nothing about the PC's models).
  */
-const attachBlocked = computed(() => !!selectedModel.value && !selectedModelHasVision.value)
+const attachBlocked = computed(() =>
+  !isRemoteTarget.value && !!selectedModel.value && !selectedModelHasVision.value
+)
 
 /** Whether the chat parameters panel is expanded */
 const showParams = ref(false)
@@ -486,8 +606,24 @@ const showParams = ref(false)
  * differs from Name when the name has spaces/special chars or collides
  * (core/gguf.go aliasDedup) — falling back to the name when absent. Label
  * stays the human-readable display name.
+ *
+ * Remote tier: the PC's router answers with its own ids; there is no local
+ * alias/display-name mapping on this device, so the id doubles as the label.
  */
-const modelOptions = computed<SelectOption[]>(() => localModels.value.map((m) => ({ value: m.alias || m.name, label: m.name })))
+const modelOptions = computed<SelectOption[]>(() => {
+  if (isRemoteTarget.value) {
+    return remoteModels.value.map((m) => ({ value: m.id, label: m.id }))
+  }
+  return localModels.value.map((m) => ({ value: m.alias || m.name, label: m.name }))
+})
+
+/**
+ * Remote-tier model list (the PC's router /models answer): replaces the local
+ * scan while the remote tier is active. Kept on probe failure so a transient
+ * network hiccup does not blank the picker; the send path surfaces the
+ * "unreachable" guidance instead.
+ */
+const remoteModels = ref<RouterModel[]>([])
 
 /**
  * Model-chip placeholder (frame ⑦): with an empty directory the touch-tier
@@ -683,6 +819,69 @@ async function refreshLocalModels(): Promise<void> {
 }
 
 /**
+ * Remote-tier model list: probe the PC's router (/models with the LAN
+ * pairing's bearer key) and reconcile the persisted selection against the
+ * remote ids — a different id set than the local scan is normal, the same
+ * reconcileSelectedModel rule applies. Probe failure keeps the current list
+ * (the send path reports "unreachable"); a remote list with no entries clears
+ * the selection like an empty local directory would.
+ */
+async function refreshRemoteModels(): Promise<void> {
+  if (!isRemoteTarget.value) return
+  let list: RouterModel[] = []
+  try {
+    list = await fetchRouterModels(effectiveTarget.value)
+  } catch {
+    // PC unreachable right now: keep whatever the picker already shows
+    return
+  }
+  remoteModels.value = list
+  const ids = list.map((m) => m.id)
+  const reconciled = reconcileSelectedModel(selectedModel.value, ids)
+  if (reconciled.action === 'switched') {
+    selectedModel.value = reconciled.model
+    persistChat()
+    // Remote models carry no display names on this device — the id is the label
+    showModelNotice(t('chat.modelSwitched', { name: reconciled.model }))
+  } else if (reconciled.action === 'cleared') {
+    selectedModel.value = ''
+    persistChat()
+  }
+}
+
+/**
+ * Local-tier bootstrap: status precheck + local scan + endpoint refresh. Runs
+ * on mount (local target) and whenever the target switches back to local; the
+ * remote tier skips the whole local-service orchestration (the PC manages its
+ * own llama-server).
+ */
+async function bootstrapLocal(): Promise<void> {
+  try {
+    const status = await getServerStatus()
+    serverRunning.value = status.running
+  } catch {
+    // Backend unavailable (standalone vite): keep the offline default
+  }
+  getServerConfig().then((scfg) => {
+    localEndpoint.value = { host: undefined, port: scfg.port, apiKey: scfg.apiKey }
+  }).catch(() => {})
+  // Picker options come from the local scan, so they work with the service
+  // stopped; reconcile the persisted choice against the names that exist
+  await refreshLocalModels()
+}
+
+// Target switch (and a pairing configured/cleared while the page is open):
+// swap the bootstrap state between the two tiers. The initial mount choice is
+// bootstrapped by onMounted directly (the watcher starts observing after that).
+watch(isRemoteTarget, async (remote) => {
+  if (remote) {
+    await refreshRemoteModels()
+  } else {
+    await bootstrapLocal()
+  }
+})
+
+/**
  * Transient model-list notice (#33): a one-line info card in the notices
  * stack that auto-dismisses after a few seconds (light toast semantics).
  */
@@ -742,10 +941,11 @@ async function ensureServerReady(): Promise<boolean> {
     await startServerWithModel(selectedModel.value)
     // Poll router readiness: llama-server binds /models a moment after spawn
     const cfg = await getServerConfig()
+    localEndpoint.value = { host: undefined, port: cfg.port, apiKey: cfg.apiKey }
     const deadline = Date.now() + (platform.value.isAndroid ? 60000 : 30000)
     while (Date.now() < deadline) {
       try {
-        await fetchRouterModels(cfg.port, { apiKey: cfg.apiKey })
+        await fetchRouterModels(localEndpoint.value)
         // Router answered: the service is ready to stream
         serverRunning.value = true
         await refreshLocalModels()
@@ -780,7 +980,8 @@ async function unloadOtherModels(): Promise<void> {
   let toUnload: string[] = []
   try {
     const cfg = await getServerConfig()
-    const loaded = await fetchRouterModels(cfg.port, { apiKey: cfg.apiKey })
+    localEndpoint.value = { host: undefined, port: cfg.port, apiKey: cfg.apiKey }
+    const loaded = await fetchRouterModels(localEndpoint.value)
     toUnload = modelsToUnload(loaded, selectedModel.value)
   } catch {
     // Router unreachable: let the chat request itself surface the real error
@@ -795,6 +996,36 @@ async function unloadOtherModels(): Promise<void> {
       } catch {
         // Best-effort: an unload failure must not block streaming
       }
+    }
+    nudgeDock()
+  } finally {
+    switchingModel.value = false
+  }
+}
+
+/**
+ * Remote-tier counterpart of unloadOtherModels: make the selected model the
+ * only resident on the PC's llama-server by unloading every OTHER loaded model
+ * over the direct router API (lib/chat.ts unloadRouterModel — the backend
+ * unload binding only addresses the LOCAL server). Best-effort: the probe and
+ * each individual unload failure resolve false and are ignored, never blocking
+ * the chat request — same non-blocking semantics as the local flow.
+ */
+async function unloadRemoteOtherModels(): Promise<void> {
+  let toUnload: string[] = []
+  try {
+    const loaded = await fetchRouterModels(effectiveTarget.value)
+    toUnload = modelsToUnload(loaded, selectedModel.value)
+  } catch {
+    // PC unreachable: let the chat request itself surface the guidance
+    return
+  }
+  if (toUnload.length === 0) return
+  switchingModel.value = true
+  try {
+    for (const id of toUnload) {
+      // false = not resident / rejected / network failure: ignored (best-effort)
+      await unloadRouterModel(effectiveTarget.value, id)
     }
     nudgeDock()
   } finally {
@@ -818,7 +1049,8 @@ async function ensureDirectModeResident(): Promise<boolean> {
   let needsSwitch: boolean
   try {
     const cfg = await getServerConfig()
-    const loaded = await fetchRouterModels(cfg.port, { apiKey: cfg.apiKey })
+    localEndpoint.value = { host: undefined, port: cfg.port, apiKey: cfg.apiKey }
+    const loaded = await fetchRouterModels(localEndpoint.value)
     needsSwitch = directModeNeedsSwitch(
       loaded.filter((m) => m.status === 'loaded').map((m) => m.id),
       selectedModel.value
@@ -911,30 +1143,43 @@ async function send(text: string, images: string[]) {
   // error. Block here with actionable bilingual guidance instead; images
   // already in the preview bar are kept so the user can retry after fixing the
   // model (download the mmproj or set the projector path in ModelSettings).
-  if (images.length > 0 && !selectedModelHasVision.value) {
+  // Remote tier only: the verdict reads the LOCAL model scan, which says
+  // nothing about the PC's models — there the server's own rejection maps to
+  // the same guided copy on arrival (chatErrorKind in the catch below).
+  if (images.length > 0 && !isRemoteTarget.value && !selectedModelHasVision.value) {
     showModelNotice(t('chat.imagesNeedVision'))
     return
   }
 
-  // Service offline: auto-start llama-server and wait for readiness before
-  // streaming. Guided failures return here with the input left untouched.
-  if (!serverRunning.value) {
-    const ready = await ensureServerReady()
-    if (!ready) return
-  }
-
-  // Without a model id there is nothing to address the request to
-  if (!selectedModel.value) return
-
-  // Deterministic single-resident memory per platform: desktop router mode
-  // unloads every OTHER loaded model; Android direct mode restarts the
-  // service when the selected model is not the resident one (a running
-  // direct server would otherwise keep answering with the OLD model).
-  if (platform.value.isAndroid) {
-    const ready = await ensureDirectModeResident()
-    if (!ready) return
+  if (isRemoteTarget.value) {
+    // Remote tier: the PC manages its own llama-server, so the local-service
+    // orchestration (status precheck, runtime readiness, auto-start,
+    // direct-mode reconciliation) is skipped wholesale. Only the selected
+    // model guard and the best-effort remote unload pass remain; a network
+    // failure surfaces the guided "unreachable" copy in the catch below.
+    if (!selectedModel.value) return
+    await unloadRemoteOtherModels()
   } else {
-    await unloadOtherModels()
+    // Service offline: auto-start llama-server and wait for readiness before
+    // streaming. Guided failures return here with the input left untouched.
+    if (!serverRunning.value) {
+      const ready = await ensureServerReady()
+      if (!ready) return
+    }
+
+    // Without a model id there is nothing to address the request to
+    if (!selectedModel.value) return
+
+    // Deterministic single-resident memory per platform: desktop router mode
+    // unloads every OTHER loaded model; Android direct mode restarts the
+    // service when the selected model is not the resident one (a running
+    // direct server would otherwise keep answering with the OLD model).
+    if (platform.value.isAndroid) {
+      const ready = await ensureDirectModeResident()
+      if (!ready) return
+    } else {
+      await unloadOtherModels()
+    }
   }
 
   const imgs = images.length ? [...images] : undefined
@@ -974,12 +1219,22 @@ async function send(text: string, images: string[]) {
   let requestFailed = false
   liveAnswerTps.value = null
   liveReasoningTps.value = null
-  // One config fetch serves both the endpoint port and the API key: with a
-  // key configured the stream request must carry the bearer header (#29).
-  const sendCfg = await getServerConfig()
+  // Endpoint for the stream request: the local tier refreshes the port/key
+  // from the backend config first (they may have changed since mount; the
+  // bearer header must ride along, #29); the remote tier streams straight to
+  // the LAN pairing carried by effectiveTarget.
+  if (!isRemoteTarget.value) {
+    try {
+      const sendCfg = await getServerConfig()
+      localEndpoint.value = { host: undefined, port: sendCfg.port, apiKey: sendCfg.apiKey }
+    } catch {
+      // Config unavailable (standalone vite): keep the last snapshot — the
+      // request itself reports the truth
+    }
+  }
   try {
     await streamChatCompletion(
-      sendCfg.port,
+      effectiveTarget.value,
       selectedModel.value,
       messages.value.filter(m => m.role !== 'assistant' || m.content).map(m => ({ role: m.role as 'user' | 'assistant', content: m.content, images: m.images })),
       (delta) => {
@@ -1005,8 +1260,7 @@ async function send(text: string, images: string[]) {
       },
       chatAbortController.current.signal,
       sendParams,
-      bodyOptions,
-      { apiKey: sendCfg.apiKey }
+      bodyOptions
     )
   } catch (e: any) {
     // Stop generation (AbortError): keep generated content; if nothing was generated, remove the empty bubble
@@ -1021,13 +1275,17 @@ async function send(text: string, images: string[]) {
     const last = messages.value[messages.value.length - 1]
     if (last && last.role === 'assistant') {
       const raw = e?.message || String(e)
+      // Remote tier: a network-layer fetch failure surfaces as TypeError —
+      // map it to the guided "unreachable" copy instead of the raw browser
+      // message. Local keeps the plain error template unchanged.
+      const msg = isRemoteTarget.value && e instanceof TypeError ? t('chat.remoteUnreachable') : raw
       // Map llama-server's known image-input rejection (issue #35) to guided
       // bilingual copy; the original message stays as secondary detail inside
       // the guidance text. Everything else keeps the plain error template.
       last.content =
         chatErrorKind(raw) === 'vision-unsupported'
           ? t('chat.errorVision', { msg: raw })
-          : t('chat.error', { msg: raw })
+          : t('chat.error', { msg })
     }
   } finally {
     streaming.value = false
@@ -1080,15 +1338,14 @@ watch(selectedModel, () => {
 })
 
 onMounted(async () => {
-  try {
-    const status = await getServerStatus()
-    serverRunning.value = status.running
-  } catch {
-    // Backend unavailable (standalone vite): keep the offline default
+  // Remote tier: skip the whole local-service bootstrap (status precheck +
+  // local scan) — the PC manages its own llama-server and the picker lists
+  // the PC's router models; the local tier runs the unchanged bootstrap.
+  if (isRemoteTarget.value) {
+    await refreshRemoteModels()
+  } else {
+    await bootstrapLocal()
   }
-  // Picker options come from the local scan, so they work with the service
-  // stopped; reconcile the persisted choice against the names that exist
-  await refreshLocalModels()
   document.addEventListener('click', onDocClick)
 })
 
@@ -1256,6 +1513,42 @@ html[data-os='android'] .chat-model-select :deep(button.themed-select__trigger:a
 html[data-os='ios'] .chat-model-select :deep(button.themed-select__trigger:active:not(:disabled)) {
   background: var(--bg-secondary);
   border-color: var(--overlay-20);
+}
+
+/* Chat target switcher (LAN remote tier): same toolbar variant as the preset
+   picker, sized compactly — the row also carries the model chip, the preset
+   picker and the icon buttons. Shrinkable with ellipsis (min-width: 0). */
+.chat-target-select {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(150px, 26%);
+}
+
+.chat-target-select :deep(.themed-select__trigger) {
+  min-height: 40px;
+}
+
+/* Unconfigured-host hint next to the switcher: a quiet text button jumping to
+   the Settings pairing form (chat.remoteHint). Takes the leftover space and
+   ellipsizes so the row never wraps. */
+.chat-remote-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-remote-hint:hover {
+  color: var(--text-primary);
 }
 
 /* Round glass action buttons (design .chat-top .rnd): 40px circles, island
@@ -1624,12 +1917,23 @@ html[data-os='ios'] .chat-model-select :deep(button.themed-select__trigger:activ
   .chat-model-select {
     flex: 0 1 auto;
     min-width: 0;
-    /* Phone toolbar row: model capsule + preset picker + 3 icon buttons —
-       the capsule leaves room for the preset picker (min 96px) + icons */
-    max-width: calc(100% - 220px);
+    /* Phone toolbar row: target switcher + model capsule + preset picker +
+       3 icon buttons — the capsule leaves room for the target switcher (min
+       56px) + preset picker (min 96px) + icons */
+    max-width: calc(100% - 280px);
   }
 
   .chat-model-select :deep(.themed-select__trigger) {
+    min-height: 44px;
+  }
+
+  /* Target switcher on the phone band: 44px touch target, shrinkable to a
+     compact pill (the hint button ellipsizes beside it when unconfigured) */
+  .chat-target-select {
+    max-width: 32%;
+  }
+
+  .chat-target-select :deep(.themed-select__trigger) {
     min-height: 44px;
   }
 

@@ -25,7 +25,7 @@ function app(): any {
 
 // ─── Config ─────────────────────────────────────────────────────
 
-export async function getConfig(): Promise<{ theme: string; llamaCppDir: string; modelsDir: string; llamaCppDownloadDir?: string; modelDownloadDir?: string; downloadSource: string; language: string; resolvedLanguage: 'zh' | 'en'; trayEnabled: boolean; apiRouteMode?: boolean; sidebarCollapsed?: boolean; onboardingDismissed?: boolean }> {
+export async function getConfig(): Promise<{ theme: string; llamaCppDir: string; modelsDir: string; llamaCppDownloadDir?: string; modelDownloadDir?: string; downloadSource: string; language: string; resolvedLanguage: 'zh' | 'en'; trayEnabled: boolean; apiRouteMode?: boolean; sidebarCollapsed?: boolean; onboardingDismissed?: boolean; remoteChat?: RemoteChatConfig }> {
   return app().GetConfig()
 }
 
@@ -200,6 +200,32 @@ export async function saveServerConfig(cfg: ServerConfig): Promise<void> {
 
 export async function getServerStatus(): Promise<{ running: boolean; log: string[] }> {
   return app().GetServerStatus()
+}
+
+// RemoteChatConfig mirrors the backend core.RemoteChatConfig: the LAN
+// remote-chat pairing (phone → PC llama-server) the chat page uses when
+// enabled is true. host carries the bare host/IP part only (no scheme, no
+// path) and port is the llama-server port on the peer (default 8080).
+export interface RemoteChatConfig {
+  enabled: boolean
+  host: string
+  port: number
+  apiKey: string
+}
+
+// Save the LAN remote-chat pairing: the backend trims host/apiKey, rejects
+// scheme- or path-bearing hosts and out-of-range ports (1..65535) and refuses
+// enabling without a host, persisting only the validated value. Rejects with
+// a localized backend error for inline display.
+export async function saveRemoteChat(cfg: RemoteChatConfig): Promise<void> {
+  return app().SaveRemoteChat(cfg)
+}
+
+// List this machine's non-loopback IPv4 addresses (e.g. "192.168.1.5") for the
+// Settings LAN pairing card; enumeration issues degrade to an empty list
+// (never null), matching the backend contract.
+export async function getLanAddresses(): Promise<string[]> {
+  return app().GetLanAddresses()
 }
 
 // Incremental server-log fetch: returns the ring entries appended since the
