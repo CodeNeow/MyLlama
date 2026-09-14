@@ -2,6 +2,28 @@
 
 更新日志的**权威来源**（见 `AGENTS.md`「版本发布」）：发版时先在此新增版本条目（含日期），`git tag` 注解消息与 GitHub Release 正文均从该条目复制，保持一致。自 v0.3.3 起条目为概括式双语（中文在上）；v0.3.0 之前的逐提交条目已随对应 tag 与 Release 的清理移除（见文末「历史版本」）。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化版本。
 
+## [v0.5.2] - 2026-09-13
+
+## 中文
+
+v0.5.2 带来「局域网远程对话」：手机与电脑端组成搭档，互相借力。
+
+- **局域网远程对话（本版亮点）** — 电脑端一键出示配对二维码，手机扫码即可导入连接：聊天页新增「对话目标」切换，模型列表、对话与模型卸载全部直达电脑端 llama-server，手机不再受限于本机算力。连接失败时给出明确指引（地址 / 服务 / 防火墙），并支持**一键远程启动**电脑端服务（需在电脑端开启「允许远程启动」并设置 API Key）。配对地址按可达性自动排序并剔除虚拟网卡，二维码默认出示真实局域网地址。
+- **安卓远程连接修复（重要）** — 修复安卓 WebView 将发往局域网地址的请求误判为「混合内容」而静默拦截的问题：此前手机端无法连接任何局域网地址（本机回环不受影响，故仅远程档受累）。同时安卓端明确为「仅本地推理、不对外服务」，设置界面相应收敛。
+- **安全加固** — GGUF 元数据解析对嵌套数组递归加上深度与数量上限；控制面拒绝非本机绑定与跨站请求；远程启动仅在显式开启后暴露于局域网，且强制携带密钥（API Key 或控制令牌，常量时比较），不支持远程停止。
+- **稳定性修复** — 下载中断重试改为从真实 .part 进度续传并自动恢复卡死任务；修复 GetLlamaCpp 数据竞争并使恢复的暂停任务可续传；任务胶囊支持队列中任务重试与完整链接手势；清理九项审计发现的低危问题。
+- **工程质量** — CI 新增 Go 竞态检测 job；引入基于 mock 运行时的 Playwright 冒烟套件；聊天页完成组件化拆分（消息列表 / 输入区 / 参数面板 / 通知栈）。
+
+## English
+
+v0.5.2 ships "LAN remote chat": your phone and the PC become a team.
+
+- **LAN remote chat (highlight)** — the PC shows a pairing QR code and the phone scans it to connect: a chat-page target switcher lists the PC's models, and streaming chats plus model unloads go straight to the PC's llama-server, so the phone is no longer bounded by its own hardware. Connection failures explain themselves (address / service / firewall) and offer a **one-tap remote start** of the PC's service (enable "allow remote start" on the PC and set an API key first). Pairing addresses are ranked by reachability with virtual adapters excluded, so the QR shows the real LAN address.
+- **Android remote-connection fix (important)** — the Android WebView misjudged requests to LAN addresses as mixed content and silently blocked them: the phone could never reach any LAN address (loopback was unaffected, so only the remote tier suffered). Android is also now explicitly local-inference-only and the settings UI reflects it.
+- **Security hardening** — GGUF metadata parsing bounds nested-array recursion depth and count; the control plane rejects off-host and cross-site requests; remote start is exposed to the LAN only when explicitly enabled and always token-gated (API key or control token, constant-time compared); remote stop does not exist by design.
+- **Stability fixes** — mid-stream download retries resume from the real .part size and stalled tasks recover automatically; a GetLlamaCpp data race is closed and restored paused tasks become resumable; the task dock supports queued-task retry and full link gestures; nine low-severity audit findings cleared.
+- **Engineering quality** — CI gains a Go race-detector job; a Playwright smoke suite over the mock runtime is wired in; the Chat page is decomposed into focused components (message list / composer / params panel / notice stack).
+
 ## [v0.5.1] - 2026-09-10
 
 ## 中文
