@@ -144,9 +144,11 @@ export function GetGPU(): $CancellablePromise<$models.GPUInfo[]> {
 
 /**
  * GetLanAddresses lists non-loopback IPv4 addresses of this machine
- * (e.g. "192.168.1.5") for the Settings pairing card. Returns an empty
- * slice (never nil semantics contract: JSON []) when none are found;
- * enumeration errors degrade to an empty list, not an error.
+ * (e.g. "192.168.1.5") for the Settings pairing card: filtered against
+ * virtual-NIC / link-local noise, then ranked by LAN-routeability with the
+ * default-route outbound address first. Returns an empty slice (never nil
+ * semantics contract: JSON []) when none are found; enumeration errors
+ * degrade to an empty list, not an error.
  */
 export function GetLanAddresses(): $CancellablePromise<string[]> {
     return $Call.ByID(1151704184).then(($result: any) => {
