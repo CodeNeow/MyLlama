@@ -227,14 +227,12 @@ func modelPresetKV(m ModelInfo, cfg ModelConfig) ([]presetKV, error) {
 		}
 	}
 	if m.HasMMProj && !explicitMMProj {
-		// Look for mmproj file in same directory
-		dir := filepath.Dir(m.Path)
-		entries, _ := os.ReadDir(dir)
-		for _, e := range entries {
-			if strings.HasPrefix(strings.ToLower(e.Name()), "mmproj") && strings.HasSuffix(strings.ToLower(e.Name()), ".gguf") {
-				kvs = append(kvs, presetKV{key: "mmproj", value: filepath.ToSlash(filepath.Join(dir, e.Name()))})
-				break
-			}
+		// Look for the projector beside the model. The match must be the one
+		// the scanner used to set HasMMProj, or a model flagged multimodal
+		// starts without its projector. os.ReadDir sorts by name, so the
+		// first match is deterministic.
+		if matches, err := mmprojFilesNear(m.Path); err == nil && len(matches) > 0 {
+			kvs = append(kvs, presetKV{key: "mmproj", value: filepath.ToSlash(matches[0])})
 		}
 	}
 	return kvs, nil

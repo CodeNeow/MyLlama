@@ -213,8 +213,7 @@ func scanModelsDir(dir string) []ModelInfo {
 					if !strings.HasSuffix(strings.ToLower(name), ".gguf") {
 						continue
 					}
-					lower := strings.ToLower(name)
-					if strings.HasPrefix(lower, "mmproj") {
+					if isMMProjName(name) {
 						hasMMProj = true
 						continue
 					}
@@ -244,7 +243,7 @@ func scanModelsDir(dir string) []ModelInfo {
 			if !strings.HasSuffix(lower, ".gguf") {
 				continue
 			}
-			if strings.HasPrefix(lower, "mmproj") {
+			if isMMProjName(name) {
 				continue
 			}
 
@@ -259,6 +258,56 @@ func scanModelsDir(dir string) []ModelInfo {
 	})
 
 	return models
+}
+
+// isMMProjName reports whether a GGUF file name marks a multimodal projector
+// rather than a model. The marker is "mmproj" at the start of the name or
+// directly after a "-" or "." separator: uploaders ship the conventional
+// "mmproj-<model>-F16.gguf" but also "<model>-mmproj-F16.gguf" and
+// "<model>.mmproj-f16.gguf". A prefix-only check lists those as models, and
+// because HasMMProj then stays false the projector is never passed to
+// llama-server either, so the model loads without vision. Requiring a
+// separator keeps a model whose own name merely contains the token from
+// being mistaken for a projector.
+func isMMProjName(name string) bool {
+	lower := strings.ToLower(name)
+	for i := 0; i+len("mmproj") <= len(lower); {
+		j := strings.Index(lower[i:], "mmproj")
+		if j < 0 {
+			return false
+		}
+		at := i + j
+		if at == 0 {
+			return true
+		}
+		if c := lower[at-1]; c == '-' || c == '.' {
+			return true
+		}
+		i = at + 1
+	}
+	return false
+}
+
+// mmprojFilesNear lists the projector files sitting beside a model, matched by
+// isMMProjName so the scanner, the tuner's weight budget and the preset writer
+// all agree on what counts as a projector.
+func mmprojFilesNear(modelPath string) ([]string, error) {
+	dir := filepath.Dir(modelPath)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if strings.HasSuffix(strings.ToLower(name), ".gguf") && isMMProjName(name) {
+			out = append(out, filepath.Join(dir, name))
+		}
+	}
+	return out, nil
 }
 
 // buildModelInfo builds a ModelInfo from one GGUF main-file path: reads GGUF
