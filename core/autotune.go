@@ -14,7 +14,6 @@ import (
 	"log"
 	"math"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -1234,14 +1233,15 @@ func tuneNeedsRAMBandwidth(gpuVendor, goos string) bool {
 }
 
 // tuneWeightsBytes returns the tuner's weight budget: the main GGUF size plus
-// the same-directory mmproj-*.gguf projector when the model is multimodal.
+// the same-directory projector (matched by isMMProjName) when the model is
+// multimodal.
 // Projector stat failures are ignored (best-effort extra weight).
 func tuneWeightsBytes(m ModelInfo) int64 {
 	weights := m.SizeBytes
 	if !m.HasMMProj {
 		return weights
 	}
-	matches, err := filepath.Glob(filepath.Join(filepath.Dir(m.Path), "mmproj-*.gguf"))
+	matches, err := mmprojFilesNear(m.Path)
 	if err != nil {
 		return weights
 	}
