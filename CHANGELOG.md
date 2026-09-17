@@ -2,6 +2,16 @@
 
 更新日志的**权威来源**（见 `AGENTS.md`「版本发布」）：发版时先在此新增版本条目（含日期），`git tag` 注解消息与 GitHub Release 正文均从该条目复制，保持一致。自 v0.3.3 起条目为概括式双语（中文在上）；v0.3.0 之前的逐提交条目已随对应 tag 与 Release 的清理移除（见文末「历史版本」）。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化版本。
 
+## [v0.5.3] - 2026-09-17
+
+## 中文
+
+维护版本，无应用行为变化：重新生成仓库内提交的 Wails TypeScript 绑定，使其与 v0.5.2 的 `ServerConfig.remoteStart` 字段及 `GetLanAddresses` 的最新文档注释保持一致（社区贡献 by @Vergillll）。发布产物在构建时本就会重新生成绑定，已安装用户不受影响；本版修正的是直接消费仓库内生成物的开发场景（类型检查 / IDE / 二次开发）。
+
+## English
+
+Maintenance release with no behavior change: the committed Wails TypeScript bindings are regenerated to match v0.5.2's `ServerConfig.remoteStart` field and the refreshed `GetLanAddresses` doc comment (community contribution by @Vergillll). Release artifacts regenerate bindings at build time, so installed users were never affected; this fixes developer-facing consumption of the committed bindings (type-checking / IDE / downstream builds).
+
 ## [v0.5.2] - 2026-09-13
 
 ## 中文
