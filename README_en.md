@@ -17,7 +17,7 @@ Windows x64 · Android arm64 · Linux x64 · GPL-3.0
 [![GitHub release](https://img.shields.io/github/v/release/CodeNeow/MyLlama?logo=github&color=blue)](https://github.com/CodeNeow/MyLlama/releases)
 [![Downloads](https://img.shields.io/github/downloads/CodeNeow/MyLlama/total?logo=github&label=downloads&color=blue)](https://github.com/CodeNeow/MyLlama/releases)
 [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
-[![CI](https://img.shields.io/github/actions/workflow/status/CodeNeow/MyLlama/.github/workflows/ci.yml?branch=dev&logo=githubactions&logoColor=white)](https://github.com/CodeNeow/MyLlama/actions)
+[![CI](https://img.shields.io/github/actions/workflow/status/CodeNeow/MyLlama/.github/workflows/ci.yml?branch=main&logo=githubactions&logoColor=white)](https://github.com/CodeNeow/MyLlama/actions)
 [![Go](https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go&logoColor=white)](https://go.dev/dl/)
 [![Wails](https://img.shields.io/badge/Wails-v3-DF0000?logo=wails&logoColor=white)](https://wails.io/)
 [![Vue](https://img.shields.io/badge/Vue-3-4FC08D?logo=vuedotjs&logoColor=white)](https://vuejs.org/)

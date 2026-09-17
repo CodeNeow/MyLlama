@@ -24,7 +24,7 @@ wails3 task dev    # Go backend + Vite frontend (:5173) hot-reload
 
 ### 2.1 Branches
 
-- Active integration happens on `dev` — commit there by default. `main` is the release channel: it advances only at release time (version-bump + CHANGELOG commit, then the annotated tag), so ordinary work never targets it directly. Only create a feature branch when the change needs isolated review (e.g., opening a PR).
+- Active integration happens on `main` — it is both the integration and release branch: commit there by default; a release is cut by a version-bump + CHANGELOG commit followed by the annotated tag. Only create a feature branch when the change needs isolated review (e.g., opening a PR).
 
 ### 2.2 Commit Messages
 
@@ -109,7 +109,7 @@ Issue bodies must never contain tokens, secrets, or machine-specific absolute pa
 
 ## 5. Pull Request Workflow
 
-1. Cut a feature branch from `dev`; commit conventions are in Section 2.
+1. Cut a feature branch from `main`; commit conventions are in Section 2.
 2. Ensure all local quality gates (Section 3) pass.
 3. Open a PR: use `Fixes #N` to associate the corresponding issue (if any), and attach verification commands and results in the description.
 4. After CI is fully green, a maintainer reviews and merges.

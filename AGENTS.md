@@ -149,7 +149,7 @@ This file retains only persistent invariants and verification discipline; stage 
 
 ## Git Workflow
 
-- Active integration happens on the local `dev` branch — commit there by default. `main` is the release channel: it advances only at release time (version-bump + CHANGELOG commit, then the annotated tag), so ordinary work never targets it directly. Only create feature branches when the user explicitly requests it or when changes need isolated review (e.g., preparing a PR for an external collaborator), and state the reason before the task.
+- Active integration happens on the local `main` branch — commit there by default; `main` is both the integration and release branch (a release is a version-bump + CHANGELOG commit followed by the annotated tag). Only create feature branches when the user explicitly requests it or when changes need isolated review (e.g., preparing a PR for an external collaborator), and state the reason before the task.
 - In role-based collaboration (see "Multi-role Collaboration and Workflows"), local commits are made only by the session holding reviewer duties; sessions declared as implementation agents stop at an unstaged working tree and do not commit.
 - Do not switch or create branches on your own initiative; if unsure about branch choice before committing, confirm with the user first.
 - Remote operations (push, `gh issue create`, etc.) require explicit user authorization before execution.
