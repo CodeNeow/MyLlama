@@ -229,13 +229,15 @@ func TestScanModelsDirGGUFMetaBaseNamePrefix(t *testing.T) {
 
 // TestIsReadableNameRejectsConverterPlaceholders verifies placeholder names
 // converters write into general.name ("Unsloth_Gguf" from unsloth, "Hf_Model"
-// from some HF-space converters) are treated as unreadable regardless of case
+// from some HF-space converters, "Safetensors" from converters naming the
+// model after the source format) are treated as unreadable regardless of case
 // so the scanner falls back to directory/file names, while real model names
 // stay readable.
 func TestIsReadableNameRejectsConverterPlaceholders(t *testing.T) {
 	for _, name := range []string{
 		"Unsloth_Gguf", "unsloth_gguf", "UNSLOTH_GGUF", "Unsloth_Gguf-Qwen",
 		"Hf_Model", "hf_model", "HF_MODEL",
+		"Safetensors", "safetensors", "SAFETENSORS", "Safetensors-Qwen",
 	} {
 		if isReadableName(name) {
 			t.Errorf("isReadableName(%q) = true, want false (converter placeholder)", name)

@@ -361,10 +361,12 @@ func preferFileNameOverGenericSuffix(name, fileBase string) bool {
 
 // converterPlaceholderNames lists placeholder values converters write into
 // general.name when the real model name is unknown ("Unsloth_Gguf" from
-// unsloth, "Hf_Model" from some HF-space converters). A name equal to or
-// starting with any entry is treated as unreadable (case-insensitive), so the
-// scanner falls back to the variant directory / file name.
-var converterPlaceholderNames = []string{"Unsloth_Gguf", "Hf_Model"}
+// unsloth, "Hf_Model" from some HF-space converters, "Safetensors" from
+// converters that name the model after the source format they read). A name
+// equal to or starting with any entry is treated as unreadable
+// (case-insensitive), so the scanner falls back to the variant directory /
+// file name.
+var converterPlaceholderNames = []string{"Unsloth_Gguf", "Hf_Model", "Safetensors"}
 
 // isReadableName returns true if the name doesn't look like a hash/UUID or a
 // converter placeholder.
