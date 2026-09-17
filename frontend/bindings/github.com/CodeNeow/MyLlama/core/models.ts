@@ -1084,6 +1084,15 @@ export class ServerConfig {
      */
     "deviceId": string;
 
+    /**
+     * RemoteStart exposes the control plane's POST /start on the LAN (control
+     * plane binds 0.0.0.0:1900 instead of loopback) so a phone pairing can
+     * start this machine's llama-server when its probe fails. Token-gated
+     * (env token or APIKey). Default false — old configs missing the field
+     * load as disabled; takes effect on the next app start (bind timing).
+     */
+    "remoteStart": boolean;
+
     /** Creates a new ServerConfig instance. */
     constructor($$source: Partial<ServerConfig> = {}) {
         if (!("accessMode" in $$source)) {
@@ -1106,6 +1115,9 @@ export class ServerConfig {
         }
         if (!("deviceId" in $$source)) {
             this["deviceId"] = "";
+        }
+        if (!("remoteStart" in $$source)) {
+            this["remoteStart"] = false;
         }
 
         Object.assign(this, $$source);
