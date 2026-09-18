@@ -491,7 +491,7 @@ func readGGUFMeta(path string) map[string]string {
 
 		field, wanted := targets[key]
 		if !wanted {
-			if err := skipGGUFValue(f, valueType, 0); err != nil {
+			if err := skipMetricsValue(f, valueType, 0); err != nil {
 				if errors.Is(err, errGGUFDepth) {
 					// Hostile structure: fail fast with no result rather than
 					// parsing on from a stream we cannot trust.
@@ -525,7 +525,7 @@ func readGGUFMeta(path string) map[string]string {
 			result[field] = ggufQuantName(uint32(val))
 			found++
 		default:
-			if err := skipGGUFValue(f, valueType, 0); err != nil {
+			if err := skipMetricsValue(f, valueType, 0); err != nil {
 				if errors.Is(err, errGGUFDepth) {
 					return nil // same fail-fast as the unknown-key path above
 				}
@@ -567,53 +567,6 @@ func readGGUFString(r io.Reader) (string, error) {
 		return "", err
 	}
 	return string(buf), nil
-}
-
-// skipGGUFValue consumes one metadata value of the given GGUF type so the
-// stream stays aligned for subsequent fields. depth counts the array levels
-// enclosing this value; an array nested deeper than maxGGUFArrayDepth stops
-// the recursion with errGGUFDepth (fail fast on hostile structure — the
-// caller aborts the whole meta parse instead of guessing at a misaligned
-// stream). I/O errors (e.g. EOF) are returned as well.
-func skipGGUFValue(r io.Reader, valueType uint32, depth int) error {
-	switch valueType {
-	case 0, 1: // uint8, int8
-		return binary.Read(r, binary.LittleEndian, make([]byte, 1))
-	case 2, 3: // uint16, int16
-		return binary.Read(r, binary.LittleEndian, make([]byte, 2))
-	case 4, 5: // uint32, int32
-		return binary.Read(r, binary.LittleEndian, make([]byte, 4))
-	case 6: // float32
-		return binary.Read(r, binary.LittleEndian, make([]byte, 4))
-	case 7: // bool
-		return binary.Read(r, binary.LittleEndian, make([]byte, 1))
-	case 8: // string
-		_, err := readGGUFString(r)
-		return err
-	case 10, 11: // uint64, int64
-		return binary.Read(r, binary.LittleEndian, make([]byte, 8))
-	case 12: // float64
-		return binary.Read(r, binary.LittleEndian, make([]byte, 8))
-	case 9: // array — the only value type that recurses
-		if depth >= maxGGUFArrayDepth {
-			return errGGUFDepth
-		}
-		var arrType uint32
-		var arrLen uint32
-		if err := binary.Read(r, binary.LittleEndian, &arrType); err != nil {
-			return err
-		}
-		if err := binary.Read(r, binary.LittleEndian, &arrLen); err != nil {
-			return err
-		}
-		for j := uint32(0); j < arrLen && j < 1000; j++ {
-			if err := skipGGUFValue(r, arrType, depth+1); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-	return nil
 }
 
 func ggufQuantName(fileType uint32) string {

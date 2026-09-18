@@ -203,7 +203,7 @@ func TestReadGGUFMetaRejectsHugeKVCount(t *testing.T) {
 // depth levels deep: the first depth-1 headers declare one array element each
 // (elemType=9) and the innermost header declares a single uint8 element, so
 // the parser legitimately walks all depth levels and terminates on the byte.
-// The 32-bit element count matches this parser's array header layout.
+// The element count is the u64 the GGUF v2/v3 array header specifies.
 func nestedArrayRaw(depth int) []byte {
 	if depth <= 0 {
 		return []byte{42} // a plain scalar value, no array at all
@@ -212,12 +212,12 @@ func nestedArrayRaw(depth int) []byte {
 	if depth == 1 {
 		// Innermost array: its single element is a fixed-size uint8.
 		putU32(&buf, 0)
-		putU32(&buf, 1)
+		putU64(&buf, 1)
 		buf.WriteByte(42)
 		return buf.Bytes()
 	}
 	putU32(&buf, 9) // element type: array
-	putU32(&buf, 1) // one element
+	putU64(&buf, 1) // one element
 	buf.Write(nestedArrayRaw(depth - 1))
 	return buf.Bytes()
 }
