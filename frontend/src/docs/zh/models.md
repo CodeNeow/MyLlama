@@ -21,7 +21,7 @@
 2. 计算结果**实时填进表单**——每一项（GPU 层数、上下文大小、缓存类型、CPU 线程等）都直接更新，你可以在保存前逐项检查、手动微调；
 3. 确认无误后点「保存设置」。
 
-调优会按你在设置页选择的**推理显卡**规划显存：多卡机器上选了哪张卡，就按哪张卡的显存算。可选方案包括全部卸载到 GPU（最快）、MoE 模型的 cpu-moe（专家层留内存、其余上 GPU）、部分卸载（显存放不下的兜底）和纯 CPU（无显卡时），上下文长度也会在显存预算内尽量选大。Apple Silicon（macOS arm64）走 Metal 方案：统一内存让全部层驻留 GPU，上下文按内存预算选最大（Flash Attention 暂不自动开启）；Linux 上 AMD / Intel 显卡同样会选中 Vulkan 构建进行 GPU 加速。
+调优会按你在设置页选择的**推理显卡**规划显存：多卡机器上选了哪张卡，就按哪张卡的显存算。可选方案包括全部卸载到 GPU（最快）、MoE 模型的 cpu-moe（专家层留内存、其余上 GPU）、部分卸载（显存放不下的兜底）和纯 CPU（无显卡时），上下文长度也会在显存预算内尽量选大。Apple Silicon（macOS arm64）走 Metal 方案：统一内存让全部层驻留 GPU，上下文按内存预算选最大，Flash Attention 不写死、交给 llama-server 自动选择（实测不比强制开启慢）；大小核机型（Apple Silicon、安卓 SoC）的线程数上限为性能核数量；Linux 上 AMD / Intel 显卡同样会选中 Vulkan 构建进行 GPU 加速。
 
 ## 常用参数速查
 
@@ -29,15 +29,15 @@
 | --- | --- |
 | GPU 层数 | `auto` 全部放进显存（推荐）；显存偏小时填数字做部分卸载；纯 CPU 推理选 `0` |
 | 上下文大小 | 模型一次能"看到"的文本量；对话越长设越大，受显存限制 |
-| CPU 线程 | `-1` 自动；CPU 较弱或发热明显时调低 |
-| Flash Attention | 推理加速且省显存，有 GPU 时推荐开启 |
+| CPU 线程 | `-1` 自动；CPU 较弱或发热明显时调低。大小核机型（Apple Silicon、安卓 SoC）自动调参只取性能核，实测 M2 4P+4E 纯 CPU 4 线程 21.5 t/s、8 线程 10.0 t/s |
+| Flash Attention | 勾选强制开启，不勾交由 llama-server 自动选择；实测 M2 Metal 解码 自动 30.0 ≈ 强制开 29.7，关闭 27.2 t/s |
 | cpu-moe | MoE 模型（DeepSeek、Qwen3-MoE 等）显存不足时，把专家层留在内存 |
-| KV 缓存类型 | `q8_0` 几乎无损且省显存，推荐；默认 f16 |
+| KV 缓存类型 | `q8_0` 缓存体积几乎减半（长上下文更不容易溢出），实测 M2 Metal 解码略慢（28.4 vs f16 30.1 t/s），内存吃紧时再选；默认 f16 |
 | 加载方式 | 默认 mmap 加载最快；内存充裕可选 mlock 防换页 |
 | 切分方式 | 单卡选 `none`；多卡默认 `layer` 稳定 |
-| 投机解码 | 「高级」标签。`ngram-simple` / `ngram-mod` 为 n-gram 自投机：无需草稿模型、零额外显存，对重复/结构化输出（代码、模板文本）有加速，其他场景可能变慢；`draft-mtp` 为 MTP 投机预测，需模型支持；留空关闭 |
+| 投机解码 | 「高级」标签。`ngram-simple` / `ngram-mod` 为 n-gram 自投机：无需草稿模型、零额外显存；`draft-mtp` 为 MTP 投机预测，需模型支持；留空关闭。实测 M2 Metal 4B Q4_K_M：输出高度重复时 `ngram-mod` 约 2.8 倍（86-88 vs 基线 31 t/s），自然语言无收益，`ngram-simple` 两种场景都慢约 5% —— 建议只在写代码 / 模板化输出时开启 |
 
-> 注：Android 为纯 CPU 构建，页面不显示 GPU 层数、Flash Attention、cpu-moe 等 GPU 专属参数；「加载方式」中的 `dio` 仅 Windows / Linux 提供。Android 会自动识别 SoC 型号（如骁龙 / 天玑，来自系统属性）；「一键调优」在安卓上线程数上限为性能核数量（big.LITTLE 小核不参与推理线程），且纯 CPU 方案的调优结果提示不再显示 GPU 层字段。
+> 注：Android 为纯 CPU 构建，页面不显示 GPU 层数、Flash Attention、cpu-moe 等 GPU 专属参数；「加载方式」中的 `dio` 仅 Windows / Linux 提供。Android 会自动识别 SoC 型号（如骁龙 / 天玑，来自系统属性）；「一键调优」在安卓与 Apple Silicon 上线程数上限为性能核数量（big.LITTLE 小核、M 系列能效核不参与推理线程），且纯 CPU 方案的调优结果提示不再显示 GPU 层字段。
 
 ## 服务运行中修改参数
 

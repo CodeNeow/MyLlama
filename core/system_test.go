@@ -28,13 +28,18 @@ func TestCountString(t *testing.T) {
 }
 
 // TestParseCoresDarwin verifies darwin core-count string parsing; illegal input falls
-// back to 0.
+// back to 0. The empty case is the real Intel-Mac path for
+// hw.perflevel0.physicalcpu (key does not exist, sysctl prints nothing) — 0
+// means "split unknown", so the tuner must not cap.
 func TestParseCoresDarwin(t *testing.T) {
 	if got := parseCoresDarwin("8"); got != 8 {
 		t.Errorf("parseCoresDarwin(8) = %d", got)
 	}
 	if got := parseCoresDarwin("abc"); got != 0 {
 		t.Errorf("parseCoresDarwin(abc) = %d, want 0", got)
+	}
+	if got := parseCoresDarwin(""); got != 0 {
+		t.Errorf("parseCoresDarwin(empty) = %d, want 0", got)
 	}
 }
 

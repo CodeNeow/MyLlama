@@ -29,10 +29,11 @@ type CPUInfo struct {
 	Model       string `json:"model"`
 	Cores       int    `json:"cores"`
 	LogicalCPUs int    `json:"logicalCpus"`
-	// PerfCores is the performance-cluster core count on big.LITTLE SoCs
-	// (Android): CPUs whose cpufreq cpuinfo_max_freq reaches 80% of the
-	// highest. 0 = unknown (desktop probes never populate it); the auto-tuner
-	// caps its Android thread pool at this count.
+	// PerfCores is the performance-cluster core count on asymmetric CPUs:
+	// Android/big.LITTLE SoCs (CPUs whose cpufreq cpuinfo_max_freq reaches 80%
+	// of the highest) and Apple Silicon (hw.perflevel0.physicalcpu, the P-core
+	// count). 0 = unknown, which means "no capping"; the auto-tuner limits its
+	// worker pool to this count when it knows the split.
 	PerfCores int `json:"perfCores,omitempty"`
 }
 
@@ -156,6 +157,11 @@ func getCPUInfo() CPUInfo {
 	case "darwin":
 		info.Model = runCmd("sysctl", "-n", "machdep.cpu.brand_string")
 		info.Cores = parseCoresDarwin(runCmd("sysctl", "-n", "machdep.cpu.core_count"))
+		// Apple Silicon is asymmetric (perflevel0 = P-cores, perflevel1 =
+		// E-cores): the P-cluster count is what GEMM workers should be pinned
+		// to. Intel Macs have no perflevel keys, so this stays 0 (= unknown,
+		// no capping).
+		info.PerfCores = parseCoresDarwin(runCmd("sysctl", "-n", "hw.perflevel0.physicalcpu"))
 	}
 
 	if info.Model == "" {

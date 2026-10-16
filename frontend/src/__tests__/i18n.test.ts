@@ -256,4 +256,32 @@ describe('lib/i18n', () => {
     expect(t('settings.lanPairing.remoteStartDesc')).toContain('restart')
     expect(t('settings.lanPairing.remoteStartHintKey')).toContain('API key')
   })
+
+  it('model-settings perf hints carry the measured numbers in both locales', () => {
+    setLocale('zh')
+    expect(t('modelSettings.threadsHint')).toContain('性能核')
+    expect(t('modelSettings.threadsHint')).toContain('t/s')
+    expect(t('modelSettings.flashAttnHint')).toContain('自动')
+    expect(t('modelSettings.flashAttnHint')).toContain('t/s')
+    expect(t('modelSettings.cacheTypeKHint')).toContain('减半')
+    // Speculation is opt-in: the hint must carry both directions of the measured
+    // result (big win on repetitive output, a regression on natural prose).
+    expect(t('modelSettings.specTypeHint')).toContain('ngram-mod')
+    expect(t('modelSettings.specTypeHint')).toContain('t/s')
+    // No blanket "recommended" claim survives: forcing flash attention measured
+    // no faster than llama-server's own choice, and q8_0 buys memory with decode
+    // speed.
+    expect(t('modelSettings.flashAttnSub')).not.toContain('推荐')
+    expect(t('modelSettings.q8Recommended')).not.toContain('推荐')
+    setLocale('en')
+    expect(t('modelSettings.threadsHint')).toContain('performance-cluster')
+    expect(t('modelSettings.threadsHint')).toContain('t/s')
+    expect(t('modelSettings.flashAttnHint')).toContain('unchecked')
+    expect(t('modelSettings.flashAttnHint')).toContain('t/s')
+    expect(t('modelSettings.cacheTypeKHint')).toContain('halves')
+    expect(t('modelSettings.specTypeHint')).toContain('ngram-mod')
+    expect(t('modelSettings.specTypeHint')).toContain('t/s')
+    expect(t('modelSettings.flashAttnSub')).not.toContain('recommended')
+    expect(t('modelSettings.q8Recommended')).not.toContain('recommended')
+  })
 })

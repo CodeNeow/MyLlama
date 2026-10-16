@@ -1095,8 +1095,11 @@ func TestTunePlanTargetApple(t *testing.T) {
 
 // TestTuneModelConfigMetal pins the Apple Silicon plan: all layers offload
 // (GPULayers="all"), the context is sized by the usable-RAM budget (unified
-// memory), flash-attn stays off (no Metal benchmark path yet), the q8_0 cache
-// pair is never written, and a MoE model still gets the plain metal plan —
+// memory), flash-attn is left unset so llama-server keeps its own -fa auto
+// (measured on an M2 at tg128: auto/on/off = 30.02/29.70/27.16 t/s — auto is
+// never the loser, forcing it on can only cost speed), the q8_0 cache pair is
+// never written (it measured ~6% slower on decode), and a MoE model still
+// gets the plain metal plan —
 // cpu-moe is a CUDA-centric split and must not appear (UsedCPUMoe=false, no
 // bench chain). A darwin-amd64 host (CPU-only release, vendor none) plans the
 // CPU-only branch even for a MoE model.
@@ -1112,7 +1115,7 @@ func TestTuneModelConfigMetal(t *testing.T) {
 		t.Errorf("dense on apple = gpuLayers %q ctx %d, want all / 65536", cfg.GPULayers, cfg.CtxSize)
 	}
 	if cfg.FlashAttn {
-		t.Errorf("metal plan must keep flash-attn off (no benchmark path yet): %+v", cfg)
+		t.Errorf("metal plan must leave flash-attn unset so llama-server keeps -fa auto (fastest on M2): %+v", cfg)
 	}
 	if cfg.CacheTypeK != "" || cfg.CacheTypeV != "" {
 		t.Errorf("metal plan keeps the f16 cache, got K=%q V=%q", cfg.CacheTypeK, cfg.CacheTypeV)
@@ -1150,13 +1153,18 @@ func TestTuneModelConfigMetal(t *testing.T) {
 	}
 }
 
-// ─── Android big.LITTLE awareness ────────────────────────────────
+// ─── Asymmetric-CPU awareness ────────────────────────────────────
 
-// TestTuneModelConfigAndroidThreadCap verifies the big.LITTLE thread cap: on
-// Android with a known performance-core split the worker pool is capped to the
-// performance-cluster size; unknown splits, uniform topologies and desktop
-// platforms keep the prior rule byte-for-byte.
-func TestTuneModelConfigAndroidThreadCap(t *testing.T) {
+// TestTuneModelConfigClusterThreadCap verifies the performance-cluster thread
+// cap: whenever the probe knows the split and the CPU is asymmetric, the worker
+// pool is capped to the performance-cluster size — on Android (cpufreq probe)
+// and on Apple Silicon (hw.perflevel0.physicalcpu) alike. Unknown splits and
+// uniform topologies keep the prior rule byte-for-byte.
+//
+// The cap used to be gated on Android only, which left M-series Macs pinned to
+// every core; measured on a 4P+4E M2 with a 4B Q4_K_M model (llama.cpp b10537,
+// tg128): 20.76 t/s at 4 threads, 18.81 at 6, 10.07 at 8.
+func TestTuneModelConfigClusterThreadCap(t *testing.T) {
 	tm := tuneModel{WeightsBytes: 2 << 30, Layers: 32, KVBytesPerTokPerLayerF16: 1024, TrainCtx: 32768}
 	base := tuneHardware{
 		GPUVendor:       vendorNone,
@@ -1186,11 +1194,27 @@ func TestTuneModelConfigAndroidThreadCap(t *testing.T) {
 		t.Errorf("android uniform: threads = %d, want 8", got)
 	}
 
-	// Desktop platforms never cap, whatever the cpufreq probe reported.
-	hw.PerfCores = 4
-	hw.AndroidPlatform = false
-	if got := tuneModelConfig(hw, tm).Threads; got != 8 {
-		t.Errorf("non-android: threads = %d, want 8", got)
+	// Apple Silicon 4P+4E: the Metal plan caps to the P-cluster too (the split
+	// is a CPU-topology fact, not an Android-only one).
+	hwApple := tuneHardware{
+		GPUVendor:     vendorApple,
+		RAMTotalGB:    24,
+		RAMFreeGB:     16,
+		PhysicalCores: 8,
+		LogicalCPUs:   8,
+		PerfCores:     4,
+	}
+	if got := tuneModelConfig(hwApple, tm).Threads; got != 4 {
+		t.Errorf("apple 4P+4E: threads = %d, want 4", got)
+	}
+
+	// A desktop CPU whose probe reports a split (arm64 Linux SBC: no "model
+	// name" line, so the cpufreq probe fills PerfCores) caps as well.
+	hwSBC := base
+	hwSBC.AndroidPlatform = false
+	hwSBC.PerfCores = 4
+	if got := tuneModelConfig(hwSBC, tm).Threads; got != 4 {
+		t.Errorf("non-android 4+4 split: threads = %d, want 4", got)
 	}
 }
 
