@@ -226,6 +226,108 @@ func TestPickBestAssetForB10453(t *testing.T) {
 	}
 }
 
+// b11671Assets mirrors the verbatim asset list of llama.cpp release b11671 in
+// the exact order the GitHub API returns it. The order is the point: the two
+// vendor-specific snapdragon tarballs sort BEFORE the generic build of the same
+// platform (android-arm64-snapdragon at index 6, android-arm64 at 7;
+// linux-arm64-snapdragon at 8). Those packages are packed from
+// `cmake --install --prefix` — a bin/ + lib/ install tree compiled with the
+// Snapdragon preset instead of the flat release layout — and equal scores keep
+// the first candidate, so without the snapdragon penalty Android and Linux
+// arm64 downloaded a package the detection paths then reported as missing.
+var b11671Assets = []GitHubAsset{
+	{Name: "cudart-llama-b11671-bin-ubuntu-cuda-12.8-x64.tar.gz"},
+	{Name: "cudart-llama-b11671-bin-ubuntu-cuda-13.4-arm64.tar.gz"},
+	{Name: "cudart-llama-b11671-bin-ubuntu-cuda-13.4-x64.tar.gz"},
+	{Name: "cudart-llama-bin-win-cuda-12.4-x64.zip"},
+	{Name: "cudart-llama-bin-win-cuda-13.4-arm64.zip"},
+	{Name: "cudart-llama-bin-win-cuda-13.4-x64.zip"},
+	{Name: "llama-b11671-bin-android-arm64-snapdragon.tar.gz"},
+	{Name: "llama-b11671-bin-android-arm64.tar.gz"},
+	{Name: "llama-b11671-bin-linux-arm64-snapdragon.tar.gz"},
+	{Name: "llama-b11671-bin-macos-arm64.tar.gz"},
+	{Name: "llama-b11671-bin-macos-x64.tar.gz"},
+	{Name: "llama-b11671-bin-ubuntu-arm64.tar.gz"},
+	{Name: "llama-b11671-bin-ubuntu-cuda-12.8-x64.tar.gz"},
+	{Name: "llama-b11671-bin-ubuntu-cuda-13.4-arm64.tar.gz"},
+	{Name: "llama-b11671-bin-ubuntu-cuda-13.4-x64.tar.gz"},
+	{Name: "llama-b11671-bin-ubuntu-openvino-2026.4.1-x64.tar.gz"},
+	{Name: "llama-b11671-bin-ubuntu-rocm-10.0-x64.tar.gz"},
+	{Name: "llama-b11671-bin-ubuntu-s390x.tar.gz"},
+	{Name: "llama-b11671-bin-ubuntu-sycl-fp16-x64.tar.gz"},
+	{Name: "llama-b11671-bin-ubuntu-sycl-fp32-x64.tar.gz"},
+	{Name: "llama-b11671-bin-ubuntu-vulkan-arm64.tar.gz"},
+	{Name: "llama-b11671-bin-ubuntu-vulkan-x64.tar.gz"},
+	{Name: "llama-b11671-bin-ubuntu-x64.tar.gz"},
+	{Name: "llama-b11671-bin-win-cpu-arm64.zip"},
+	{Name: "llama-b11671-bin-win-cpu-x64.zip"},
+	{Name: "llama-b11671-bin-win-cuda-12.4-x64.zip"},
+	{Name: "llama-b11671-bin-win-cuda-13.4-arm64.zip"},
+	{Name: "llama-b11671-bin-win-cuda-13.4-x64.zip"},
+	{Name: "llama-b11671-bin-win-opencl-adreno-arm64.zip"},
+	{Name: "llama-b11671-bin-win-openvino-2026.4.1-x64.zip"},
+	{Name: "llama-b11671-bin-win-rocm-10.0-x64.zip"},
+	{Name: "llama-b11671-bin-win-sycl-x64.zip"},
+	{Name: "llama-b11671-bin-win-vulkan-arm64.zip"},
+	{Name: "llama-b11671-bin-win-vulkan-x64.zip"},
+	{Name: "llama-b11671-ui.tar.gz"},
+	{Name: "llama-b11671-xcframework.zip"},
+}
+
+// TestPickBestAssetForB11671Snapdragon verifies the snapdragon penalty against
+// the real b11671 list: android arm64 and linux arm64 (the two hosts a
+// snapdragon package exists for) take the generic flat tarball even though the
+// snapdragon asset sorts first, while the other host profiles are unaffected.
+func TestPickBestAssetForB11671Snapdragon(t *testing.T) {
+	tests := []struct {
+		name     string
+		platform string
+		arch     string
+		hasGPU   bool
+		want     string
+	}{
+		{"android arm64", "android", "arm64", false, "llama-b11671-bin-android-arm64.tar.gz"},
+		{"android arm64 ignores gpu flag", "android", "arm64", true, "llama-b11671-bin-android-arm64.tar.gz"},
+		{"linux arm64 no GPU", "linux", "arm64", false, "llama-b11671-bin-ubuntu-arm64.tar.gz"},
+		// The GPU path keeps working: the vulkan bonus (+80) still outranks the
+		// generic tarball, and the penalized snapdragon package stays behind both.
+		{"linux arm64 amd prefers vulkan", "linux", "arm64", true, "llama-b11671-bin-ubuntu-vulkan-arm64.tar.gz"},
+		{"darwin arm64", "darwin", "arm64", false, "llama-b11671-bin-macos-arm64.tar.gz"},
+		{"win x64 no GPU", "windows", "amd64", false, "llama-b11671-bin-win-cpu-x64.zip"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := pickBestAssetFor(b11671Assets, tt.platform, tt.arch, tt.hasGPU, "", 0)
+			if got == nil || got.Name != tt.want {
+				t.Errorf("pickBestAssetFor(%s/%s) = %v, want %s", tt.platform, tt.arch, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestPickBestAssetForSnapdragonLastResort verifies the snapdragon package is
+// deprioritized rather than excluded: a release whose only platform-matching
+// asset is the snapdragon tarball must still resolve it (a download), instead
+// of surfacing a "no llama.cpp build found" error on an arm64 Android device.
+func TestPickBestAssetForSnapdragonLastResort(t *testing.T) {
+	androidOnly := []GitHubAsset{
+		{Name: "llama-b11671-bin-android-arm64-snapdragon.tar.gz"},
+		{Name: "llama-b11671-bin-macos-arm64.tar.gz"},
+	}
+	got := pickBestAssetFor(androidOnly, "android", "arm64", false, "", 0)
+	if got == nil || got.Name != "llama-b11671-bin-android-arm64-snapdragon.tar.gz" {
+		t.Errorf("snapdragon-only android release should still pick the snapdragon tarball, got %v", got)
+	}
+
+	linuxOnly := []GitHubAsset{
+		{Name: "llama-b11671-bin-linux-arm64-snapdragon.tar.gz"},
+	}
+	got = pickBestAssetFor(linuxOnly, "linux", "arm64", false, "", 0)
+	if got == nil || got.Name != "llama-b11671-bin-linux-arm64-snapdragon.tar.gz" {
+		t.Errorf("snapdragon-only linux release should still pick the snapdragon tarball, got %v", got)
+	}
+}
+
 // TestGPUComputeCapParsesProbeOutput verifies the parsing of the nvidia-smi
 // compute_cap probe via the injectable probeGPUComputeCap var (no shell-out):
 // single value, multi-GPU first-value-wins, and empty/garbage inputs.

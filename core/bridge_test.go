@@ -879,7 +879,10 @@ func TestStopServerInternalEscalatesToKillAfterGrace(t *testing.T) {
 }
 
 // TestAndroidLdEnv verifies the Android LD_LIBRARY_PATH anchor: the binary's
-// directory only on android, nil elsewhere.
+// directory only on android, nil elsewhere, plus the install-tree layout where
+// the executable sits in bin/ and its shared libraries in the sibling lib/ (the
+// Android linker does not search the executable's own directory, so a lib/ that
+// is not on LD_LIBRARY_PATH means the binary dies at load time).
 func TestAndroidLdEnv(t *testing.T) {
 	old := pathsGOOS
 	t.Cleanup(func() { pathsGOOS = old })
@@ -892,6 +895,31 @@ func TestAndroidLdEnv(t *testing.T) {
 	want := "LD_LIBRARY_PATH=" + filepath.Join("/data", "x")
 	if got := androidLdEnv("/data/x/llama-server"); len(got) != 1 || got[0] != want {
 		t.Errorf("androidLdEnv on android = %v, want [%q]", got, want)
+	}
+
+	// release/bin/llama-server with a sibling release/lib/: both directories are
+	// exported, the binary's own dir first (the flat layout keeps its priority).
+	root := t.TempDir()
+	binDir := filepath.Join(root, "llama-b11671", "bin")
+	libDir := filepath.Join(root, "llama-b11671", "lib")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(libDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(libDir, "libllama.so"), []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	got := androidLdEnv(filepath.Join(binDir, "llama-server"))
+	// The value is the Android (POSIX) search path, so it is colon-separated by
+	// contract and compared as a whole string: splitting the result on the HOST's
+	// os.PathListSeparator would read a Windows test run (where the separator is
+	// ';') as one element, and splitting on ':' would tear the Windows temp paths
+	// themselves apart.
+	want = "LD_LIBRARY_PATH=" + binDir + ":" + filepath.Join(binDir, "..", "lib")
+	if len(got) != 1 || got[0] != want {
+		t.Errorf("androidLdEnv with sibling lib = %v, want [%q]", got, want)
 	}
 }
 

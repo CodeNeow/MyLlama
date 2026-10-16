@@ -251,6 +251,114 @@ func TestGetLlamaCppInfoDetectsDownloadDirSubdir(t *testing.T) {
 	wantSamePath(t, info.Path, filepath.Join(tmp, subdir, binName))
 }
 
+// TestFindLlamaBinInDirHandlesInstallTreeLayout verifies the cmake-install
+// layout — bin/llama-server with libraries in the sibling lib/ — is detected.
+// Vendor releases (e.g. the android / linux arm64 snapdragon tarballs) are
+// packed with `cmake --install --prefix`, so the binary sits two levels below
+// the install root; a root-plus-one-level scan never saw it and the runtime
+// showed up as "not found" after a successful download and extraction.
+func TestFindLlamaBinInDirHandlesInstallTreeLayout(t *testing.T) {
+	root := t.TempDir()
+	binName := llamaServerBinName()
+	binDir := filepath.Join(root, "llama-b11671", "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "llama-b11671", "lib"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(binDir, binName)
+	if err := os.WriteFile(want, []byte("stub"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	got := findLlamaBinInDir(root, "llama-server")
+	if got == "" {
+		t.Fatal("install-tree layout (release/bin/<binary>) must be detected")
+	}
+	wantSamePath(t, got, want)
+
+	// Bounded depth: the scan covers the root, one directory level and that
+	// level's bin/ only, so an arbitrarily nested tree stays a miss instead of
+	// turning detection into a filesystem walk.
+	deep := t.TempDir()
+	deepBin := filepath.Join(deep, "a", "b", "c", binName)
+	if err := os.MkdirAll(filepath.Dir(deepBin), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(deepBin, []byte("stub"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if got := findLlamaBinInDir(deep, "llama-server"); got != "" {
+		t.Errorf("nesting deeper than release/bin must not be found, got %q", got)
+	}
+}
+
+// TestGetLlamaCppInfoDetectsInstallTreeLayout drives the same install tree
+// through the page-facing resolver: the extracted snapdragon-style layout must
+// report Installed=true with the path pointing at release/bin/llama-server.
+func TestGetLlamaCppInfoDetectsInstallTreeLayout(t *testing.T) {
+	saveServerState(t)
+	tmp := withTempCwd(t)
+	binName := llamaServerBinName()
+	release := filepath.Join("llama-cpp", "llama-b11671")
+	if err := os.MkdirAll(filepath.Join(release, "bin"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(release, "lib"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(release, "bin", binName)
+	if err := os.WriteFile(want, []byte("stub"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	info := getLlamaCppInfo()
+	if !info.Installed {
+		t.Fatal("Installed should be true for the extracted release/bin/<binary> layout")
+	}
+	wantSamePath(t, info.Path, filepath.Join(tmp, want))
+}
+
+// TestDetectAccelCompanionLibDir verifies the backend-library lookup also sees
+// the sibling lib/ directory: in the cmake-install layout the executables land
+// in bin/ and every ggml backend in ../lib, so a bin/ directory alone would
+// classify a GPU build as CPU-only.
+func TestDetectAccelCompanionLibDir(t *testing.T) {
+	root := t.TempDir()
+	binDir := filepath.Join(root, "llama-b11671", "bin")
+	libDir := filepath.Join(root, "llama-b11671", "lib")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(libDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(binDir, llamaServerBinName()), []byte("stub"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// No backend library anywhere: still cpu (the companion dir is searched,
+	// not assumed).
+	if got := detectAccel(binDir, "linux", "arm64"); got != "cpu" {
+		t.Errorf("bin/ with no backends = %q, want cpu", got)
+	}
+
+	if err := os.WriteFile(filepath.Join(libDir, "libggml-vulkan.so"), []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if got := detectAccel(binDir, "linux", "arm64"); got != "vulkan" {
+		t.Errorf("linux bin/ + sibling lib/libggml-vulkan.so = %q, want vulkan", got)
+	}
+
+	if err := os.WriteFile(filepath.Join(libDir, "ggml-cuda.dll"), []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if got := detectAccel(binDir, "windows", "amd64"); got != "cuda" {
+		t.Errorf("windows bin/ + sibling lib/ggml-cuda.dll = %q, want cuda", got)
+	}
+}
+
 // TestBuildServerCommandDetectsDownloadDir verifies buildServerCommand can hit the
 // llama-server in the llama-cpp/ download directory (previously only checked PATH
 // and custom directories; after download the API page could not start the service).

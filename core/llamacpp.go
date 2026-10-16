@@ -105,8 +105,12 @@ type DownloadState struct {
 
 // findLlamaBinInDir searches for llama.cpp binary bin under dir: first the dir
 // root, then one-level subdirectories (the downloaded zip may extract with a
-// top-level folder, e.g. llama-b9999-bin/). On Windows, also accepts files
-// without the .exe suffix. Returns the absolute path on hit, empty string otherwise.
+// top-level folder, e.g. llama-b9999-bin/), then that folder's own bin/ (the
+// cmake-install layout some release tarballs ship: llama-b9999/bin/llama-server
+// next to llama-b9999/lib/*.so). Depth is deliberately bounded at two levels so
+// a user pointing the app at a huge tree cannot turn detection into a walk.
+// On Windows, also accepts files without the .exe suffix. Returns the absolute
+// path on hit, empty string otherwise.
 func findLlamaBinInDir(dir, bin string) string {
 	name := bin
 	if runtime.GOOS == "windows" {
@@ -121,14 +125,21 @@ func findLlamaBinInDir(dir, bin string) string {
 		}
 		return ""
 	}
-	if p := check(filepath.Join(dir, name)); p != "" {
-		return p
-	}
-	// Windows fallback: files without the .exe suffix
-	if runtime.GOOS == "windows" {
-		if p := check(filepath.Join(dir, bin)); p != "" {
+	// checkIn accepts both the exact platform name and, on Windows, the
+	// extension-less file (a zip extracted without its .exe suffix).
+	checkIn := func(d string) string {
+		if p := check(filepath.Join(d, name)); p != "" {
 			return p
 		}
+		if runtime.GOOS == "windows" {
+			if p := check(filepath.Join(d, bin)); p != "" {
+				return p
+			}
+		}
+		return ""
+	}
+	if p := checkIn(dir); p != "" {
+		return p
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -138,13 +149,12 @@ func findLlamaBinInDir(dir, bin string) string {
 		if !e.IsDir() {
 			continue
 		}
-		if p := check(filepath.Join(dir, e.Name(), name)); p != "" {
+		sub := filepath.Join(dir, e.Name())
+		if p := checkIn(sub); p != "" {
 			return p
 		}
-		if runtime.GOOS == "windows" {
-			if p := check(filepath.Join(dir, e.Name(), bin)); p != "" {
-				return p
-			}
+		if p := checkIn(filepath.Join(sub, "bin")); p != "" {
+			return p
 		}
 	}
 	return ""
@@ -169,13 +179,42 @@ func findLlamaBin(dir, bin string) string {
 // (libllama-server-impl.so, libllama-bench-impl.so, libggml*.so, …) NEXT to
 // the executables, and the Android dynamic linker does not search the
 // executable's own directory — LD_LIBRARY_PATH must point there (the same
-// pattern Termux uses to run its programs). Returns nil on every other
+// pattern Termux uses to run its programs). The cmake-install layout
+// (bin/llama-server with the libraries under the sibling lib/) is covered by
+// appending that directory too when it exists. Returns nil on every other
 // platform so callers can append unconditionally.
 func androidLdEnv(binPath string) []string {
 	if pathsGOOS != "android" {
 		return nil
 	}
-	return []string{"LD_LIBRARY_PATH=" + filepath.Dir(binPath)}
+	dirs := llamaCompanionDirs(filepath.Dir(binPath))
+	return []string{"LD_LIBRARY_PATH=" + strings.Join(dirs, ":")}
+}
+
+// llamaCompanionDirs returns the directories that can hold the shared
+// libraries for a llama.cpp binary living in dir: dir itself (the flat release
+// layout, libraries next to the executables — the official android / ubuntu /
+// macos tarballs and every Windows zip) plus its sibling lib/ when present (the
+// cmake-install layout, e.g. bin/llama-server with lib/*.so). Used by the
+// library lookups (acceleration backend, CUDA runtime DLLs) and the Android
+// linker path so all of them see the same two layouts. The dir itself is always
+// first so a flat install keeps its priority; a missing sibling is skipped.
+func llamaCompanionDirs(dir string) []string {
+	if dir == "" {
+		return nil
+	}
+	dirs := []string{dir}
+	if sibling := filepath.Join(dir, "..", "lib"); dirHasAnyEntry(sibling) {
+		dirs = append(dirs, sibling)
+	}
+	return dirs
+}
+
+// dirHasAnyEntry reports whether dir exists and is readable (its contents are
+// not inspected — the caller's own lookup does that on the directory listing).
+func dirHasAnyEntry(dir string) bool {
+	_, err := os.ReadDir(dir)
+	return err == nil
 }
 
 // resolveLlamaServerBin resolves the llama-server executable path by priority
@@ -333,28 +372,37 @@ func getLlamaCppInfo() LlamaCppInfo {
 // binaries live in dir ("" means not installed → empty result). Official
 // llama.cpp builds are GGML_BACKEND_DL everywhere: the main programs ship
 // backend-agnostic and the GPU support comes from whichever backend library
-// sits next to them. windows: ggml-cuda.dll → "cuda", ggml-vulkan.dll →
-// "vulkan"; linux: libggml-vulkan.so (or plain ggml-vulkan.so) → "vulkan";
-// darwin: the arm64 release embeds Metal ("metal", no file to find) while the
-// x64 release is CPU-only; android: CPU-only arm64 packages → "cpu". A build
-// with no recognized GPU backend library falls back to "cpu". Pure over the
-// directory listing (no process spawns), directly unit-testable with a fixture
-// directory and explicit goos/goarch values.
+// sits next to them — in dir itself (flat release layout) or in its sibling
+// lib/ (cmake-install layout), see llamaCompanionDirs.
+// windows: ggml-cuda.dll → "cuda", ggml-vulkan.dll → "vulkan"; linux:
+// libggml-vulkan.so (or plain ggml-vulkan.so) → "vulkan"; darwin: the arm64
+// release embeds Metal ("metal", no file to find) while the x64 release is
+// CPU-only; android: CPU-only arm64 packages → "cpu". A build with no
+// recognized GPU backend library falls back to "cpu". Pure over the directory
+// listing (no process spawns), directly unit-testable with a fixture directory
+// and explicit goos/goarch values.
 func detectAccel(dir, goos, goarch string) string {
 	if dir == "" {
 		return ""
 	}
+	dirs := llamaCompanionDirs(dir)
 	switch goos {
 	case "windows":
-		if dirHasFileFold(dir, "ggml-cuda.dll") {
-			return "cuda"
+		for _, d := range dirs {
+			if dirHasFileFold(d, "ggml-cuda.dll") {
+				return "cuda"
+			}
 		}
-		if dirHasFileFold(dir, "ggml-vulkan.dll") {
-			return "vulkan"
+		for _, d := range dirs {
+			if dirHasFileFold(d, "ggml-vulkan.dll") {
+				return "vulkan"
+			}
 		}
 	case "linux":
-		if dirHasFileFold(dir, "libggml-vulkan.so") || dirHasFileFold(dir, "ggml-vulkan.so") {
-			return "vulkan"
+		for _, d := range dirs {
+			if dirHasFileFold(d, "libggml-vulkan.so") || dirHasFileFold(d, "ggml-vulkan.so") {
+				return "vulkan"
+			}
 		}
 	case "darwin":
 		if goarch == "arm64" {
@@ -385,18 +433,22 @@ func dirHasFileFold(dir, name string) bool {
 }
 
 // detectCudartRuntime reports whether the CUDA runtime DLLs shipped by the
-// cudart asset (cudart64_*.dll plus the cublas family) are present in dir.
-// The DLLs land next to llama-server.exe because both assets extract into the
-// same directory, so their presence marks a CUDA build with its runtime
-// installed. Non-Windows never carries the Windows-exclusive cudart asset.
+// cudart asset (cudart64_*.dll plus the cublas family) are present alongside
+// the resolved binary. The DLLs land next to llama-server.exe because both
+// assets extract into the same directory, so their presence marks a CUDA build
+// with its runtime installed; a sibling lib/ is scanned too (cmake-install
+// layout, see llamaCompanionDirs). Non-Windows never carries the
+// Windows-exclusive cudart asset.
 func detectCudartRuntime(dir string) bool {
 	if runtime.GOOS != "windows" || dir == "" {
 		return false
 	}
 	patterns := []string{"cudart*.dll", "cublas*.dll"}
-	for _, pat := range patterns {
-		if matches, err := filepath.Glob(filepath.Join(dir, pat)); err == nil && len(matches) > 0 {
-			return true
+	for _, d := range llamaCompanionDirs(dir) {
+		for _, pat := range patterns {
+			if matches, err := filepath.Glob(filepath.Join(d, pat)); err == nil && len(matches) > 0 {
+				return true
+			}
 		}
 	}
 	return false
@@ -1221,6 +1273,9 @@ func cudaVerOf(name string) (float64, bool) {
 //   - Linux with any GPU (NVIDIA, AMD or Intel — the ubuntu-vulkan tarball is
 //     the only GPU-accelerated Linux build, no ubuntu cuda variant exists):
 //     vulkan wins decisively.
+//   - Vendor-specific snapdragon tarballs lose to the generic build for the
+//     same platform on every score (install-tree layout + Snapdragon preset,
+//     see the penalty in the scoring loop).
 //
 // On Windows, cudart runtime assets are skipped (the main program and runtime
 // are downloaded separately; the runtime is matched by pickCudartAssetFor).
@@ -1373,6 +1428,23 @@ func pickBestAssetFor(assets []GitHubAsset, platform, arch string, hasGPU bool, 
 			// NVIDIA, AMD and Intel alike
 			if hasGPU && strings.Contains(name, "vulkan") {
 				score += 80
+			}
+			// Vendor-specific builds lose to the generic package. The snapdragon
+			// tarballs (bin-android-arm64-snapdragon, bin-linux-arm64-snapdragon)
+			// are packed from `cmake --install --prefix` — a bin/ + lib/ install
+			// tree instead of the flat release layout every launch path assumes
+			// (libraries next to the executable, see androidLdEnv) — and are
+			// compiled with the Snapdragon preset, so they are the wrong binary
+			// for a general device even though the name matches the platform.
+			// They also sort BEFORE the generic build in the release asset list,
+			// and equal scores keep the first candidate, so without this penalty
+			// Android and Linux arm64 downloaded the snapdragon package and then
+			// reported llama.cpp as missing. A decisive penalty rather than an
+			// exclusion: it stays available as a last resort instead of turning
+			// into a "no build for this platform" error if upstream ever ships
+			// only that package.
+			if strings.Contains(name, "snapdragon") {
+				score -= 400
 			}
 		}
 

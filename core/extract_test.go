@@ -88,19 +88,126 @@ func TestExtractZipOK(t *testing.T) {
 	}
 }
 
-// TestExtractTarGzSymlinkRejected verifies extractTarGz returns an error for symlink entries (#6).
-// The default branch only handles directories and regular files; unknown types like symlinks must be explicitly rejected
-// rather than silently skipped, otherwise extracted content may be incomplete or cause accidental writes.
+// TestExtractTarGzSymlinkRejected verifies extractTarGz rejects link entries
+// whose target leaves the extraction directory (#6): an absolute Linkname and a
+// relative one that walks out with ".." are both path-traversal vectors.
+// (In-archive relative links are NOT rejected any more — real macOS / Linux
+// llama.cpp tarballs ship the library-version alias chain and must extract;
+// see TestExtractTarGzRelativeSymlinkExtracted.)
 func TestExtractTarGzSymlinkRejected(t *testing.T) {
-	tarPath := filepath.Join(t.TempDir(), "link.tar.gz")
+	setLanguageForTest(t, "zh")
+	for _, linkname := range []string{"/etc/passwd", "../../outside"} {
+		tarPath := filepath.Join(t.TempDir(), "link.tar.gz")
+		if err := writeTestTarGz(tarPath, []tarFixture{
+			{Name: "link", Typeflag: tar.TypeSymlink, Linkname: linkname, Size: 0},
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := extractTarGz(tarPath, t.TempDir()); err == nil {
+			t.Errorf("link target %q leaves the extraction directory and must be rejected", linkname)
+		}
+	}
+}
+
+// TestExtractTarGzRelativeSymlinkExtracted pins the behavior that made the
+// runtime undetectable after a successful download: the upstream macos-arm64 /
+// ubuntu-x64 tarballs carry the shared-library alias links
+// (libllama.0.dylib -> libllama.0.7.0.dylib) that the dynamic loader needs, and
+// the link entry can precede its target in the archive. Extraction must
+// therefore accept in-archive relative links and apply them after the regular
+// entries, and it must not abort before reaching llama-server.
+func TestExtractTarGzRelativeSymlinkExtracted(t *testing.T) {
+	tarPath := filepath.Join(t.TempDir(), "llama.tar.gz")
 	if err := writeTestTarGz(tarPath, []tarFixture{
-		{Name: "link", Typeflag: tar.TypeSymlink, Linkname: "/etc/passwd", Size: 0},
+		{Name: "llama-b9999/", Typeflag: tar.TypeDir},
+		// Link first, target later: the single-pass reader cannot resolve it yet.
+		{Name: "llama-b9999/libllama.0.dylib", Typeflag: tar.TypeSymlink, Linkname: "libllama.0.7.0.dylib"},
+		{Name: "llama-b9999/llama-server", Typeflag: tar.TypeReg, Size: 4, Mode: 0755},
+		{Name: "llama-b9999/libllama.0.7.0.dylib", Typeflag: tar.TypeReg, Size: 8, Mode: 0644},
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := extractTarGz(tarPath, t.TempDir()); err == nil {
-		t.Error("含 symlink 条目的 tar.gz 应返回错误")
+	dest := t.TempDir()
+	if err := extractTarGz(tarPath, dest); err != nil {
+		t.Fatalf("relative in-archive links must extract cleanly: %v", err)
+	}
+
+	link := filepath.Join(dest, "llama-b9999", "libllama.0.dylib")
+	// The alias must resolve to the real library: 8 bytes through the link.
+	fi, err := os.Stat(link)
+	if err != nil {
+		t.Fatalf("aliased library missing after extraction: %v", err)
+	}
+	if fi.Size() != 8 {
+		t.Errorf("aliased library size = %d, want 8 (must resolve to libllama.0.7.0.dylib)", fi.Size())
+	}
+	// The binary that follows the link entry must be extracted too — the
+	// original bug aborted the whole run at the first link.
+	if _, err := os.Stat(filepath.Join(dest, "llama-b9999", "llama-server")); err != nil {
+		t.Errorf("llama-server missing after extraction: %v", err)
+	}
+	// On Unix the link is a real symlink (byte-identical copy is the
+	// Windows / no-privilege fallback).
+	if runtime.GOOS != "windows" {
+		if li, err := os.Lstat(link); err != nil {
+			t.Fatalf("lstat link: %v", err)
+		} else if li.Mode()&os.ModeSymlink == 0 {
+			t.Errorf("link created as %v, want a symlink on %s", li.Mode(), runtime.GOOS)
+		}
+	}
+}
+
+// TestExtractTarGzHardlinkExtracted verifies a hardlink entry (TypeLink, whose
+// Linkname is another archive path) no longer aborts the extraction: the second
+// path must exist with the target's content either way (real link or copy).
+func TestExtractTarGzHardlinkExtracted(t *testing.T) {
+	tarPath := filepath.Join(t.TempDir(), "hard.tar.gz")
+	if err := writeTestTarGz(tarPath, []tarFixture{
+		{Name: "libreal.so", Typeflag: tar.TypeReg, Size: 6, Mode: 0644},
+		{Name: "libalias.so", Typeflag: tar.TypeLink, Linkname: "libreal.so"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	dest := t.TempDir()
+	if err := extractTarGz(tarPath, dest); err != nil {
+		t.Fatalf("hardlink entry must extract: %v", err)
+	}
+	fi, err := os.Stat(filepath.Join(dest, "libalias.so"))
+	if err != nil {
+		t.Fatalf("hardlinked path missing: %v", err)
+	}
+	if fi.Size() != 6 {
+		t.Errorf("hardlinked path size = %d, want 6", fi.Size())
+	}
+}
+
+// TestExtractTarGzLinkCountCap verifies the link-count ceiling: materialized
+// links duplicate bytes on disk (the copy fallback), so a link-heavy archive is
+// cut off instead of duplicating an unbounded amount of data.
+func TestExtractTarGzLinkCountCap(t *testing.T) {
+	setLanguageForTest(t, "zh")
+	orig := maxExtractTarLinks
+	maxExtractTarLinks = 1
+	defer func() { maxExtractTarLinks = orig }()
+
+	tarPath := filepath.Join(t.TempDir(), "links.tar.gz")
+	if err := writeTestTarGz(tarPath, []tarFixture{
+		{Name: "real", Typeflag: tar.TypeReg, Size: 1},
+		{Name: "alias1", Typeflag: tar.TypeSymlink, Linkname: "real"},
+		{Name: "alias2", Typeflag: tar.TypeSymlink, Linkname: "real"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	err := extractTarGz(tarPath, t.TempDir())
+	if err == nil {
+		t.Fatal("超过链接条目数上限的 tar.gz 应返回错误")
+	}
+	if !strings.Contains(err.Error(), "链接条目数超出上限") {
+		t.Errorf("错误信息应说明链接条目数超限: %v", err)
 	}
 }
 
